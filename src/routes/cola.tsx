@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import {
   X, ChevronRight, AlertTriangle, ShieldCheck, GitBranch, Sparkles,
@@ -326,13 +326,12 @@ function Drawer({
 
         {/* Footer */}
         <div className="border-t border-border px-5 py-4 space-y-3">
-          <Link
-            to="/alerta/$id"
-            params={{ id: row.id }}
-            className="block text-center text-[12px] font-medium text-primary hover:underline"
+          <button
+            type="button"
+            className="block w-full text-center text-[12px] font-medium text-primary hover:underline"
           >
             Ver detalle completo →
-          </Link>
+          </button>
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => onAction("fraud")}
