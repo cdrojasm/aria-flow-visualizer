@@ -1,10 +1,11 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Inbox, ListChecks, Activity, Settings } from "lucide-react";
+import { LayoutDashboard, Inbox, ListChecks, Activity, Settings, GaugeCircle } from "lucide-react";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/cola", label: "Mi cola", icon: Inbox },
   { to: "/casos", label: "Casos", icon: ListChecks },
+  { to: "/monitor", label: "Monitor del Agente", icon: GaugeCircle },
   { to: "/agente", label: "Agente ARIA", icon: Activity },
   { to: "/configuracion", label: "Configuración", icon: Settings },
 ];
