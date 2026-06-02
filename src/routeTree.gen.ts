@@ -9,10 +9,17 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as MonitorRouteImport } from './routes/monitor'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ColaRouteImport } from './routes/cola'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AlertaIdRouteImport } from './routes/alerta.$id'
 
+const MonitorRoute = MonitorRouteImport.update({
+  id: '/monitor',
+  path: '/monitor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -28,39 +35,59 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlertaIdRoute = AlertaIdRouteImport.update({
+  id: '/alerta/$id',
+  path: '/alerta/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cola': typeof ColaRoute
   '/dashboard': typeof DashboardRoute
+  '/monitor': typeof MonitorRoute
+  '/alerta/$id': typeof AlertaIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cola': typeof ColaRoute
   '/dashboard': typeof DashboardRoute
+  '/monitor': typeof MonitorRoute
+  '/alerta/$id': typeof AlertaIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/cola': typeof ColaRoute
   '/dashboard': typeof DashboardRoute
+  '/monitor': typeof MonitorRoute
+  '/alerta/$id': typeof AlertaIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cola' | '/dashboard'
+  fullPaths: '/' | '/cola' | '/dashboard' | '/monitor' | '/alerta/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cola' | '/dashboard'
-  id: '__root__' | '/' | '/cola' | '/dashboard'
+  to: '/' | '/cola' | '/dashboard' | '/monitor' | '/alerta/$id'
+  id: '__root__' | '/' | '/cola' | '/dashboard' | '/monitor' | '/alerta/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ColaRoute: typeof ColaRoute
   DashboardRoute: typeof DashboardRoute
+  MonitorRoute: typeof MonitorRoute
+  AlertaIdRoute: typeof AlertaIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/monitor': {
+      id: '/monitor'
+      path: '/monitor'
+      fullPath: '/monitor'
+      preLoaderRoute: typeof MonitorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -82,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/alerta/$id': {
+      id: '/alerta/$id'
+      path: '/alerta/$id'
+      fullPath: '/alerta/$id'
+      preLoaderRoute: typeof AlertaIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +123,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ColaRoute: ColaRoute,
   DashboardRoute: DashboardRoute,
+  MonitorRoute: MonitorRoute,
+  AlertaIdRoute: AlertaIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
