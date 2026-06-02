@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
@@ -133,9 +133,8 @@ function MonitorPage() {
                   {filtered.map((d) => {
                     const open = expanded === d.alertId;
                     return (
-                      <>
+                      <Fragment key={d.alertId}>
                         <tr
-                          key={d.alertId}
                           className="border-t border-border hover:bg-surface cursor-pointer"
                           onClick={() => setExpanded(open ? null : d.alertId)}
                         >
@@ -163,7 +162,7 @@ function MonitorPage() {
                           </td>
                         </tr>
                         {open && (
-                          <tr key={`${d.alertId}-detail`} className="border-t border-border bg-surface">
+                          <tr className="border-t border-border bg-surface">
                             <td colSpan={8} className="px-6 py-4">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-[12px] font-medium text-text-primary">Razonamiento completo</span>
@@ -193,7 +192,7 @@ function MonitorPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>
