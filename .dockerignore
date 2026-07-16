@@ -1,0 +1,13 @@
+node_modules
+.output
+.vinxi
+.nitro
+.tanstack
+dist
+dist-ssr
+*.log
+.DS_Store
+.env*.local
+.git
+.github
+.lovable
