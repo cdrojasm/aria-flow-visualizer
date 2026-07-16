@@ -12,6 +12,15 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
+const shieldFavicon =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2 3 5v6c0 5.2 3.6 9.7 9 11 5.4-1.3 9-5.8 9-11V5l-9-3Z" fill="#001194"/>
+      <path d="m9.5 12.2 1.8 1.8 3.6-3.8" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  );
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -77,19 +86,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "ARIA - Agente prevención de Fraude" },
+      { name: "description", content: "ARIA — Agente de prevención de fraude." },
+      { name: "author", content: "ARIA" },
+      { property: "og:title", content: "ARIA - Agente prevención de Fraude" },
+      { property: "og:description", content: "ARIA — Agente de prevención de fraude." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: shieldFavicon,
       },
     ],
   }),

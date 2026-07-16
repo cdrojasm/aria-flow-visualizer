@@ -1,82 +1,106 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
+import { useState } from "react";
+import {
+  AlertTriangle, TrendingDown, TrendingUp,
+  CheckCircle2, Brain, Zap, ShieldAlert, Users, Bot,
+} from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
 export const Route = createFileRoute("/monitor")({
   head: () => ({
     meta: [
-      { title: "Monitor del Agente · ARIA" },
+      { title: "ARIA - Agente prevención de Fraude" },
       { name: "description", content: "Telemetría y log de decisiones del agente ARIA." },
     ],
   }),
   component: MonitorPage,
 });
 
-type Decision = {
-  ts: string;
-  alertId: string;
-  taxonomy: string;
-  taxVerdict: string;
-  adversarialCorrected: boolean;
-  finalVerdict: string;
-  result: "Auto-resuelto" | "Derivado" | "Error";
-  reasoning: Record<string, unknown>;
+// ─── Config data ────────────────────────────────────────────────────────────
+
+type AgentConfig = {
+  id: string;
+  name: string;
+  description: string;
+  env: "production" | "staging" | "canary";
 };
 
-const decisions: Decision[] = [
-  { ts: "10:48:12", alertId: "ALR-48210", taxonomy: "card-present geo anomaly", taxVerdict: "Probable fraude", adversarialCorrected: false, finalVerdict: "Probable fraude", result: "Auto-resuelto",
-    reasoning: { confidence: 0.94, signals: ["geo_mismatch", "amount_spike"], adversarial: { agreed: true } } },
-  { ts: "10:47:51", alertId: "ALR-48209", taxonomy: "phishing redirect", taxVerdict: "Sospechoso", adversarialCorrected: true, finalVerdict: "Falso positivo", result: "Auto-resuelto",
-    reasoning: { confidence: 0.41, signals: ["url_pattern"], adversarial: { agreed: false, reason: "domain whitelisted last 24h" } } },
-  { ts: "10:47:22", alertId: "ALR-48208", taxonomy: "money mule pattern", taxVerdict: "Incierto", adversarialCorrected: false, finalVerdict: "Incierto", result: "Derivado",
-    reasoning: { confidence: 0.58, signals: ["circular_transfer", "new_beneficiary"] } },
-  { ts: "10:46:58", alertId: "ALR-48207", taxonomy: "identity takeover", taxVerdict: "Probable fraude", adversarialCorrected: true, finalVerdict: "Revisar", result: "Derivado",
-    reasoning: { confidence: 0.72, adversarial: { agreed: false, reason: "device known 90d" } } },
-  { ts: "10:46:30", alertId: "ALR-48206", taxonomy: "card-present geo anomaly", taxVerdict: "Falso positivo", adversarialCorrected: false, finalVerdict: "Falso positivo", result: "Auto-resuelto",
-    reasoning: { confidence: 0.88, signals: ["travel_notice_active"] } },
-  { ts: "10:46:02", alertId: "ALR-48205", taxonomy: "laundering layering", taxVerdict: "Probable fraude", adversarialCorrected: false, finalVerdict: "Probable fraude", result: "Auto-resuelto",
-    reasoning: { confidence: 0.91 } },
-  { ts: "10:45:41", alertId: "ALR-48204", taxonomy: "phishing redirect", taxVerdict: "Sospechoso", adversarialCorrected: false, finalVerdict: "Sospechoso", result: "Error",
-    reasoning: { confidence: 0.66, error: "tool_timeout: enrichment.ip_reputation" } },
-  { ts: "10:45:12", alertId: "ALR-48203", taxonomy: "money mule pattern", taxVerdict: "Probable fraude", adversarialCorrected: true, finalVerdict: "Falso positivo", result: "Auto-resuelto",
-    reasoning: { confidence: 0.37, adversarial: { agreed: false } } },
-  { ts: "10:44:55", alertId: "ALR-48202", taxonomy: "card-not-present", taxVerdict: "Probable fraude", adversarialCorrected: false, finalVerdict: "Probable fraude", result: "Derivado",
-    reasoning: { confidence: 0.81 } },
+const CONFIGS: AgentConfig[] = [
+  { id: "cfg-prod", name: "Producción", description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.", env: "production" },
+  { id: "cfg-staging", name: "Staging", description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.", env: "staging" },
+  { id: "cfg-canary", name: "Canario 2%", description: "Despliegue progresivo al 2% del tráfico real para validación.", env: "canary" },
 ];
 
-const taxonomies = Array.from(new Set(decisions.map((d) => d.taxonomy)));
-const results = ["Auto-resuelto", "Derivado", "Error"] as const;
+const ENV_STYLES: Record<AgentConfig["env"], string> = {
+  production: "bg-success/10 text-success border-success/30",
+  staging: "bg-warning/10 text-warning border-warning/30",
+  canary: "bg-primary/10 text-primary border-primary/30",
+};
 
-// Confidence histogram buckets (deciles)
-const confidenceDist = [12, 18, 24, 9, 7, 11, 14, 22, 38, 56];
+// ─── KPI data per config ─────────────────────────────────────────────────────
+
+type ConfigKPIs = {
+  latencia: string;
+  errores: string;
+  avgTokens: string;
+  fraudeNoDetectado: string;
+  falsosPositivos: string;
+  procesados: string;
+  fallos: string;
+  disponibilidad: string;
+  caidas: number;
+  alucinaciones: string;
+  usoCorrectoData: string;
+  recAceptadas: number;
+  recIgnoradas: number;
+  tiempoAhorrado: string;
+  casosHumano: number;
+  casosAI: number;
+};
+
+const KPIS: Record<string, ConfigKPIs> = {
+  "cfg-prod": {
+    latencia: "842 ms", errores: "6.4%", avgTokens: "2,340",
+    fraudeNoDetectado: "1.2%", falsosPositivos: "8.7%",
+    procesados: "97.3%", fallos: "2.7%",
+    disponibilidad: "99.1%", caidas: 2,
+    alucinaciones: "0.3%", usoCorrectoData: "98.7%",
+    recAceptadas: 73, recIgnoradas: 27,
+    tiempoAhorrado: "14.2 h", casosHumano: 48, casosAI: 312,
+  },
+  "cfg-staging": {
+    latencia: "1,120 ms", errores: "11.2%", avgTokens: "3,810",
+    fraudeNoDetectado: "3.1%", falsosPositivos: "14.5%",
+    procesados: "88.9%", fallos: "11.1%",
+    disponibilidad: "97.4%", caidas: 7,
+    alucinaciones: "2.1%", usoCorrectoData: "91.4%",
+    recAceptadas: 58, recIgnoradas: 42,
+    tiempoAhorrado: "8.6 h", casosHumano: 61, casosAI: 188,
+  },
+  "cfg-canary": {
+    latencia: "910 ms", errores: "7.8%", avgTokens: "2,650",
+    fraudeNoDetectado: "1.9%", falsosPositivos: "10.2%",
+    procesados: "92.1%", fallos: "7.9%",
+    disponibilidad: "98.5%", caidas: 3,
+    alucinaciones: "0.8%", usoCorrectoData: "96.2%",
+    recAceptadas: 68, recIgnoradas: 32,
+    tiempoAhorrado: "11.4 h", casosHumano: 54, casosAI: 247,
+  },
+};
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 function MonitorPage() {
   const agentStatus: "ok" | "degraded" = "degraded";
-  const [taxFilter, setTaxFilter] = useState<string>("all");
-  const [resFilter, setResFilter] = useState<string>("all");
-  const [advFilter, setAdvFilter] = useState<"all" | "yes" | "no">("all");
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"json" | "human">("human");
+  const [selectedConfig, setSelectedConfig] = useState<string>("cfg-prod");
 
-  const filtered = useMemo(() => decisions.filter((d) => {
-    if (taxFilter !== "all" && d.taxonomy !== taxFilter) return false;
-    if (resFilter !== "all" && d.result !== resFilter) return false;
-    if (advFilter === "yes" && !d.adversarialCorrected) return false;
-    if (advFilter === "no" && d.adversarialCorrected) return false;
-    return true;
-  }), [taxFilter, resFilter, advFilter]);
-
-  const lowConfShare = (confidenceDist[0] + confidenceDist[1] + confidenceDist[2]) /
-    confidenceDist.reduce((a, b) => a + b, 0);
-  const highLowConf = lowConfShare > 0.25;
-  const maxBucket = Math.max(...confidenceDist);
+  const kpi = KPIS[selectedConfig];
 
   return (
     <DashboardLayout>
-      <div className="p-8 max-w-[1400px]">
+      <div className="p-8 max-w-[1400px] space-y-6">
         {agentStatus === "degraded" && (
-          <div className="mb-6 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 flex items-start gap-3">
+          <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 flex items-start gap-3">
             <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
             <div className="text-[13px] text-text-primary">
               <span className="font-semibold">Agente degradado.</span> Latencia de enriquecimiento por encima del umbral y un sub-agente reportando timeouts intermitentes.
@@ -85,7 +109,7 @@ function MonitorPage() {
         )}
 
         {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-4">
           <h1 className="text-[20px] font-semibold text-text-primary">Monitor del Agente</h1>
           <span className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-warning/10 text-warning text-[12px] font-semibold">
             <span className="relative flex h-2 w-2">
@@ -96,152 +120,130 @@ function MonitorPage() {
           </span>
         </div>
 
-        {/* Health cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
-          <HealthCard label="Latencia promedio / etapa" value="842" unit="ms" trend="up" delta="+18% vs 1h" tone="warning" />
-          <HealthCard label="Errores de herramientas" value="6.4" unit="%" trend="up" delta="umbral 4%" tone="danger" />
-          <HealthCard label="Alertas en procesamiento" value="23" unit="" trend="down" delta="-4 vs 5m" tone="primary" />
-          <HealthCard label="Reversiones adversariales" value="11" unit="turno" trend="up" delta="+3 vs turno previo" tone="primary" />
-        </div>
-
-        <div className="grid grid-cols-[2fr_1fr] gap-6">
-          {/* Decision log */}
-          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] overflow-hidden">
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-              <h2 className="text-[14px] font-semibold text-text-primary">Log de decisiones</h2>
-              <div className="flex items-center gap-2">
-                <Select value={taxFilter} onChange={setTaxFilter} options={[["all", "Toda taxonomía"], ...taxonomies.map((t) => [t, t] as [string, string])]} />
-                <Select value={resFilter} onChange={setResFilter} options={[["all", "Todo resultado"], ...results.map((r) => [r, r] as [string, string])]} />
-                <Select value={advFilter} onChange={(v) => setAdvFilter(v as any)} options={[["all", "Adversarial: todo"], ["yes", "Solo corregidas"], ["no", "Sin corrección"]]} />
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
-                <thead className="bg-surface text-text-secondary">
-                  <tr>
-                    <th className="text-left font-medium px-4 py-2.5"></th>
-                    <th className="text-left font-medium px-3 py-2.5">Timestamp</th>
-                    <th className="text-left font-medium px-3 py-2.5">ID</th>
-                    <th className="text-left font-medium px-3 py-2.5">Taxonomía</th>
-                    <th className="text-left font-medium px-3 py-2.5">Veredicto tax.</th>
-                    <th className="text-left font-medium px-3 py-2.5">Adversarial</th>
-                    <th className="text-left font-medium px-3 py-2.5">Final</th>
-                    <th className="text-left font-medium px-3 py-2.5">Resultado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((d) => {
-                    const open = expanded === d.alertId;
-                    return (
-                      <Fragment key={d.alertId}>
-                        <tr
-                          className="border-t border-border hover:bg-surface cursor-pointer"
-                          onClick={() => setExpanded(open ? null : d.alertId)}
-                        >
-                          <td className="px-4 py-2.5 text-text-secondary">
-                            {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-                          </td>
-                          <td className="px-3 py-2.5 tabular-nums text-text-secondary">{d.ts}</td>
-                          <td className="px-3 py-2.5 font-mono text-text-primary">{d.alertId}</td>
-                          <td className="px-3 py-2.5 text-text-primary">{d.taxonomy}</td>
-                          <td className="px-3 py-2.5 text-text-primary">{d.taxVerdict}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                              d.adversarialCorrected ? "bg-warning/10 text-warning" : "bg-surface text-text-secondary"
-                            }`}>
-                              {d.adversarialCorrected ? "Sí" : "No"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-text-primary font-medium">{d.finalVerdict}</td>
-                          <td className="px-3 py-2.5">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                              d.result === "Auto-resuelto" ? "bg-success/10 text-success" :
-                              d.result === "Derivado" ? "bg-primary-light text-primary" :
-                              "bg-danger/10 text-danger"
-                            }`}>{d.result}</span>
-                          </td>
-                        </tr>
-                        {open && (
-                          <tr className="border-t border-border bg-surface">
-                            <td colSpan={8} className="px-6 py-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-[12px] font-medium text-text-primary">Razonamiento completo</span>
-                                <div className="inline-flex rounded-md border border-border bg-background text-[11px]">
-                                  <button
-                                    onClick={() => setViewMode("human")}
-                                    className={`px-2.5 py-1 rounded-l-md ${viewMode === "human" ? "bg-primary text-white" : "text-text-secondary"}`}
-                                  >Legible</button>
-                                  <button
-                                    onClick={() => setViewMode("json")}
-                                    className={`px-2.5 py-1 rounded-r-md ${viewMode === "json" ? "bg-primary text-white" : "text-text-secondary"}`}
-                                  >JSON</button>
-                                </div>
-                              </div>
-                              {viewMode === "json" ? (
-                                <pre className="text-[11px] bg-background border border-border rounded-md p-3 overflow-auto leading-relaxed">{JSON.stringify(d.reasoning, null, 2)}</pre>
-                              ) : (
-                                <ul className="text-[12px] text-text-primary space-y-1.5">
-                                  {Object.entries(d.reasoning).map(([k, v]) => (
-                                    <li key={k}>
-                                      <span className="text-text-secondary">{k}:</span>{" "}
-                                      <span className="font-medium">{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Confidence distribution */}
-          <section className={`rounded-xl border p-5 ${highLowConf ? "border-warning/40 bg-warning/5" : "border-border bg-card"} shadow-[0_1px_4px_rgba(0,0,0,0.06)]`}>
-            <h2 className="text-[14px] font-semibold text-text-primary mb-1">Distribución de confianza</h2>
-            <p className="text-[11px] text-text-secondary mb-4">Decisiones del turno por rango de confianza</p>
-            <div className="flex items-end gap-1.5 h-40 mb-3">
-              {confidenceDist.map((v, i) => {
-                const opacity = 0.25 + (i / 9) * 0.75;
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t-sm bg-primary"
-                      style={{ height: `${(v / maxBucket) * 100}%`, opacity }}
-                      title={`${i * 10}-${(i + 1) * 10}%: ${v}`}
-                    />
+        {/* ── Config selector ────────────────────────────────────────────── */}
+        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+          <h2 className="text-[13px] font-semibold text-text-primary mb-3 uppercase tracking-wider">Configuración activa</h2>
+          <div className="flex gap-3 flex-wrap">
+            {CONFIGS.map((cfg) => {
+              const active = selectedConfig === cfg.id;
+              return (
+                <button
+                  key={cfg.id}
+                  onClick={() => setSelectedConfig(cfg.id)}
+                  className={`relative flex-1 min-w-[200px] text-left rounded-lg border px-4 py-3.5 transition-all ${
+                    active
+                      ? "border-primary bg-primary/5 shadow-sm"
+                      : "border-border bg-background hover:border-primary/40 hover:bg-surface"
+                  }`}
+                >
+                  {active && (
+                    <span className="absolute top-3 right-3">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    </span>
+                  )}
+                  <div className="flex items-center gap-2 mb-1 pr-6">
+                    <span className="text-[13px] font-semibold text-text-primary">{cfg.name}</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${ENV_STYLES[cfg.env]}`}>
+                      {cfg.env}
+                    </span>
                   </div>
-                );
-              })}
+                  <p className="text-[11px] text-text-secondary leading-relaxed">{cfg.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* ── KPIs operativos ───────────────────────────────────────────── */}
+        <section className="space-y-4">
+          <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">Indicadores operativos</h2>
+          <div className="grid grid-cols-4 gap-4">
+            <KpiCard label="Latencia promedio" value={kpi.latencia} tone="warning" trend="up" delta="+18% vs 1h" icon={<Zap className="h-4 w-4" />} />
+            <KpiCard label="Errores de ejecución" value={kpi.errores} tone="danger" trend="up" delta="umbral 4%" icon={<AlertTriangle className="h-4 w-4" />} />
+            <KpiCard label="Avg token usage" value={kpi.avgTokens} unit="tok" tone="primary" trend="down" delta="-120 vs turno previo" icon={<Brain className="h-4 w-4" />} />
+            <KpiCard label="Fraude no detectado" value={kpi.fraudeNoDetectado} tone="danger" trend="down" delta="-0.2pp vs ayer" icon={<ShieldAlert className="h-4 w-4" />} />
+            <KpiCard label="Falsos positivos" value={kpi.falsosPositivos} tone="warning" trend="up" delta="+1.1pp vs ayer" icon={<AlertTriangle className="h-4 w-4" />} />
+            <KpiCard label="Procesados" value={kpi.procesados} tone="primary" trend="up" delta="sobre total" icon={<CheckCircle2 className="h-4 w-4" />} />
+            <KpiCard label="Fallos" value={kpi.fallos} tone="danger" trend="up" delta="sobre total" icon={<AlertTriangle className="h-4 w-4" />} />
+            <KpiCard label="Disponibilidad" value={kpi.disponibilidad} tone="primary" trend="down" delta={`${kpi.caidas} caída(s) hoy`} icon={<CheckCircle2 className="h-4 w-4" />} />
+          </div>
+
+          {/* Explicabilidad subsection */}
+          <div className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Brain className="h-4 w-4 text-primary" />
+              <h3 className="text-[13px] font-semibold text-text-primary">Explicabilidad</h3>
             </div>
-            <div className="flex justify-between text-[10px] text-text-secondary mb-4">
-              <span>0%</span><span>50%</span><span>100%</span>
+            <div className="grid grid-cols-2 gap-4">
+              <ExplainCard
+                label="Alucinaciones"
+                value={kpi.alucinaciones}
+                description="Porcentaje de decisiones con razonamiento factualmente incorrecto detectado."
+                tone={parseFloat(kpi.alucinaciones) > 1 ? "warning" : "primary"}
+              />
+              <ExplainCard
+                label="Uso correcto de datos"
+                value={kpi.usoCorrectoData}
+                description="Decisiones donde el agente citó y aplicó correctamente los datos disponibles."
+                tone={parseFloat(kpi.usoCorrectoData) >= 95 ? "primary" : "warning"}
+              />
             </div>
-            {highLowConf && (
-              <div className="rounded-md border border-warning/30 bg-warning/10 p-3 flex items-start gap-2">
-                <AlertTriangle className="h-3.5 w-3.5 text-warning mt-0.5 shrink-0" />
-                <p className="text-[11px] text-text-primary leading-relaxed">
-                  Alta concentración de decisiones con baja confianza — revisar taxonomías.
-                </p>
+          </div>
+        </section>
+
+        {/* ── Recomendaciones ───────────────────────────────────────────── */}
+        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+            <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">% Recomendaciones</h2>
+          </div>
+
+          <div className="grid grid-cols-3 gap-6">
+            {/* Acceptance donut-style bars */}
+            <div className="col-span-1 space-y-3">
+              <RecBar label="Aceptadas" pct={kpi.recAceptadas} tone="success" />
+              <RecBar label="Ignoradas" pct={kpi.recIgnoradas} tone="warning" />
+              <div className="pt-1 flex items-center justify-between text-[11px] text-text-secondary border-t border-border">
+                <span>Total recomendaciones emitidas</span>
+                <span className="font-semibold text-text-primary">{kpi.casosAI + kpi.casosHumano}</span>
               </div>
-            )}
-          </section>
-        </div>
+            </div>
+
+            {/* Human vs AI */}
+            <div className="col-span-1 flex flex-col gap-3">
+              <p className="text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-1">Revisión de casos</p>
+              <div className="flex items-end gap-6 h-24">
+                <CasesBar label="Por humano" value={kpi.casosHumano} max={kpi.casosAI} icon={<Users className="h-3.5 w-3.5" />} tone="warning" />
+                <CasesBar label="Por AI" value={kpi.casosAI} max={kpi.casosAI} icon={<Bot className="h-3.5 w-3.5" />} tone="primary" />
+              </div>
+              <p className="text-[11px] text-text-secondary">
+                Ratio AI/humano: <span className="font-semibold text-text-primary">{(kpi.casosAI / kpi.casosHumano).toFixed(1)}x</span>
+              </p>
+            </div>
+
+            {/* Tiempo ahorrado */}
+            <div className="col-span-1 bg-surface rounded-lg border border-border p-4 flex flex-col justify-center items-center text-center">
+              <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-2">Tiempo ahorrado</span>
+              <span className="text-[38px] font-bold text-primary leading-none">{kpi.tiempoAhorrado}</span>
+              <span className="text-[11px] text-text-secondary mt-2">estimado en turno actual<br />vs revisión 100% manual</span>
+            </div>
+          </div>
+        </section>
+
       </div>
     </DashboardLayout>
   );
 }
 
-function HealthCard({
-  label, value, unit, trend, delta, tone,
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function KpiCard({
+  label, value, unit, trend, delta, tone, icon,
 }: {
-  label: string; value: string; unit: string;
+  label: string; value: string; unit?: string;
   trend: "up" | "down"; delta: string;
   tone: "primary" | "warning" | "danger";
+  icon: React.ReactNode;
 }) {
   const toneClass =
     tone === "danger" ? "text-danger" :
@@ -250,10 +252,13 @@ function HealthCard({
   const TrendIcon = trend === "up" ? TrendingUp : TrendingDown;
   return (
     <div className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-      <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-2">{label}</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[11px] uppercase tracking-wider text-text-secondary">{label}</div>
+        <span className={`${toneClass} opacity-60`}>{icon}</span>
+      </div>
       <div className="flex items-baseline gap-1.5">
-        <span className={`text-[32px] font-bold ${toneClass}`}>{value}</span>
-        {unit && <span className="text-[13px] text-text-secondary">{unit}</span>}
+        <span className={`text-[28px] font-bold leading-none ${toneClass}`}>{value}</span>
+        {unit && <span className="text-[12px] text-text-secondary">{unit}</span>}
       </div>
       <div className="flex items-center gap-1.5 mt-2 text-[11px] text-text-secondary">
         <TrendIcon className={`h-3.5 w-3.5 ${toneClass}`} />
@@ -263,16 +268,55 @@ function HealthCard({
   );
 }
 
-function Select({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: [string, string][] }) {
+function ExplainCard({
+  label, value, description, tone,
+}: {
+  label: string; value: string; description: string;
+  tone: "primary" | "warning";
+}) {
+  const toneClass = tone === "warning" ? "text-warning" : "text-primary";
+  const bgClass = tone === "warning" ? "bg-warning/5 border-warning/20" : "bg-primary/5 border-primary/20";
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 px-2.5 rounded-md border border-border bg-background text-[12px] text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-    >
-      {options.map(([v, l]) => (
-        <option key={v} value={v}>{l}</option>
-      ))}
-    </select>
+    <div className={`rounded-lg border p-4 ${bgClass}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[12px] font-semibold text-text-primary">{label}</span>
+        <span className={`text-[22px] font-bold ${toneClass}`}>{value}</span>
+      </div>
+      <p className="text-[11px] text-text-secondary leading-relaxed">{description}</p>
+    </div>
   );
 }
+
+function RecBar({ label, pct, tone }: { label: string; pct: number; tone: "success" | "warning" }) {
+  const fill = tone === "success" ? "bg-success" : "bg-warning";
+  const text = tone === "success" ? "text-success" : "text-warning";
+  return (
+    <div>
+      <div className="flex justify-between text-[12px] mb-1">
+        <span className="text-text-primary font-medium">{label}</span>
+        <span className={`font-bold ${text}`}>{pct}%</span>
+      </div>
+      <div className="h-2 bg-surface rounded-full overflow-hidden border border-border">
+        <div className={`h-full rounded-full ${fill}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CasesBar({
+  label, value, max, icon, tone,
+}: { label: string; value: number; max: number; icon: React.ReactNode; tone: "primary" | "warning" }) {
+  const fill = tone === "primary" ? "bg-primary" : "bg-warning";
+  const text = tone === "primary" ? "text-primary" : "text-warning";
+  const pct = (value / max) * 100;
+  return (
+    <div className="flex flex-col items-center gap-1 flex-1">
+      <span className={`text-[20px] font-bold ${text}`}>{value}</span>
+      <div className="w-full bg-surface border border-border rounded-sm overflow-hidden" style={{ height: `${pct}%`, minHeight: 8 }}>
+        <div className={`w-full h-full ${fill} opacity-80`} />
+      </div>
+      <div className={`flex items-center gap-1 text-[11px] ${text}`}>{icon}<span>{label}</span></div>
+    </div>
+  );
+}
+

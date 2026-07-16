@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, AlertTriangle, HelpCircle } from "lucide-react";
+import {
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
 import { DashboardLayout } from "@/components/DashboardLayout";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard · ARIA" },
+      { title: "ARIA - Agente prevención de Fraude" },
       { name: "description", content: "Dashboard operacional ARIA — monitoreo en tiempo real de alertas, agente y SLA." },
     ],
   }),
@@ -14,65 +17,80 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 type Trend = "up" | "down";
-const stats: { value: number; label: string; trend: Trend; delta: string }[] = [
-  { value: 142, label: "Alertas activas", trend: "up", delta: "+8%" },
-  { value: 36, label: "En evaluación por agente", trend: "up", delta: "+3%" },
-  { value: 12, label: "Esperando analista", trend: "down", delta: "-15%" },
-  { value: 287, label: "Resueltas este turno", trend: "up", delta: "+22%" },
+type StatDef = {
+  value: string;
+  label: string;
+  trend: Trend;
+  delta: string;
+  help: string;
+};
+
+const stats: StatDef[] = [
+  {
+    value: "1,248", label: "Alertas procesadas", trend: "up", delta: "+18%",
+    help: "Total de alertas ARIC procesadas por el agente en el período seleccionado.",
+  },
+  {
+    value: "4m 32s", label: "Tiempo prom. procesamiento", trend: "up", delta: "−12%",
+    help: "Tiempo promedio desde la recepción de la alerta hasta su resolución o escalado.",
+  },
+  {
+    value: "1,089", label: "Alertas bien gestionadas", trend: "up", delta: "+21%",
+    help: "Alertas cerradas satisfactoriamente sin escalado a analista, desde el último cambio de configuración.",
+  },
+  {
+    value: "12.7%", label: "Ratio falsos positivos", trend: "down", delta: "−3.1pp",
+    help: "Porcentaje de alertas incorrectamente clasificadas como positivas desde la última configuración.",
+  },
 ];
 
 const funnel = [
-  { name: "Entrada ARIC", count: 412, warn: false },
-  { name: "Clasificación ARIC", count: 268, warn: false },
-  { name: "Evaluación Agente", count: 96, warn: true },
-  { name: "Executor", count: 41, warn: false },
-  { name: "Analista", count: 12, warn: false },
+  { name: "Entrada ARIC", count: 412, warn: false, color: "#60a5fa" },
+  { name: "Agente ARIA", count: 96, warn: true, color: "#fbbf24" },
+  { name: "Voicebot", count: 41, warn: false, color: "#34d399" },
+  { name: "Analista", count: 12, warn: false, color: "#a78bfa" },
 ];
 
-const slaRows = [
-  { id: "ALR-48201", stage: "Evaluación Agente", elapsed: "07:42", pct: 92, level: "danger" as const },
-  { id: "ALR-48198", stage: "Analista", elapsed: "06:15", pct: 78, level: "warning" as const },
-  { id: "ALR-48190", stage: "Executor", elapsed: "05:03", pct: 65, level: "warning" as const },
-  { id: "ALR-48177", stage: "Analista", elapsed: "04:48", pct: 58, level: "warning" as const },
-  { id: "ALR-48165", stage: "Evaluación Agente", elapsed: "03:21", pct: 42, level: "success" as const },
-  { id: "ALR-48150", stage: "Executor", elapsed: "02:58", pct: 36, level: "success" as const },
-];
-
-const taxonomyColors: Record<string, string> = {
-  "Fraude tarjeta": "bg-[#fee2e2] text-[#991b1b]",
-  "Lavado": "bg-[#fef3c7] text-[#92400e]",
-  "Phishing": "bg-[#ede9fe] text-[#5b21b6]",
-  "Identidad": "bg-[#dbeafe] text-[#1e40af]",
-  "Cuenta mula": "bg-[#fce7f3] text-[#9d174d]",
-};
-
-const verdicts: Record<string, string> = {
-  "Auto-resuelto": "bg-[#dcfce7] text-[#166534]",
-  "Derivado a analista": "bg-primary-light text-primary",
-  "Sospechoso re-evaluado": "bg-[#fef3c7] text-[#92400e]",
-};
-
-const activity = Array.from({ length: 14 }).map((_, i) => {
-  const samples = [
-    { type: "Fraude tarjeta", verdict: "Auto-resuelto", agent: "Sub-agente FRAUD-01" },
-    { type: "Phishing", verdict: "Derivado a analista", agent: "Sub-agente PHISH-02" },
-    { type: "Lavado", verdict: "Sospechoso re-evaluado", agent: "Sub-agente AML-03" },
-    { type: "Identidad", verdict: "Auto-resuelto", agent: "Sub-agente IDV-01" },
-    { type: "Cuenta mula", verdict: "Derivado a analista", agent: "Sub-agente MULE-02" },
-  ];
-  const s = samples[i % samples.length];
-  const minutes = i * 3 + 2;
-  return {
-    id: `ALR-${48210 - i}`,
-    time: `Hace ${minutes} min`,
-    ...s,
-  };
+const MONTHLY_SPIKES: Record<number, number> = { 15: 135, 20: 110, 30: 150 };
+const monthlyData = Array.from({ length: 30 }, (_, i) => {
+  const day = i + 1;
+  const wave = 42 + Math.round(10 * Math.sin(day / 2.3));
+  return { day, alertas: MONTHLY_SPIKES[day] ?? wave };
 });
 
-function StatCard({ value, label, trend, delta }: typeof stats[number]) {
+const HOURLY_STEPS = [
+  { from: 0, to: 6, value: 18 },
+  { from: 6, to: 11, value: 32 },
+  { from: 11, to: 20, value: 68 },
+  { from: 20, to: 24, value: 20 },
+];
+const hourlyData = Array.from({ length: 24 }, (_, hour) => {
+  const step = HOURLY_STEPS.find((s) => hour >= s.from && hour < s.to)!;
+  return { hour, alertas: step.value };
+});
+
+const GRANULARITIES = ["Último día", "Semana", "Mes"] as const;
+type Granularity = typeof GRANULARITIES[number];
+const DISTRIBUTION_HELP = "Distribución de alertas activas en cada etapa del flujo de gestión, según el período seleccionado.";
+
+function StatCard({ value, label, trend, delta, help }: StatDef) {
+  const [helpOpen, setHelpOpen] = useState(false);
+
   return (
-    <div className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-      <div className="flex items-baseline justify-between">
+    <div className="relative bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+      <button
+        onClick={() => setHelpOpen(!helpOpen)}
+        className="absolute top-3 right-3 text-text-secondary hover:text-text-primary transition-colors"
+        aria-label="Ayuda"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+      {helpOpen && (
+        <div className="absolute top-8 right-3 z-10 bg-card border border-border rounded-lg p-3 text-[12px] text-text-secondary max-w-[190px] shadow-md">
+          {help}
+        </div>
+      )}
+      <div className="flex items-baseline justify-between pr-6">
         <span className="text-[32px] font-bold leading-none text-primary tabular-nums">{value}</span>
         <span className={`flex items-center gap-1 text-[12px] font-medium ${trend === "up" ? "text-success" : "text-danger"}`}>
           {trend === "up" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
@@ -84,153 +102,195 @@ function StatCard({ value, label, trend, delta }: typeof stats[number]) {
   );
 }
 
-function FunnelStage({ stage, idx, total }: { stage: typeof funnel[number]; idx: number; total: number }) {
-  const heightPct = 100 - (idx / total) * 35;
-  return (
-    <div className="flex items-center flex-1 min-w-0">
-      <div
-        className={`flex-1 rounded-lg flex flex-col items-center justify-center px-3 transition-colors ${
-          stage.warn ? "bg-[#fef3c7] border border-[#fde68a]" : "bg-primary-light border border-transparent"
-        }`}
-        style={{ height: `${heightPct * 1.4}px` }}
-      >
-        <span className={`text-[11px] uppercase tracking-wider mb-1 ${stage.warn ? "text-[#92400e]" : "text-primary/70"}`}>
-          {stage.name}
-        </span>
-        <span className={`text-[28px] font-bold tabular-nums ${stage.warn ? "text-[#92400e]" : "text-primary"}`}>
-          {stage.count}
-        </span>
-      </div>
-      {idx < total - 1 && <ChevronRight className="h-5 w-5 mx-1 text-border shrink-0" />}
-    </div>
-  );
+const RING_GAP_DEG = 5;
+
+function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
+  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(angleRad), y: cy + r * Math.sin(angleRad) };
 }
 
-function SlaBar({ pct, level }: { pct: number; level: "success" | "warning" | "danger" }) {
-  const color = level === "danger" ? "bg-danger" : level === "warning" ? "bg-warning" : "bg-success";
+function describeArc(cx: number, cy: number, r: number, startAngle: number, endAngle: number) {
+  const start = polarToCartesian(cx, cy, r, endAngle);
+  const end = polarToCartesian(cx, cy, r, startAngle);
+  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+}
+
+function FunnelRing({ stages }: { stages: typeof funnel }) {
+  const total = stages.reduce((sum, s) => sum + s.count, 0);
+  const [hovered, setHovered] = useState<number | null>(null);
+
+  const arcs = useMemo(() => {
+    const availableDeg = 360 - RING_GAP_DEG * stages.length;
+    let cumulative = 0;
+    return stages.map((stage) => {
+      const sweep = (stage.count / total) * availableDeg;
+      const arc = { start: cumulative, end: cumulative + sweep };
+      cumulative += sweep + RING_GAP_DEG;
+      return arc;
+    });
+  }, [stages, total]);
+
+  const active = hovered !== null ? stages[hovered] : null;
+
   return (
-    <div className="h-1.5 w-full bg-border rounded-full overflow-hidden">
-      <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
+    <div className="flex items-center gap-8 flex-wrap">
+      <div className="relative w-[190px] h-[190px] shrink-0">
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          {stages.map((stage, i) => (
+            <path
+              key={stage.name}
+              d={describeArc(100, 100, 82, arcs[i].start, arcs[i].end)}
+              fill="none"
+              stroke={stage.color}
+              strokeWidth={22}
+              strokeLinecap="round"
+              opacity={hovered === null || hovered === i ? 1 : 0.35}
+              className="transition-opacity cursor-pointer"
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+            />
+          ))}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-[26px] font-bold tabular-nums text-text-primary">
+            {(active ?? { count: total }).count.toLocaleString("es-ES")}
+          </span>
+          <span className="text-[12px] text-text-secondary text-center px-4">
+            {active ? active.name : "Alertas en la distribución"}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2.5 min-w-[200px]">
+        {stages.map((stage, i) => (
+          <div
+            key={stage.name}
+            className="flex items-center gap-2.5 cursor-pointer"
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: stage.color }} />
+            <span className="text-[13px] text-text-primary flex-1">{stage.name}</span>
+            <span className="text-[13px] font-semibold tabular-nums text-text-primary">{stage.count}</span>
+            {stage.warn && <AlertTriangle className="h-3.5 w-3.5 text-[#92400e]" />}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function DashboardPage() {
-  const [shift, setShift] = useState<"current" | "8h" | "24h">("current");
-  const shifts: { id: typeof shift; label: string }[] = [
-    { id: "current", label: "Turno actual" },
-    { id: "8h", label: "Últimas 8h" },
-    { id: "24h", label: "Últimas 24h" },
-  ];
+  const [granularity, setGranularity] = useState<Granularity>("Último día");
+  const [distributionHelpOpen, setDistributionHelpOpen] = useState(false);
 
   return (
     <DashboardLayout>
       <div className="px-8 py-6">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-[20px] font-bold text-text-primary">Dashboard</h1>
           <div className="inline-flex rounded-lg border border-border bg-surface p-1">
-            {shifts.map((s) => (
+            {GRANULARITIES.map((g) => (
               <button
-                key={s.id}
-                onClick={() => setShift(s.id)}
-                className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
-                  shift === s.id ? "bg-primary text-primary-foreground" : "text-text-secondary hover:text-text-primary"
+                key={g}
+                onClick={() => setGranularity(g)}
+                className={`px-3 py-1 text-[11px] font-medium rounded-md transition-colors ${
+                  granularity === g ? "bg-primary text-primary-foreground" : "text-text-secondary hover:text-text-primary"
                 }`}
               >
-                {s.label}
+                {g}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Stats row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {stats.map((s) => <StatCard key={s.label} {...s} />)}
         </div>
 
-        {/* Funnel + SLA panel */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 mb-6">
-          <section className="xl:col-span-2 bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-[14px] font-semibold text-text-primary">Embudo en tiempo real</h2>
-              <span className="text-[11px] uppercase tracking-wider text-text-secondary">Live</span>
+        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <h2 className="text-[14px] font-semibold text-text-primary">Distribución en tiempo real</h2>
+            <div className="relative">
+              <button
+                onClick={() => setDistributionHelpOpen(!distributionHelpOpen)}
+                className="text-text-secondary hover:text-text-primary transition-colors"
+                aria-label="Ayuda"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+              {distributionHelpOpen && (
+                <div className="absolute left-0 top-6 z-10 bg-card border border-border rounded-lg p-3 text-[12px] text-text-secondary max-w-[220px] shadow-md">
+                  {DISTRIBUTION_HELP}
+                </div>
+              )}
             </div>
-            <div className="flex items-center">
-              {funnel.map((stage, idx) => (
-                <FunnelStage key={stage.name} stage={stage} idx={idx} total={funnel.length} />
-              ))}
-            </div>
+          </div>
+          <FunnelRing stages={funnel} />
+        </section>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+            <h2 className="text-[14px] font-semibold text-text-primary mb-4">Alertas procesadas · Mensual</h2>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={monthlyData} margin={{ top: 5, right: 12, bottom: 0, left: -20 }}>
+                <CartesianGrid stroke="#e2e5ef" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e2e5ef" }}
+                  ticks={[1, 5, 10, 15, 20, 25, 30]}
+                />
+                <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={32} />
+                <Tooltip
+                  formatter={(value: number) => [value, "Alertas"]}
+                  labelFormatter={(day) => `Día ${day}`}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: "#e2e5ef" }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="alertas"
+                  stroke="rgb(0,17,148)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </section>
 
           <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-            <h2 className="text-[14px] font-semibold text-text-primary mb-4">SLA en riesgo</h2>
-            {slaRows.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <CheckCircle2 className="h-10 w-10 text-success mb-3" />
-                <p className="text-[13px] text-text-secondary">Sin alertas en riesgo de SLA</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-border">
-                {slaRows.map((row) => (
-                  <li key={row.id}>
-                    <button className="w-full text-left py-3 hover:bg-surface rounded-md px-2 -mx-2 transition-colors">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[13px] font-medium text-text-primary tabular-nums">{row.id}</span>
-                        <span className="text-[11px] text-text-secondary tabular-nums">{row.elapsed}</span>
-                      </div>
-                      <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-2">{row.stage}</div>
-                      <SlaBar pct={row.pct} level={row.level} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h2 className="text-[14px] font-semibold text-text-primary mb-4">Alertas procesadas · Horario diario</h2>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={hourlyData} margin={{ top: 5, right: 12, bottom: 0, left: -20 }}>
+                <CartesianGrid stroke="#e2e5ef" vertical={false} />
+                <XAxis
+                  dataKey="hour"
+                  tick={{ fontSize: 11, fill: "#6b7280" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "#e2e5ef" }}
+                  ticks={[0, 6, 11, 20, 23]}
+                  tickFormatter={(h) => `${String(h).padStart(2, "0")}h`}
+                />
+                <YAxis tick={{ fontSize: 11, fill: "#6b7280" }} tickLine={false} axisLine={false} width={32} />
+                <Tooltip
+                  formatter={(value: number) => [value, "Alertas"]}
+                  labelFormatter={(h) => `${String(h).padStart(2, "0")}:00`}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, borderColor: "#e2e5ef" }}
+                />
+                <Line
+                  type="stepAfter"
+                  dataKey="alertas"
+                  stroke="rgb(0,17,148)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </section>
         </div>
-
-        {/* Activity feed */}
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-          <div className="px-5 py-4 border-b border-border">
-            <h2 className="text-[14px] font-semibold text-text-primary">Actividad reciente del agente</h2>
-          </div>
-          <div className="overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-text-secondary">
-                  <th className="text-left font-normal px-5 py-3 w-[140px]">Timestamp</th>
-                  <th className="text-left font-normal py-3 w-[120px]">Alerta</th>
-                  <th className="text-left font-normal py-3">Tipo</th>
-                  <th className="text-left font-normal py-3">Veredicto</th>
-                  <th className="text-left font-normal px-5 py-3">Sub-agente</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activity.map((row, i) => (
-                  <tr key={row.id} className={`border-t border-border ${i % 2 === 1 ? "bg-surface" : "bg-card"}`}>
-                    <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums">{row.time}</td>
-                    <td className="py-3 text-[13px] font-medium text-text-primary tabular-nums">{row.id}</td>
-                    <td className="py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${taxonomyColors[row.type]}`}>
-                        {row.type}
-                      </span>
-                    </td>
-                    <td className="py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${verdicts[row.verdict]}`}>
-                        {row.verdict}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[12px] text-text-secondary">{row.agent}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-border flex justify-between items-center">
-            <span className="text-[11px] text-text-secondary">Mostrando 14 de 20</span>
-            <button className="text-[12px] font-medium text-primary hover:underline">Cargar más</button>
-          </div>
-        </section>
       </div>
     </DashboardLayout>
   );
