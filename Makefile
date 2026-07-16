@@ -12,6 +12,7 @@ build-static:
 	docker run --rm -v $(PWD):/app -v /app/node_modules -w /app oven/bun:1-alpine \
 		sh -c "bun install --frozen-lockfile && bun run build:static"
 	cp dist/client/index.html dist/client/404.html
+	rm -rf docs && cp -R dist/client docs
 
 run:
 	docker compose up -d
