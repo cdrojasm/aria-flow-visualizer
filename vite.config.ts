@@ -6,10 +6,22 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+// STATIC=1 (make build-static) → SPA shell prerendered for GitHub Pages,
+// served under /<repo>/. Unset (default) → SSR build for Docker/node.
+const isStatic = !!process.env.STATIC;
+const base = process.env.STATIC_BASE ?? "/aria-flow-visualizer/";
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    ...(isStatic && {
+      spa: {
+        enabled: true,
+        prerender: { outputPath: "/index", autoSubfolderIndex: false },
+      },
+    }),
   },
+  ...(isStatic && { vite: { base } }),
 });
