@@ -11,10 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TestingRouteImport } from './routes/testing'
 import { Route as MonitorRouteImport } from './routes/monitor'
+import { Route as HistoricoFraudeRouteImport } from './routes/historico-fraude'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ColaRouteImport } from './routes/cola'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TestingRunIdRouteImport } from './routes/testing.$runId'
 import { Route as AlertaIdRouteImport } from './routes/alerta.$id'
 
 const TestingRoute = TestingRouteImport.update({
@@ -25,6 +27,11 @@ const TestingRoute = TestingRouteImport.update({
 const MonitorRoute = MonitorRouteImport.update({
   id: '/monitor',
   path: '/monitor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoricoFraudeRoute = HistoricoFraudeRouteImport.update({
+  id: '/historico-fraude',
+  path: '/historico-fraude',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -47,6 +54,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestingRunIdRoute = TestingRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => TestingRoute,
+} as any)
 const AlertaIdRoute = AlertaIdRouteImport.update({
   id: '/alerta/$id',
   path: '/alerta/$id',
@@ -58,18 +70,22 @@ export interface FileRoutesByFullPath {
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
+  '/historico-fraude': typeof HistoricoFraudeRoute
   '/monitor': typeof MonitorRoute
-  '/testing': typeof TestingRoute
+  '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
+  '/testing/$runId': typeof TestingRunIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
+  '/historico-fraude': typeof HistoricoFraudeRoute
   '/monitor': typeof MonitorRoute
-  '/testing': typeof TestingRoute
+  '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
+  '/testing/$runId': typeof TestingRunIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,9 +93,11 @@ export interface FileRoutesById {
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
+  '/historico-fraude': typeof HistoricoFraudeRoute
   '/monitor': typeof MonitorRoute
-  '/testing': typeof TestingRoute
+  '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
+  '/testing/$runId': typeof TestingRunIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -88,27 +106,33 @@ export interface FileRouteTypes {
     | '/cola'
     | '/configuracion'
     | '/dashboard'
+    | '/historico-fraude'
     | '/monitor'
     | '/testing'
     | '/alerta/$id'
+    | '/testing/$runId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/cola'
     | '/configuracion'
     | '/dashboard'
+    | '/historico-fraude'
     | '/monitor'
     | '/testing'
     | '/alerta/$id'
+    | '/testing/$runId'
   id:
     | '__root__'
     | '/'
     | '/cola'
     | '/configuracion'
     | '/dashboard'
+    | '/historico-fraude'
     | '/monitor'
     | '/testing'
     | '/alerta/$id'
+    | '/testing/$runId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -116,8 +140,9 @@ export interface RootRouteChildren {
   ColaRoute: typeof ColaRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   DashboardRoute: typeof DashboardRoute
+  HistoricoFraudeRoute: typeof HistoricoFraudeRoute
   MonitorRoute: typeof MonitorRoute
-  TestingRoute: typeof TestingRoute
+  TestingRoute: typeof TestingRouteWithChildren
   AlertaIdRoute: typeof AlertaIdRoute
 }
 
@@ -135,6 +160,13 @@ declare module '@tanstack/react-router' {
       path: '/monitor'
       fullPath: '/monitor'
       preLoaderRoute: typeof MonitorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/historico-fraude': {
+      id: '/historico-fraude'
+      path: '/historico-fraude'
+      fullPath: '/historico-fraude'
+      preLoaderRoute: typeof HistoricoFraudeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -165,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/testing/$runId': {
+      id: '/testing/$runId'
+      path: '/$runId'
+      fullPath: '/testing/$runId'
+      preLoaderRoute: typeof TestingRunIdRouteImport
+      parentRoute: typeof TestingRoute
+    }
     '/alerta/$id': {
       id: '/alerta/$id'
       path: '/alerta/$id'
@@ -175,13 +214,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface TestingRouteChildren {
+  TestingRunIdRoute: typeof TestingRunIdRoute
+}
+
+const TestingRouteChildren: TestingRouteChildren = {
+  TestingRunIdRoute: TestingRunIdRoute,
+}
+
+const TestingRouteWithChildren =
+  TestingRoute._addFileChildren(TestingRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ColaRoute: ColaRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   DashboardRoute: DashboardRoute,
+  HistoricoFraudeRoute: HistoricoFraudeRoute,
   MonitorRoute: MonitorRoute,
-  TestingRoute: TestingRoute,
+  TestingRoute: TestingRouteWithChildren,
   AlertaIdRoute: AlertaIdRoute,
 }
 export const routeTree = rootRouteImport

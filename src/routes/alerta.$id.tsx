@@ -3,8 +3,11 @@ import { useEffect, useState } from "react";
 import {
   ChevronRight, AlertTriangle, Check, ChevronDown, Clock,
   RefreshCw, ExternalLink, GitBranch, ShieldCheck, Sparkles, Database, X,
+  UserPlus, Pencil, KeyRound, ArrowLeftRight,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { RefreshControl } from "@/components/RefreshControl";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export const Route = createFileRoute("/alerta/$id")({
   head: () => ({
@@ -17,6 +20,7 @@ export const Route = createFileRoute("/alerta/$id")({
 });
 
 type AlertTab = "resumen" | "razonamiento" | "data" | "estados" | "usuario" | "historial";
+type ActionKind = "fraud" | "fp" | "dataset" | null;
 
 const TABS: { id: AlertTab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
@@ -121,10 +125,28 @@ const userFields: { field: string; available: "yes" | "partial" | "no"; value: s
 ];
 
 const history30d = [3, 2, 5, 1, 4, 2, 3, 6, 2, 1, 3, 4, 2, 5, 3, 2, 4, 1, 2, 3, 5, 4, 2, 3, 1, 2, 4, 3, 2, 8];
-const prevAlerts = [
-  { id: "ALR-47120", date: "2026-05-21", result: "Falso positivo" },
-  { id: "ALR-46004", date: "2026-04-18", result: "Auto-cerrada" },
-  { id: "ALR-44872", date: "2026-03-02", result: "Falso positivo" },
+
+type TxCategory = "enroll" | "cambio_datos" | "autenticacion" | "movimiento_dinero";
+
+const txCategoryMeta: Record<TxCategory, { label: string; icon: typeof UserPlus; classes: string }> = {
+  enroll: { label: "Enrolamiento", icon: UserPlus, classes: "bg-[#ede9fe] text-[#5b21b6]" },
+  cambio_datos: { label: "Cambio de datos", icon: Pencil, classes: "bg-[#fef3c7] text-[#92400e]" },
+  autenticacion: { label: "Autenticación", icon: KeyRound, classes: "bg-[#dbeafe] text-[#1e40af]" },
+  movimiento_dinero: { label: "Movimiento de dinero", icon: ArrowLeftRight, classes: "bg-[#dcfce7] text-[#166534]" },
+};
+
+const prevAlerts: { id: string; date: string; hour: string; category: TxCategory; monto: string; controls: string[]; result: string }[] = [
+  { id: "ALR-47120", date: "2026-05-21", hour: "14:32", category: "movimiento_dinero", monto: "$1,850.00 USD", controls: ["Score1000Net_PRE", "geo_anomaly"], result: "Falso positivo" },
+  { id: "ALR-46004", date: "2026-04-18", hour: "09:07", category: "autenticacion", monto: "—", controls: ["dg_vpn_pse"], result: "Auto-cerrada" },
+  { id: "ALR-44872", date: "2026-03-02", hour: "22:51", category: "cambio_datos", monto: "—", controls: ["device_change", "cancelTSEC"], result: "Falso positivo" },
+];
+
+const previousTransactions: { id: string; date: string; hour: string; category: TxCategory; desc: string; monto: string; canal: string; controls: string[] }[] = [
+  { id: "TX-9980011", date: "2026-06-08", hour: "19:42", category: "movimiento_dinero", desc: "Transferencia PSE", monto: "$320,000 COP", canal: "App Móvil", controls: ["monto_pattern_ok"] },
+  { id: "TX-9979884", date: "2026-06-05", hour: "08:15", category: "autenticacion", desc: "Login con OTP", monto: "—", canal: "Web", controls: ["biocatch_ok"] },
+  { id: "TX-9978210", date: "2026-05-29", hour: "16:03", category: "cambio_datos", desc: "Actualización de celular registrado", monto: "—", canal: "App Móvil", controls: ["kyc_reverify"] },
+  { id: "TX-9975500", date: "2026-05-14", hour: "11:27", category: "enroll", desc: "Enrolamiento token digital", monto: "—", canal: "Sucursal", controls: ["identity_verified"] },
+  { id: "TX-9971233", date: "2026-05-02", hour: "20:58", category: "movimiento_dinero", desc: "Pago tarjeta de crédito", monto: "$450,000 COP", canal: "App Móvil", controls: [] },
 ];
 
 /* ────────────── badge helpers ────────────── */
@@ -138,9 +160,94 @@ const availLabel = { yes: "✓", partial: "⚠", no: "✗" };
 
 /* ────────────── tab content ────────────── */
 
-function ResumenTab() {
+const profiling = [
+  {
+    title: "Perfilamiento usuario",
+    badges: [
+      { label: "Sexo", value: "Mujer" },
+      { label: "Edad", value: "44 años" },
+      { label: "Nombre", value: "Ana Martínez" },
+      { label: "Segmento", value: "Premium" },
+      { label: "Antigüedad", value: "~6 años" },
+      { label: "Historial fraude", value: "Ninguno" },
+    ],
+    text: "Cliente hace aproximadamente 6 años, sin historial de fraude confirmado. Patrón de uso bancario estable, sin cambios recientes en datos de contacto o dispositivos.",
+  },
+  {
+    title: "Perfilamiento transacción",
+    badges: [
+      { label: "Ubicación", value: "São Paulo, Brasil" },
+      { label: "Hora", value: "02:17 h" },
+      { label: "Canal", value: "Card-Present" },
+      { label: "Monto", value: "4.2× media 30d" },
+      { label: "Horario", value: "Fuera de ventana habitual" },
+    ],
+    text: "Canal y dispositivo (Card-Present) consistentes con el perfil histórico. Sin embargo, horario fuera de ventana habitual (8:00–22:00) por más de 4 horas. Comercio no reconocido en historial de viajes.",
+  },
+  {
+    title: "Perfil transaccional (histórico)",
+    badges: [
+      { label: "Días activos", value: "Lun–Vie" },
+      { label: "Horario habitual", value: "9:00–21:00" },
+      { label: "Monto habitual", value: "$50–$800 USD" },
+      { label: "Frecuencia", value: "3–8 tx/semana" },
+      { label: "Máx. histórico", value: "$1,500 USD" },
+    ],
+    text: "Nunca ha superado $1,500 USD en una sola operación. No registra compras card-present en el exterior ni en comercios de electrónica de alto valor.",
+  },
+];
+
+function ResumenTab({ onAction }: { onAction: (a: ActionKind) => void }) {
   return (
-    <div className="max-w-[860px] space-y-6">
+    <div className="max-w-[1180px] space-y-6">
+      {/* Perfilamiento + recomendación — hero, siempre arriba, dos columnas si el ancho lo permite */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-5 items-start">
+        <div className="rounded-xl border-2 border-primary/40 bg-gradient-to-br from-primary-light/60 via-primary-light/20 to-transparent p-6 space-y-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <h2 className="text-[14px] font-bold text-text-primary">Perfilamiento del agente</h2>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            {profiling.map((p) => (
+              <div key={p.title} className="bg-card border border-border rounded-lg px-5 py-4">
+                <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-2">{p.title}</div>
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {p.badges.map((b) => (
+                    <span key={b.label} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-light text-primary text-[11px] font-semibold">
+                      <span className="opacity-70">{b.label}:</span> {b.value}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[13px] text-text-primary leading-relaxed">{p.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="lg:sticky lg:top-6 bg-card border-2 border-primary rounded-xl p-5 space-y-4">
+          <div className="flex items-start gap-3">
+            <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-primary font-bold mb-1">Recomendación: confirmar fraude</div>
+              <p className="text-[13px] text-text-primary leading-relaxed">
+                Patrón consistente con <strong>fraude card-present en el exterior</strong>. Hipótesis principal: skimming en POS previo + uso en cadena retail de alto valor en Brasil.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <button onClick={() => onAction("fraud")}
+              className="h-9 px-4 rounded-md bg-danger text-white text-[13px] font-semibold hover:opacity-90">
+              Confirmar fraude
+            </button>
+            <button onClick={() => onAction("fp")}
+              className="h-9 px-4 rounded-md border border-border text-text-primary text-[13px] font-medium hover:bg-surface">
+              Falso positivo
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section>
         <h3 className="text-[12px] uppercase tracking-wider text-text-secondary mb-3">Señales de riesgo</h3>
         <div className="flex flex-wrap gap-2">
@@ -182,36 +289,6 @@ function ResumenTab() {
           </dl>
         </section>
       </div>
-
-      <section className="bg-[#eff6ff] border border-[#bfdbfe] rounded-xl p-5">
-        <h3 className="text-[12px] uppercase tracking-wider text-[#1e40af] mb-2">Recomendación del agente</h3>
-        <p className="text-[13px] text-[#1e40af] leading-relaxed">
-          Patrón consistente con <strong>fraude card-present en el exterior</strong>. Se recomienda confirmar fraude y proceder con bloqueo de tarjeta. Hipótesis principal: skimming en POS previo + uso en cadena retail de alto valor en Brasil. Confianza: <strong>92%</strong>.
-        </p>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3">
-        <h3 className="text-[12px] uppercase tracking-wider text-text-secondary">Perfilamiento del agente</h3>
-        {[
-          {
-            title: "Perfilamiento usuario",
-            text: "Mujer, 44 años. Nombre: Ana Martínez. Cliente hace aproximadamente 6 años. Segmento Premium. Sin historial de fraude confirmado. Patrón de uso bancario estable, sin cambios recientes en datos de contacto o dispositivos.",
-          },
-          {
-            title: "Perfilamiento transacción",
-            text: "Transacción POS en São Paulo, Brasil, a las 02:17 h. Canal y dispositivo (Card-Present) consistentes con el perfil histórico. Sin embargo, horario fuera de ventana habitual (8:00–22:00) por más de 4 horas. Comercio no reconocido en historial de viajes. Monto 4.2× la media móvil de 30 días.",
-          },
-          {
-            title: "Perfil transaccional",
-            text: "Cliente que opera principalmente de lunes a viernes entre las 9:00 y las 21:00 h. Montos habituales: $50–$800 USD. Realiza entre 3 y 8 transacciones semanales. Nunca ha superado $1,500 USD en una sola operación. No registra compras card-present en el exterior ni en comercios de electrónica de alto valor.",
-          },
-        ].map((p) => (
-          <div key={p.title} className="bg-surface border border-border rounded-lg px-5 py-4">
-            <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-1.5">{p.title}</div>
-            <p className="text-[13px] text-text-primary leading-relaxed">{p.text}</p>
-          </div>
-        ))}
-      </section>
     </div>
   );
 }
@@ -303,8 +380,13 @@ function RazonamientoTab() {
 }
 
 function DataAlertaTab() {
+  const { lastRefresh, refresh } = useAutoRefresh();
   return (
-    <div className="max-w-[860px] bg-card rounded-xl border border-border overflow-hidden">
+    <div className="max-w-[860px] space-y-3">
+      <div className="flex justify-end">
+        <RefreshControl lastRefresh={lastRefresh} onRefresh={refresh} />
+      </div>
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
       <table className="w-full text-[12px]">
         <thead className="bg-surface">
           <tr className="text-[11px] uppercase tracking-wider text-text-secondary border-b border-border">
@@ -329,6 +411,7 @@ function DataAlertaTab() {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -368,9 +451,36 @@ function UsuarioTab() {
   );
 }
 
-function HistorialTab() {
+function CategoryBadge({ category }: { category: TxCategory }) {
+  const meta = txCategoryMeta[category];
+  const Icon = meta.icon;
   return (
-    <div className="max-w-[860px] space-y-6">
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap ${meta.classes}`}>
+      <Icon className="h-3 w-3" />
+      {meta.label}
+    </span>
+  );
+}
+
+function ControlChips({ controls }: { controls: string[] }) {
+  if (controls.length === 0) return <span className="text-text-secondary">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {controls.map((c) => (
+        <span key={c} className="inline-flex items-center px-2 py-0.5 rounded bg-surface border border-border text-[10px] font-mono text-text-secondary">
+          {c}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function HistorialTab() {
+  const alertasRefresh = useAutoRefresh();
+  const txRefresh = useAutoRefresh();
+
+  return (
+    <div className="max-w-[980px] space-y-6">
       <section className="bg-card rounded-xl border border-border p-6">
         <h2 className="text-[14px] font-semibold text-text-primary mb-1">Actividad últimos 30 días</h2>
         <p className="text-[11px] text-text-secondary mb-4">Transacciones del usuario</p>
@@ -392,25 +502,83 @@ function HistorialTab() {
           <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-danger" /> Esta transacción</span>
         </div>
       </section>
-      <section className="bg-card rounded-xl border border-border p-6">
-        <h2 className="text-[14px] font-semibold text-text-primary mb-4">Alertas previas</h2>
-        <ul className="divide-y divide-border">
-          {prevAlerts.map((a) => (
-            <li key={a.id} className="py-3 flex items-center justify-between text-[13px]">
-              <span className="font-mono text-text-primary">{a.id}</span>
-              <span className="text-text-secondary">{a.date}</span>
-              <span className="text-text-primary font-medium">{a.result}</span>
-            </li>
-          ))}
-        </ul>
+
+      <section className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+          <h2 className="text-[14px] font-semibold text-text-primary">Alertas previas</h2>
+          <RefreshControl lastRefresh={alertasRefresh.lastRefresh} onRefresh={alertasRefresh.refresh} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead className="bg-surface">
+              <tr className="text-[11px] uppercase tracking-wider text-text-secondary border-y border-border">
+                <th className="text-left font-normal px-6 py-2.5">Alerta</th>
+                <th className="text-left font-normal py-2.5">Fecha</th>
+                <th className="text-left font-normal py-2.5">Hora</th>
+                <th className="text-left font-normal py-2.5">Tipo tx</th>
+                <th className="text-right font-normal py-2.5">Monto</th>
+                <th className="text-left font-normal py-2.5">Controles</th>
+                <th className="text-left font-normal py-2.5 pr-6">Resultado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prevAlerts.map((a, i) => (
+                <tr key={a.id} className={`border-b border-border/50 last:border-b-0 ${i % 2 === 1 ? "bg-surface/50" : ""}`}>
+                  <td className="px-6 py-3 font-mono text-text-primary whitespace-nowrap">{a.id}</td>
+                  <td className="py-3 text-text-secondary tabular-nums whitespace-nowrap">{a.date}</td>
+                  <td className="py-3 text-text-secondary tabular-nums whitespace-nowrap">{a.hour}</td>
+                  <td className="py-3"><CategoryBadge category={a.category} /></td>
+                  <td className="py-3 text-text-primary tabular-nums text-right whitespace-nowrap">{a.monto}</td>
+                  <td className="py-3 pr-3"><ControlChips controls={a.controls} /></td>
+                  <td className="py-3 pr-6 text-text-primary font-medium whitespace-nowrap">{a.result}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4">
+          <h2 className="text-[14px] font-semibold text-text-primary">Transacciones previas</h2>
+          <RefreshControl lastRefresh={txRefresh.lastRefresh} onRefresh={txRefresh.refresh} />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead className="bg-surface">
+              <tr className="text-[11px] uppercase tracking-wider text-text-secondary border-y border-border">
+                <th className="text-left font-normal px-6 py-2.5">Tx</th>
+                <th className="text-left font-normal py-2.5">Fecha</th>
+                <th className="text-left font-normal py-2.5">Hora</th>
+                <th className="text-left font-normal py-2.5">Tipo</th>
+                <th className="text-left font-normal py-2.5">Descripción</th>
+                <th className="text-right font-normal py-2.5">Monto</th>
+                <th className="text-left font-normal py-2.5">Canal</th>
+                <th className="text-left font-normal py-2.5 pr-6">Controles</th>
+              </tr>
+            </thead>
+            <tbody>
+              {previousTransactions.map((t, i) => (
+                <tr key={t.id} className={`border-b border-border/50 last:border-b-0 ${i % 2 === 1 ? "bg-surface/50" : ""}`}>
+                  <td className="px-6 py-3 font-mono text-text-primary whitespace-nowrap">{t.id}</td>
+                  <td className="py-3 text-text-secondary tabular-nums whitespace-nowrap">{t.date}</td>
+                  <td className="py-3 text-text-secondary tabular-nums whitespace-nowrap">{t.hour}</td>
+                  <td className="py-3"><CategoryBadge category={t.category} /></td>
+                  <td className="py-3 text-text-primary whitespace-nowrap">{t.desc}</td>
+                  <td className="py-3 text-text-primary tabular-nums text-right whitespace-nowrap">{t.monto}</td>
+                  <td className="py-3 text-text-secondary whitespace-nowrap">{t.canal}</td>
+                  <td className="py-3 pr-6"><ControlChips controls={t.controls} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );
 }
 
 /* ────────────── page ────────────── */
-
-type ActionKind = "fraud" | "fp" | "dataset" | null;
 
 function AlertaDetailPage() {
   const { id } = Route.useParams();
@@ -474,7 +642,7 @@ function AlertaDetailPage() {
         </div>
 
         {/* Tab content */}
-        {tab === "resumen" && <ResumenTab />}
+        {tab === "resumen" && <ResumenTab onAction={setAction} />}
         {tab === "razonamiento" && <RazonamientoTab />}
         {tab === "data" && <DataAlertaTab />}
         {tab === "estados" && <EstadosTab />}

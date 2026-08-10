@@ -1,16 +1,24 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck, History } from "lucide-react";
+import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/cola", label: "In Progress", icon: Inbox },
+  { to: "/historico-fraude", label: "Histórico de Gestión de Fraude", icon: History },
   { to: "/monitor", label: "Monitor del Agente", icon: GaugeCircle },
   { to: "/testing", label: "Testing", icon: FlaskConical },
   { to: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
-export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
+export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal }: {
+  collapsed: boolean;
+  onToggle: () => void;
+  role: Role | null | undefined;
+  onOpenRoleModal: () => void;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
 
   return (
     <aside className={`fixed inset-y-0 left-0 ${collapsed ? "w-14" : "w-[220px]"} bg-sidebar text-sidebar-foreground flex flex-col z-20 transition-all duration-200`}>
@@ -29,7 +37,7 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
         </button>
       </div>
       <nav className="flex-1 px-2 space-y-1">
-        {nav.map((item) => {
+        {visibleNav.map((item) => {
           const active = pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
           const Icon = item.icon;
           return (
@@ -48,17 +56,21 @@ export function AppSidebar({ collapsed, onToggle }: { collapsed: boolean; onTogg
         })}
       </nav>
       <div className="px-3 py-4 border-t border-white/10">
-        <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3"}`}>
+        <button
+          onClick={onOpenRoleModal}
+          title="Cambiar rol"
+          className={`w-full flex items-center rounded-md -mx-1 px-1 py-1 hover:bg-white/10 transition-colors ${collapsed ? "justify-center" : "gap-3"}`}
+        >
           <div className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold">
             MR
           </div>
           {!collapsed && (
-            <div className="min-w-0">
+            <div className="min-w-0 text-left">
               <div className="text-[13px] font-medium truncate">María Rodríguez</div>
-              <div className="text-[11px] text-white/70 truncate">Supervisor</div>
+              <div className="text-[11px] text-white/70 truncate">{role ? ROLE_LABELS[role] : "Supervisor"}</div>
             </div>
           )}
-        </div>
+        </button>
         {!collapsed && (
           <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/80">
             <span className="relative flex h-2 w-2">

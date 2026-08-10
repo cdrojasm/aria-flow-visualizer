@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import {
-  Play, Square, CheckCircle2, AlertTriangle, Database, Layers, Clock,
-  ChevronDown, ChevronRight,
+  Play, Square, CheckCircle2, AlertTriangle, Layers,
+  ChevronDown, ChevronRight, Radio, Eye,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { INITIAL_CONFIGS, RUNNING_DEFAULT, isReadyToTest } from "@/data/configs";
 
 export const Route = createFileRoute("/testing")({
   head: () => ({
@@ -18,7 +19,6 @@ export const Route = createFileRoute("/testing")({
 
 /* ─── Types ──────────────────────────────────────────── */
 
-type AgentConfig = { id: string; name: string; description: string; env: "production" | "staging" | "canary" };
 type Dataset = { id: string; name: string; description: string; categories: number; records: number };
 type AlertEntry = { id: string; amount: string; date: string; channel: string; country: string; account: string; client: string; status: "confirmed" | "suspected" | "false_positive" };
 type AlertGroup = { classification: string; code: string; alerts: AlertEntry[] };
@@ -27,17 +27,7 @@ type ExecState = "idle" | "running" | "done";
 
 /* ─── Static data ────────────────────────────────────── */
 
-const CONFIGS: AgentConfig[] = [
-  { id: "cfg-prod", name: "Producción", description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.", env: "production" },
-  { id: "cfg-staging", name: "Staging", description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.", env: "staging" },
-  { id: "cfg-canary", name: "Canario 2%", description: "Despliegue progresivo al 2% del tráfico real para validación.", env: "canary" },
-];
-
-const ENV_STYLES: Record<AgentConfig["env"], string> = {
-  production: "bg-success/10 text-success border-success/30",
-  staging: "bg-warning/10 text-warning border-warning/30",
-  canary: "bg-primary/10 text-primary border-primary/30",
-};
+const CONFIGS = INITIAL_CONFIGS;
 
 const DATASETS: Dataset[] = [
   { id: "ds-1", name: "Producción Q1 2025", description: "Muestra representativa del tráfico real del primer trimestre.", categories: 5, records: 340 },
@@ -109,13 +99,26 @@ const ALERT_STATUS: Record<AlertEntry["status"], { label: string; cls: string }>
 /* ─── Page ───────────────────────────────────────────── */
 
 function TestingPage() {
-  const [selectedConfig, setSelectedConfig] = useState("cfg-staging");
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<number | "draft" | null>(null);
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [expandedAlerts, setExpandedAlerts] = useState<Set<string>>(new Set());
   const [expandedRuns, setExpandedRuns] = useState<Set<string>>(new Set());
   const [execState, setExecState] = useState<ExecState>("idle");
   const [execStats, setExecStats] = useState({ processed: 0, pending: 0, failed: 0, instances: 4 });
+
+  const selectedConfig = CONFIGS.find((c) => c.id === selectedConfigId) ?? null;
+  const configReady = selectedConfigId !== null && selectedVersion === "draft";
+  const canPickDataset = configReady;
+
+  const selectConfigRow = (c: (typeof CONFIGS)[number]) => {
+    if (!isReadyToTest(c)) return;
+    setSelectedConfigId(c.id);
+    setSelectedVersion("draft");
+    setSelectedDataset(null);
+    resetExec();
+  };
 
   useEffect(() => {
     if (execState !== "running") return;
@@ -179,52 +182,131 @@ function TestingPage() {
           )}
         </header>
 
-        {/* Config selector */}
+        {/* Config + version selector — recycled from /configuracion */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
           <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider mb-3">Configuración a evaluar</h2>
-          <div className="flex gap-3 flex-wrap">
-            {CONFIGS.map((cfg) => {
-              const active = selectedConfig === cfg.id;
-              return (
-                <button key={cfg.id} onClick={() => setSelectedConfig(cfg.id)}
-                  className={`relative flex-1 min-w-[200px] text-left rounded-lg border px-4 py-3.5 transition-all ${active ? "border-primary bg-primary/5 shadow-sm" : "border-border bg-background hover:border-primary/40 hover:bg-surface"}`}>
-                  {active && <CheckCircle2 className="absolute top-3 right-3 h-4 w-4 text-primary" />}
-                  <div className="flex items-center gap-2 mb-1 pr-6">
-                    <span className="text-[13px] font-semibold text-text-primary">{cfg.name}</span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${ENV_STYLES[cfg.env]}`}>{cfg.env}</span>
+          <p className="text-[11px] text-text-secondary mb-3">Solo las configuraciones con cambios sin validar están habilitadas para test.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-surface border-b border-border text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Configuración</div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                {CONFIGS.map((c) => {
+                  const selected = c.id === selectedConfigId;
+                  const isRunning = RUNNING_DEFAULT.configId === c.id;
+                  const ready = isReadyToTest(c);
+                  return (
+                    <button key={c.id} onClick={() => selectConfigRow(c)} disabled={!ready}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${selected ? "bg-primary/5" : ready ? "hover:bg-surface" : "opacity-50 cursor-not-allowed"}`}>
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-medium text-text-primary truncate">{c.name}</span>
+                        <p className="text-[11px] text-text-secondary truncate mt-0.5">{ready ? c.description : "Sin cambios pendientes por validar"}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {ready && <span className="h-1.5 w-1.5 rounded-full bg-warning" title="Cambios sin guardar" />}
+                        {isRunning && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success">
+                            <Radio className="h-3.5 w-3.5" /> Producción
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="px-3 py-2 bg-surface border-b border-border text-[11px] font-semibold text-text-secondary uppercase tracking-wider">Versión</div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-border">
+                {!selectedConfig && (
+                  <p className="px-3 py-3 text-[12px] text-text-secondary">Selecciona primero una configuración habilitada.</p>
+                )}
+                {selectedConfig && (
+                  <button onClick={() => setSelectedVersion("draft")}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${selectedVersion === "draft" ? "bg-primary/5" : "hover:bg-surface"}`}>
+                    <div>
+                      <span className="text-[13px] font-medium text-warning">Cambios sin guardar</span>
+                      <p className="text-[11px] text-text-secondary">Borrador editable, listo para correr contra un dataset.</p>
+                    </div>
+                    {selectedVersion === "draft" && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
+                  </button>
+                )}
+                {selectedConfig && [...selectedConfig.versions].reverse().map((v) => (
+                  <div key={v.version} className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left opacity-50 cursor-not-allowed" title="Versión ya validada — no requiere test">
+                    <div>
+                      <span className="text-[13px] font-medium text-text-primary">v{v.version}</span>
+                      <p className="text-[11px] text-text-secondary">{v.testRun.date} · {v.testRun.accuracy.toFixed(1)}% precisión</p>
+                    </div>
+                    <Eye className="h-3.5 w-3.5 text-text-secondary shrink-0" />
                   </div>
-                  <p className="text-[11px] text-text-secondary leading-relaxed">{cfg.description}</p>
-                </button>
-              );
-            })}
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* Dataset selector */}
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-          <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider mb-3">Dataset</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {DATASETS.map((ds) => {
-              const active = selectedDataset === ds.id;
-              return (
-                <button key={ds.id} onClick={() => { setSelectedDataset(ds.id); resetExec(); }}
-                  className={`text-left rounded-lg border px-4 py-3.5 transition-all ${active ? "border-primary bg-primary/5 shadow-sm" : "border-border hover:border-primary/40 hover:bg-surface"}`}>
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Database className="h-4 w-4 text-primary shrink-0" />
-                      <span className="text-[13px] font-semibold text-text-primary">{ds.name}</span>
-                    </div>
-                    {active && <CheckCircle2 className="h-4 w-4 text-primary shrink-0" />}
-                  </div>
-                  <p className="text-[11px] text-text-secondary mb-3 leading-relaxed">{ds.description}</p>
-                  <div className="flex items-center gap-3 text-[11px] text-text-secondary">
-                    <span className="flex items-center gap-1"><Layers className="h-3 w-3" /> {ds.categories} categorías</span>
-                    <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {ds.records.toLocaleString()} registros</span>
-                  </div>
-                </button>
-              );
-            })}
+        {/* Dataset selector — list with per-row composition breakdown */}
+        <section className={`bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] ${!canPickDataset ? "opacity-50" : ""}`}>
+          <div className="px-5 py-4 border-b border-border">
+            <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">Dataset</h2>
+            <p className="text-[11px] text-text-secondary mt-0.5">{canPickDataset ? "Selecciona el dataset contra el cual correr la prueba." : "Selecciona primero una configuración con cambios pendientes."}</p>
           </div>
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-text-secondary border-b border-border">
+                <th className="text-left font-medium px-5 py-2 w-8"></th>
+                <th className="text-left font-medium px-3 py-2">Dataset</th>
+                <th className="text-left font-medium px-3 py-2">Categorías</th>
+                <th className="text-left font-medium px-3 py-2">Registros</th>
+              </tr>
+            </thead>
+            <tbody>
+              {DATASETS.map((ds) => {
+                const active = selectedDataset === ds.id;
+                const dsGroups = DATASET_GROUPS[ds.id] ?? [];
+                return (
+                  <Fragment key={ds.id}>
+                    <tr
+                      onClick={() => { if (!canPickDataset) return; setSelectedDataset(active ? null : ds.id); resetExec(); }}
+                      className={`border-t border-border transition-colors ${!canPickDataset ? "cursor-not-allowed" : "cursor-pointer"} ${active ? "bg-primary/5" : canPickDataset ? "hover:bg-surface" : ""}`}>
+                      <td className="px-5 py-3 text-text-secondary">
+                        {active ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-semibold text-text-primary">{ds.name}</span>
+                          {active && <CheckCircle2 className="h-3.5 w-3.5 text-primary shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-text-secondary mt-0.5">{ds.description}</p>
+                      </td>
+                      <td className="px-3 py-3 text-text-secondary">
+                        <span className="inline-flex items-center gap-1"><Layers className="h-3 w-3" /> {ds.categories}</span>
+                      </td>
+                      <td className="px-3 py-3 text-text-secondary tabular-nums">{ds.records.toLocaleString()}</td>
+                    </tr>
+                    {active && (
+                      <tr className="border-t border-border bg-surface">
+                        <td colSpan={4} className="px-5 py-4">
+                          <p className="text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-2">Composición de la muestra</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {dsGroups.map((g) => (
+                              <div key={g.code} className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[12px] font-medium text-text-primary truncate">{g.classification}</span>
+                                  <span className="font-mono text-[10px] text-text-secondary shrink-0">{g.code}</span>
+                                </div>
+                                <span className="text-[11px] text-text-secondary shrink-0">{g.alerts.length} alertas</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
         </section>
 
         {/* Dataset viewer */}
