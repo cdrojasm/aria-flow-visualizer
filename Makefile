@@ -1,4 +1,4 @@
-.PHONY: help build build-ssr build-static run down logs shell
+.PHONY: help build build-ssr build-static deploy run down logs shell
 
 .DEFAULT_GOAL := help
 
@@ -18,6 +18,12 @@ build-static: ## Build static SPA, publish to docs/ (GitHub Pages)
 		sh -c "bun install --frozen-lockfile && bun run build:static"
 	cp dist/client/index.html dist/client/404.html
 	rm -rf docs && cp -R dist/client docs
+
+deploy: build-static ## Build static SPA and push docs/ to GitHub Pages
+	git add -A src docs
+	git diff --cached --quiet && echo "Nothing to commit." || \
+		git commit -m "Publish static build to docs/ for GitHub Pages"
+	git push origin main
 
 run: ## Start app in background
 	docker compose up -d
