@@ -24,6 +24,20 @@ export type StepStatus = "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "F
 
 export type DatasetRecord = { name: string; row_count: number };
 
+export type DatasetStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED";
+
+export type FieldDistribution = { value: string; count: number; percentage: number };
+
+export type DatasetSummaryResponse = {
+  dataset_name: string;
+  status: DatasetStatus;
+  total_rows: number;
+  field_distributions: Record<string, FieldDistribution[]>;
+  uploaded_at: string | null;
+  updated_at: string | null;
+  error: string | null;
+};
+
 export type TestRunResponse = {
   id: string;
   name: string;
@@ -128,6 +142,35 @@ export type TestCaseDetailResponse = {
 export const getDatasets = createServerFn({ method: "GET" }).handler(() =>
   apiFetch<DatasetRecord[]>("/api/v0/datasets"),
 );
+
+// FormData payload (the uploaded CSV file) - bypasses apiFetch's forced
+// JSON Content-Type so the browser's multipart boundary reaches the
+// backend intact.
+export const uploadDataset = createServerFn({ method: "POST" })
+  .inputValidator((data: FormData) => data)
+  .handler(async ({ data }) => {
+    const { apiUrl } = getServerConfig();
+    const res = await fetch(`${apiUrl}/api/v0/datasets`, { method: "POST", body: data });
+    if (!res.ok) {
+      throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
+    }
+    return res.json() as Promise<{ name: string; status: DatasetStatus }>;
+  });
+
+export const getDatasetSummary = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ name: z.string().min(1) }))
+  .handler(({ data }) =>
+    apiFetch<DatasetSummaryResponse>(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`),
+  );
+
+export const deleteDataset = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ name: z.string().min(1) }))
+  .handler(({ data }) =>
+    apiFetch<{ name: string; deleted: boolean }>(
+      `/api/v0/datasets/${encodeURIComponent(data.name)}`,
+      { method: "DELETE" },
+    ),
+  );
 
 export const listTestRuns = createServerFn({ method: "GET" })
   .inputValidator(z.object({ order: z.enum(["asc", "desc"]).default("desc") }).optional())

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { ChangeEvent, useEffect, useRef, useState } from "react";
 import {
   Play,
   Loader2,
@@ -9,13 +9,18 @@ import {
   AlertTriangle,
   ArrowUpDown,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import {
+  deleteDataset,
   deleteTestRuns,
   getDatasets,
+  getDatasetSummary,
   listTestRuns,
   startTestRun,
+  uploadDataset,
   type TestRunResponse,
 } from "@/lib/api/testing.functions";
 
@@ -48,6 +53,27 @@ const STATUS_STYLE: Record<TestRunResponse["status"], string> = {
   FAILED: "bg-danger/10 text-danger",
 };
 
+const DATASET_STATUS_STYLE: Record<string, string> = {
+  PENDING: "bg-warning/10 text-warning",
+  PROCESSING: "bg-primary/10 text-primary",
+  READY: "bg-success/10 text-success",
+  FAILED: "bg-danger/10 text-danger",
+};
+
+const DATASET_FIELD_LABELS: Record<string, string> = {
+  razon_marcacion: "Razón de marcación",
+  marcacion_final: "Marcación final",
+  integration_point: "Punto de integración",
+  tipo: "Tipo",
+  triggered_rules: "Reglas activadas",
+};
+
+// razon_marcacion and triggered_rules are multi-value ("[A, B]") - a row
+// can count toward several values at once, so their bars/percentages can
+// add up to more than the total/100%. Flagged in the UI so that isn't read
+// as a bug.
+const MULTI_VALUE_FIELDS = new Set(["razon_marcacion", "triggered_rules"]);
+
 function TestingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -70,6 +96,59 @@ function TestingPage() {
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return uploadDataset({ data: formData });
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      setSelectedDataset(res.name);
+    },
+  });
+
+  function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) uploadMutation.mutate(file);
+  }
+
+  const datasetSummaryQuery = useQuery({
+    queryKey: ["datasetSummary", selectedDataset],
+    queryFn: () => getDatasetSummary({ data: { name: selectedDataset! } }),
+    enabled: !!selectedDataset,
+  });
+
+  const deleteDatasetMutation = useMutation({
+    mutationFn: (name: string) => deleteDataset({ data: { name } }),
+    onSuccess: (_res, name) => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      queryClient.removeQueries({ queryKey: ["datasetSummary", name] });
+      setSelectedDataset(null);
+    },
+  });
+
+  function handleDeleteDataset() {
+    if (!selectedDataset) return;
+    const confirmed = window.confirm(
+      `¿Borrar el dataset "${selectedDataset}" y sus datos de análisis? Esta acción no se puede deshacer.`,
+    );
+    if (!confirmed) return;
+    deleteDatasetMutation.mutate(selectedDataset);
+  }
+
+  const isDatasetProcessing =
+    datasetSummaryQuery.data?.status === "PENDING" ||
+    datasetSummaryQuery.data?.status === "PROCESSING";
+  const { lastRefresh: lastDatasetRefresh } = useAutoRefresh(isDatasetProcessing ? 3000 : 60000);
+
+  useEffect(() => {
+    if (selectedDataset) datasetSummaryQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastDatasetRefresh, selectedDataset]);
 
   const deleteMutation = useMutation({
     mutationFn: (testRunIds: string[]) => deleteTestRuns({ data: { test_run_ids: testRunIds } }),
@@ -154,7 +233,29 @@ function TestingPage() {
             </div>
 
             <div>
-              <label className="text-[11px] text-text-secondary block mb-1">Dataset</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-text-secondary">Dataset</label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadMutation.isPending}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline disabled:opacity-40"
+                >
+                  {uploadMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Upload className="h-3 w-3" />
+                  )}
+                  Cargar dataset
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                />
+              </div>
               {datasetsQuery.isLoading && (
                 <p className="text-[12px] text-text-secondary py-2">Cargando datasets…</p>
               )}
@@ -174,6 +275,11 @@ function TestingPage() {
                     </option>
                   ))}
                 </select>
+              )}
+              {uploadMutation.isError && (
+                <p className="text-[11px] text-danger mt-1">
+                  {(uploadMutation.error as Error).message}
+                </p>
               )}
             </div>
 
@@ -234,6 +340,128 @@ function TestingPage() {
             )}
           </div>
         </section>
+
+        {/* Dataset card: totals + field distributions for the selected dataset */}
+        {selectedDataset && (
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
+                Dataset: {selectedDataset}
+              </h2>
+              <div className="flex items-center gap-2 shrink-0">
+                {datasetSummaryQuery.data && (
+                  <span
+                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                      DATASET_STATUS_STYLE[datasetSummaryQuery.data.status]
+                    }`}
+                  >
+                    {datasetSummaryQuery.data.status}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDeleteDataset}
+                  disabled={deleteDatasetMutation.isPending}
+                  title="Borrar dataset"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-danger hover:underline disabled:opacity-40"
+                >
+                  {deleteDatasetMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            </div>
+            {deleteDatasetMutation.isError && (
+              <p className="text-[12px] text-danger">
+                {(deleteDatasetMutation.error as Error).message}
+              </p>
+            )}
+
+            {datasetSummaryQuery.isLoading && (
+              <p className="text-[13px] text-text-secondary">Cargando resumen…</p>
+            )}
+            {datasetSummaryQuery.isError && (
+              <p className="text-[13px] text-danger">No se pudo cargar el resumen del dataset.</p>
+            )}
+
+            {datasetSummaryQuery.data && isDatasetProcessing && (
+              <p className="text-[13px] text-text-secondary flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Analizando dataset…
+              </p>
+            )}
+
+            {datasetSummaryQuery.data?.status === "FAILED" && (
+              <p className="text-[13px] text-danger">
+                {datasetSummaryQuery.data.error ?? "El análisis del dataset falló."}
+              </p>
+            )}
+
+            {datasetSummaryQuery.data?.status === "READY" && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="border border-border rounded-lg p-3">
+                    <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                      Total de muestras
+                    </p>
+                    <p className="text-[18px] font-semibold text-text-primary tabular-nums">
+                      {datasetSummaryQuery.data.total_rows}
+                    </p>
+                  </div>
+                  <div className="border border-border rounded-lg p-3 col-span-2 md:col-span-3">
+                    <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                      Última actualización
+                    </p>
+                    <p className="text-[13px] text-text-primary">
+                      {datasetSummaryQuery.data.updated_at
+                        ? new Date(datasetSummaryQuery.data.updated_at).toLocaleString()
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {Object.entries(datasetSummaryQuery.data.field_distributions).map(
+                    ([field, values]) => (
+                      <div key={field} className="border border-border rounded-lg p-3 space-y-2">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                            {DATASET_FIELD_LABELS[field] ?? field}
+                          </p>
+                          {MULTI_VALUE_FIELDS.has(field) && (
+                            <span className="text-[9px] text-text-secondary shrink-0">
+                              multi-valor
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          {values.map((v) => (
+                            <div key={v.value} className="space-y-0.5">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-text-primary truncate pr-2">{v.value}</span>
+                                <span className="text-text-secondary tabular-nums shrink-0">
+                                  {v.count} ({v.percentage}%)
+                                </span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+                                <div
+                                  className="h-full bg-primary rounded-full"
+                                  style={{ width: `${v.percentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ),
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        )}
 
         {/* What's actually configurable today */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
