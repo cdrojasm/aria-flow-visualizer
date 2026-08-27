@@ -16,6 +16,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ColaRouteImport } from './routes/cola'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as TestingIndexRouteImport } from './routes/testing.index'
 import { Route as TestingRunIdRouteImport } from './routes/testing.$runId'
 import { Route as AlertaIdRouteImport } from './routes/alerta.$id'
 
@@ -54,6 +55,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestingIndexRoute = TestingIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TestingRoute,
+} as any)
 const TestingRunIdRoute = TestingRunIdRouteImport.update({
   id: '/$runId',
   path: '/$runId',
@@ -75,6 +81,7 @@ export interface FileRoutesByFullPath {
   '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
+  '/testing/': typeof TestingIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -83,9 +90,9 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
   '/monitor': typeof MonitorRoute
-  '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
+  '/testing': typeof TestingIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -98,6 +105,7 @@ export interface FileRoutesById {
   '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
+  '/testing/': typeof TestingIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +119,7 @@ export interface FileRouteTypes {
     | '/testing'
     | '/alerta/$id'
     | '/testing/$runId'
+    | '/testing/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -119,9 +128,9 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/historico-fraude'
     | '/monitor'
-    | '/testing'
     | '/alerta/$id'
     | '/testing/$runId'
+    | '/testing'
   id:
     | '__root__'
     | '/'
@@ -133,6 +142,7 @@ export interface FileRouteTypes {
     | '/testing'
     | '/alerta/$id'
     | '/testing/$runId'
+    | '/testing/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -197,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/testing/': {
+      id: '/testing/'
+      path: '/'
+      fullPath: '/testing/'
+      preLoaderRoute: typeof TestingIndexRouteImport
+      parentRoute: typeof TestingRoute
+    }
     '/testing/$runId': {
       id: '/testing/$runId'
       path: '/$runId'
@@ -216,10 +233,12 @@ declare module '@tanstack/react-router' {
 
 interface TestingRouteChildren {
   TestingRunIdRoute: typeof TestingRunIdRoute
+  TestingIndexRoute: typeof TestingIndexRoute
 }
 
 const TestingRouteChildren: TestingRouteChildren = {
   TestingRunIdRoute: TestingRunIdRoute,
+  TestingIndexRoute: TestingIndexRoute,
 }
 
 const TestingRouteWithChildren =

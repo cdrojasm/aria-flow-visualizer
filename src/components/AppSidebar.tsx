@@ -11,11 +11,12 @@ const nav = [
   { to: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
-export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal }: {
+export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHealthy }: {
   collapsed: boolean;
   onToggle: () => void;
   role: Role | null | undefined;
   onOpenRoleModal: () => void;
+  apiHealthy: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
@@ -40,14 +41,25 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal }: {
         {visibleNav.map((item) => {
           const active = pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
           const Icon = item.icon;
+          const itemClasses = `flex items-center gap-3 px-3 py-2 rounded-md text-[13px] transition-colors ${
+            active ? "bg-sidebar-accent font-medium" : "hover:bg-white/10"
+          } ${collapsed ? "justify-center" : ""} ${!apiHealthy ? "opacity-40 pointer-events-none cursor-not-allowed" : ""}`;
+
+          if (!apiHealthy) {
+            return (
+              <span key={item.to} title="No disponible — servicio API caído" className={itemClasses}>
+                <Icon className="h-4 w-4 shrink-0" />
+                {!collapsed && <span>{item.label}</span>}
+              </span>
+            );
+          }
+
           return (
             <Link
               key={item.to}
               to={item.to}
               title={collapsed ? item.label : undefined}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-[13px] transition-colors ${
-                active ? "bg-sidebar-accent font-medium" : "hover:bg-white/10"
-              } ${collapsed ? "justify-center" : ""}`}
+              className={itemClasses}
             >
               <Icon className="h-4 w-4 shrink-0" />
               {!collapsed && <span>{item.label}</span>}
@@ -74,10 +86,12 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal }: {
         {!collapsed && (
           <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/80">
             <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 animate-ping" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+              {apiHealthy && (
+                <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 animate-ping" />
+              )}
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${apiHealthy ? "bg-success" : "bg-danger"}`} />
             </span>
-            ARIA Agente · Operativo
+            ARIA Agente · {apiHealthy ? "Operativo" : "No disponible"}
           </div>
         )}
       </div>

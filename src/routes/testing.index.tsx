@@ -10,6 +10,10 @@ import {
   ArrowUpDown,
   Trash2,
   Upload,
+  Radio,
+  RotateCcw,
+  Search,
+  X,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
@@ -23,6 +27,7 @@ import {
   uploadDataset,
   type TestRunResponse,
 } from "@/lib/api/testing.functions";
+import { listConfigurations } from "@/lib/api/configurations.functions";
 
 export const Route = createFileRoute("/testing/")({
   head: () => ({
@@ -36,15 +41,6 @@ export const Route = createFileRoute("/testing/")({
   }),
   component: TestingPage,
 });
-
-// Overrides are optional and only apply to LLM-backed steps.
-const OVERRIDE_STEPS = ["profiling", "classification", "adversarial", "analyst"] as const;
-const OVERRIDE_LABELS: Record<(typeof OVERRIDE_STEPS)[number], string> = {
-  profiling: "Profiling",
-  classification: "Clasificación",
-  adversarial: "Adversarial",
-  analyst: "Analista",
-};
 
 const STATUS_STYLE: Record<TestRunResponse["status"], string> = {
   PENDING: "bg-warning/10 text-warning",
@@ -74,6 +70,26 @@ const DATASET_FIELD_LABELS: Record<string, string> = {
 // as a bug.
 const MULTI_VALUE_FIELDS = new Set(["razon_marcacion", "triggered_rules"]);
 
+// Above this many distinct values, a field's distribution list gets capped
+// to a scrollable max height with a "ver más" toggle instead of growing the
+// card indefinitely.
+const FIELD_VALUES_COLLAPSE_THRESHOLD = 10;
+
+function configurationLabel(
+  ref: { configuration_id: string; version: number } | null,
+  configurations: { configuration_id: string; name: string }[],
+): string {
+  if (!ref) return "Configuración activa al momento";
+  const match = configurations.find((c) => c.configuration_id === ref.configuration_id);
+  return `${match?.name ?? ref.configuration_id}:${ref.version}`;
+}
+
+const TRUNCATE_MAX_CHARS = 23;
+
+function truncateText(text: string, max = TRUNCATE_MAX_CHARS): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
 function TestingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -86,12 +102,19 @@ function TestingPage() {
   // max_feedback_iterations is intentos - 1; default 2 matches the
   // backend's own default of 1 (alert_dtos.py, schemas.py, test_run_port.py).
   const [maxAttempts, setMaxAttempts] = useState("2");
-  const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
-  const [modelOverrides, setModelOverrides] = useState<Record<string, string>>({});
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
+  const [selectedConfigurationId, setSelectedConfigurationId] = useState<string | null>(null);
+  const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [nameFilter, setNameFilter] = useState("");
+  const [datasetFilter, setDatasetFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<TestRunResponse["status"] | "">("");
 
   const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
+  const configurationsQuery = useQuery({
+    queryKey: ["configurations"],
+    queryFn: () => listConfigurations(),
+  });
   const testRunsQuery = useQuery({
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
@@ -179,6 +202,9 @@ function TestingPage() {
 
   const parsedSampleSize = sampleSize.trim() ? Number(sampleSize) : undefined;
   const parsedMaxAttempts = maxAttempts.trim() ? Number(maxAttempts) : 2;
+  const selectedConfiguration = (configurationsQuery.data ?? []).find(
+    (c) => c.configuration_id === selectedConfigurationId,
+  );
 
   const startMutation = useMutation({
     mutationFn: () =>
@@ -187,9 +213,13 @@ function TestingPage() {
           name: runName.trim() || `Prueba ${new Date().toLocaleString()}`,
           dataset_name: selectedDataset!,
           config: {
-            prompt_overrides: stripEmpty(promptOverrides),
-            model_overrides: stripEmpty(modelOverrides),
             max_feedback_iterations: Math.max(0, parsedMaxAttempts - 1),
+            configuration_ref: selectedConfiguration
+              ? {
+                  configuration_id: selectedConfiguration.configuration_id,
+                  version: selectedConfiguration.version,
+                }
+              : undefined,
           },
           sample_size: parsedSampleSize,
         },
@@ -200,12 +230,55 @@ function TestingPage() {
     },
   });
 
+  // Re-dispatches a past run's exact config (prompt/model overrides,
+  // max_feedback_iterations, configuration_ref) over its full dataset -
+  // sample_size/sample_distribution aren't persisted on TestRunRecord, so a
+  // sampled original run's retry runs the whole dataset instead of
+  // reproducing the same sample.
+  const retryMutation = useMutation({
+    mutationFn: (run: TestRunResponse) =>
+      startTestRun({
+        data: {
+          name: `${run.name} (reintento)`,
+          dataset_name: run.dataset_name,
+          config: {
+            prompt_overrides: run.config.prompt_overrides,
+            model_overrides: run.config.model_overrides,
+            max_feedback_iterations: run.config.max_feedback_iterations,
+            configuration_ref: run.config.configuration_ref ?? undefined,
+          },
+        },
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["testRuns"] });
+      navigate({ to: "/testing/$runId", params: { runId: res.test_run_id } });
+    },
+  });
+
+  function toggleFieldExpanded(field: string) {
+    setExpandedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  }
+
   const datasets = datasetsQuery.data ?? [];
+  const configurations = configurationsQuery.data ?? [];
   const runs = testRunsQuery.data ?? [];
+  const runDatasetNames = Array.from(new Set(runs.map((r) => r.dataset_name))).sort();
+  const filteredRuns = runs.filter(
+    (run) =>
+      (!nameFilter || run.name.toLowerCase().includes(nameFilter.toLowerCase())) &&
+      (!datasetFilter || run.dataset_name === datasetFilter) &&
+      (!statusFilter || run.status === statusFilter),
+  );
+  const hasActiveFilters = !!(nameFilter || datasetFilter || statusFilter);
 
   return (
     <DashboardLayout>
-      <div className="px-8 py-6 max-w-[1000px] space-y-6">
+      <div className="px-8 py-6 max-w-[1280px] space-y-6">
         <header>
           <h1 className="text-[20px] font-semibold text-text-primary">Testing del Agente</h1>
           <p className="text-[13px] text-text-secondary mt-1">
@@ -319,6 +392,71 @@ function TestingPage() {
             </div>
           </div>
 
+          {/* Configuration selector - which stored ConfigurationRecord
+              (by lineage, pinned to its latest version) this run resolves
+              segments against. Empty selection = whatever is active at
+              dispatch time, same as before this existed. */}
+          <div>
+            <label className="text-[11px] text-text-secondary block mb-1">
+              Configuración a probar (opcional)
+            </label>
+            <div className="border border-border rounded-lg overflow-hidden">
+              <div className="max-h-48 overflow-y-auto divide-y divide-border">
+                {configurationsQuery.isLoading && (
+                  <p className="px-3 py-3 text-[12px] text-text-secondary">
+                    Cargando configuraciones…
+                  </p>
+                )}
+                {configurationsQuery.isError && (
+                  <p className="px-3 py-3 text-[12px] text-danger">
+                    No se pudieron cargar las configuraciones.
+                  </p>
+                )}
+                {configurationsQuery.isSuccess && configurations.length === 0 && (
+                  <p className="px-3 py-3 text-[12px] text-text-secondary">
+                    Aún no hay configuraciones creadas.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedConfigurationId(null)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                    selectedConfigurationId === null ? "bg-primary/5" : "hover:bg-surface"
+                  }`}
+                >
+                  <span className="text-[13px] font-medium text-text-primary">
+                    La configuración activa al momento
+                  </span>
+                </button>
+                {configurations.map((c) => {
+                  const selected = c.configuration_id === selectedConfigurationId;
+                  return (
+                    <button
+                      key={c.configuration_id}
+                      type="button"
+                      onClick={() => setSelectedConfigurationId(c.configuration_id)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${selected ? "bg-primary/5" : "hover:bg-surface"}`}
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[13px] font-medium text-text-primary truncate">
+                          {c.name}:{c.version}
+                        </span>
+                        <p className="text-[11px] text-text-secondary truncate mt-0.5">
+                          {c.description}
+                        </p>
+                      </div>
+                      {c.active && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
+                          <Radio className="h-3.5 w-3.5" /> Producción
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => startMutation.mutate()}
@@ -424,89 +562,61 @@ function TestingPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {Object.entries(datasetSummaryQuery.data.field_distributions).map(
-                    ([field, values]) => (
-                      <div key={field} className="border border-border rounded-lg p-3 space-y-2">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                            {DATASET_FIELD_LABELS[field] ?? field}
-                          </p>
-                          {MULTI_VALUE_FIELDS.has(field) && (
-                            <span className="text-[9px] text-text-secondary shrink-0">
-                              multi-valor
-                            </span>
+                    ([field, values]) => {
+                      const isLong = values.length > FIELD_VALUES_COLLAPSE_THRESHOLD;
+                      const isExpanded = expandedFields.has(field);
+                      return (
+                        <div key={field} className="border border-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+                              {DATASET_FIELD_LABELS[field] ?? field}
+                            </p>
+                            {MULTI_VALUE_FIELDS.has(field) && (
+                              <span className="text-[9px] text-text-secondary shrink-0">
+                                multi-valor
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className={`space-y-1.5 ${isLong && !isExpanded ? "max-h-48 overflow-y-auto pr-1" : ""}`}
+                          >
+                            {values.map((v) => (
+                              <div key={v.value} className="space-y-0.5">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-text-primary truncate pr-2">{v.value}</span>
+                                  <span className="text-text-secondary tabular-nums shrink-0">
+                                    {v.count} ({v.percentage}%)
+                                  </span>
+                                </div>
+                                <div className="h-1.5 rounded-full bg-surface overflow-hidden">
+                                  <div
+                                    className="h-full bg-primary rounded-full"
+                                    style={{ width: `${v.percentage}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {isLong && (
+                            <button
+                              type="button"
+                              onClick={() => toggleFieldExpanded(field)}
+                              className="text-[11px] font-medium text-primary hover:underline"
+                            >
+                              {isExpanded
+                                ? "Ver menos"
+                                : `Ver más (${values.length - FIELD_VALUES_COLLAPSE_THRESHOLD} más)`}
+                            </button>
                           )}
                         </div>
-                        <div className="space-y-1.5">
-                          {values.map((v) => (
-                            <div key={v.value} className="space-y-0.5">
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-text-primary truncate pr-2">{v.value}</span>
-                                <span className="text-text-secondary tabular-nums shrink-0">
-                                  {v.count} ({v.percentage}%)
-                                </span>
-                              </div>
-                              <div className="h-1.5 rounded-full bg-surface overflow-hidden">
-                                <div
-                                  className="h-full bg-primary rounded-full"
-                                  style={{ width: `${v.percentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ),
+                      );
+                    },
                   )}
                 </div>
               </>
             )}
           </section>
         )}
-
-        {/* What's actually configurable today */}
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-          <div className="px-5 py-4 border-b border-border">
-            <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
-              Configuraciones disponibles
-            </h2>
-            <p className="text-[12px] text-text-secondary mt-1">
-              Esto es lo único que el backend soporta hoy: un override de prompt y/o modelo por paso
-              LLM, aplicado a todos los casos de esta prueba. Vacío = usa el default configurado en
-              el servicio.
-            </p>
-          </div>
-          <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {OVERRIDE_STEPS.map((step) => (
-              <div key={step} className="border border-border rounded-lg p-3 space-y-2">
-                <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
-                  {OVERRIDE_LABELS[step]}
-                </p>
-                <div>
-                  <label className="text-[10px] text-text-secondary block mb-1">
-                    Prompt override
-                  </label>
-                  <input
-                    value={promptOverrides[step] ?? ""}
-                    onChange={(e) => setPromptOverrides((s) => ({ ...s, [step]: e.target.value }))}
-                    placeholder="Usar default"
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-text-secondary block mb-1">
-                    Model override
-                  </label>
-                  <input
-                    value={modelOverrides[step] ?? ""}
-                    onChange={(e) => setModelOverrides((s) => ({ ...s, [step]: e.target.value }))}
-                    placeholder="Usar default (ej: gpt-4o-mini)"
-                    className="w-full rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
 
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -540,6 +650,60 @@ function TestingPage() {
             </div>
           </div>
 
+          {/* Organization controls: client-side filters over the already
+              fetched page of runs (no dedicated filter query params on the
+              backend today). */}
+          <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap bg-surface/50">
+            <div className="relative">
+              <Search className="h-3.5 w-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                placeholder="Buscar por nombre…"
+                className="pl-8 pr-3 py-1.5 rounded-md border border-border text-[12px] bg-background w-52"
+              />
+            </div>
+            <select
+              value={datasetFilter}
+              onChange={(e) => setDatasetFilter(e.target.value)}
+              className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
+            >
+              <option value="">Todos los datasets</option>
+              {runDatasetNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as TestRunResponse["status"] | "")}
+              className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
+            >
+              <option value="">Todos los estados</option>
+              {(Object.keys(STATUS_STYLE) as TestRunResponse["status"][]).map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            {hasActiveFilters && (
+              <button
+                onClick={() => {
+                  setNameFilter("");
+                  setDatasetFilter("");
+                  setStatusFilter("");
+                }}
+                className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary"
+              >
+                <X className="h-3.5 w-3.5" /> Limpiar filtros
+              </button>
+            )}
+            <span className="text-[11px] text-text-secondary ml-auto">
+              {filteredRuns.length} de {runs.length}
+            </span>
+          </div>
+
           {testRunsQuery.isLoading && (
             <p className="px-5 py-6 text-[13px] text-text-secondary">Cargando…</p>
           )}
@@ -551,56 +715,95 @@ function TestingPage() {
               Aún no hay pruebas ejecutadas.
             </p>
           )}
+          {testRunsQuery.isSuccess && runs.length > 0 && filteredRuns.length === 0 && (
+            <p className="px-5 py-6 text-[13px] text-text-secondary">
+              Ningún resultado coincide con los filtros.
+            </p>
+          )}
           {deleteMutation.isError && (
             <p className="px-5 py-2 text-[12px] text-danger">
               No se pudieron borrar las pruebas seleccionadas.
             </p>
           )}
+          {retryMutation.isError && (
+            <p className="px-5 py-2 text-[12px] text-danger">
+              {(retryMutation.error as Error).message}
+            </p>
+          )}
 
           <div className="divide-y divide-border">
-            {runs.map((run) => (
-              <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface">
-                <input
-                  type="checkbox"
-                  checked={selectedRunIds.has(run.id)}
-                  onChange={() => toggleRunSelected(run.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  className="shrink-0"
-                  aria-label={`Seleccionar prueba ${run.name}`}
-                />
-                <Link
-                  to="/testing/$runId"
-                  params={{ runId: run.id }}
-                  className="flex items-center gap-4 flex-1 min-w-0"
-                >
-                  <span className="text-[12px] tabular-nums text-text-secondary w-40 shrink-0">
-                    {new Date(run.created_at).toLocaleString()}
-                  </span>
-                  <span className="text-[13px] font-medium text-text-primary flex-1 truncate">
-                    {run.name}
-                  </span>
-                  <span className="text-[11px] text-text-secondary flex items-center gap-1 w-40 shrink-0">
-                    <Database className="h-3 w-3" /> {run.dataset_name}
-                  </span>
-                  <span className="text-[11px] text-text-secondary w-20 text-right shrink-0">
-                    {run.total} casos
-                  </span>
-                  <span
-                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${STATUS_STYLE[run.status]}`}
+            {filteredRuns.map((run) => {
+              const isRetrying = retryMutation.isPending && retryMutation.variables?.id === run.id;
+              return (
+                <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface">
+                  <input
+                    type="checkbox"
+                    checked={selectedRunIds.has(run.id)}
+                    onChange={() => toggleRunSelected(run.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="shrink-0"
+                    aria-label={`Seleccionar prueba ${run.name}`}
+                  />
+                  <Link
+                    to="/testing/$runId"
+                    params={{ runId: run.id }}
+                    className="flex items-center gap-4 flex-1 min-w-0"
                   >
-                    {run.status}
-                  </span>
-                  <ChevronRight className="h-3.5 w-3.5 text-text-secondary shrink-0" />
-                </Link>
-              </div>
-            ))}
+                    <span
+                      title={new Date(run.created_at).toLocaleString()}
+                      className="text-[12px] tabular-nums text-text-secondary w-20 shrink-0"
+                    >
+                      {new Date(run.created_at).toLocaleDateString()}
+                    </span>
+                    <span
+                      title={run.name}
+                      className="text-[13px] font-medium text-text-primary flex-1 truncate"
+                    >
+                      {truncateText(run.name)}
+                    </span>
+                    <span
+                      title={run.dataset_name}
+                      className="text-[11px] text-text-secondary flex items-center gap-1 w-40 shrink-0"
+                    >
+                      <Database className="h-3 w-3 shrink-0" /> {truncateText(run.dataset_name)}
+                    </span>
+                    <span
+                      title={configurationLabel(run.config.configuration_ref, configurations)}
+                      className="text-[11px] text-text-secondary truncate w-44 shrink-0"
+                    >
+                      {truncateText(
+                        configurationLabel(run.config.configuration_ref, configurations),
+                      )}
+                    </span>
+                    <span className="text-[11px] text-text-secondary w-20 text-right shrink-0">
+                      {run.total} casos
+                    </span>
+                    <span
+                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${STATUS_STYLE[run.status]}`}
+                    >
+                      {run.status}
+                    </span>
+                    <ChevronRight className="h-3.5 w-3.5 text-text-secondary shrink-0" />
+                  </Link>
+                  <button
+                    type="button"
+                    title="Nuevo intento con la misma configuración"
+                    onClick={() => retryMutation.mutate(run)}
+                    disabled={retryMutation.isPending}
+                    className="inline-flex items-center text-primary hover:text-primary/70 disabled:opacity-40 shrink-0"
+                  >
+                    {isRetrying ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
       </div>
     </DashboardLayout>
   );
-}
-
-function stripEmpty(m: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(Object.entries(m).filter(([, v]) => v.trim() !== ""));
 }

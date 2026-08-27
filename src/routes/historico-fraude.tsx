@@ -10,9 +10,10 @@ import type { DateRange } from "react-day-picker";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { ChannelFilter } from "@/components/ChannelFilter";
+import { AlertFiltersBar, matchesAlertFilters, type AlertFiltersValue } from "@/components/AlertFiltersBar";
+import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
 import { subcanalesFor, SEGMENTO_BADGES, type Canal, type Segmento } from "@/data/channels";
-import { MONTO_TIERS, matchesMonto, type MontoTier } from "@/lib/montoTiers";
+import { REGLAS_GATILLADAS } from "@/data/rules";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -31,6 +32,7 @@ export const Route = createFileRoute("/historico-fraude")({
 type TipoAlerta = "Fraude tarjeta" | "Phishing" | "Lavado" | "Identidad" | "Cuenta mula";
 type Veredicto = "Auto-resuelto" | "Derivado a analista" | "Sospechoso re-evaluado";
 type EstadoFraude = "Fraude" | "No Fraude";
+type MetodoResolucion = "Voicebot" | "Analista";
 
 type HistRow = {
   id: string;
@@ -42,11 +44,13 @@ type HistRow = {
   canal: string;
   canalFiltro: Canal;
   subcanalFiltro: string;
+  reglas: string[];
   monto: number;
   analista: string;
   verdict: Veredicto;
   agent: string;
   estado: EstadoFraude;
+  resolutionMethod: MetodoResolucion;
   nota?: string;
 };
 
@@ -64,7 +68,18 @@ function pickSubcanal(canal: Canal, seedIndex: number): string {
   return opts.length ? opts[seedIndex % opts.length] : "Todos";
 }
 
+function pickReglas(seedIndex: number): string[] {
+  const a = REGLAS_GATILLADAS[seedIndex % REGLAS_GATILLADAS.length];
+  const b = REGLAS_GATILLADAS[(seedIndex + 3) % REGLAS_GATILLADAS.length];
+  return a === b ? [a] : [a, b];
+}
+
+function pickResolutionMethod(seedIndex: number): MetodoResolucion {
+  return seedIndex % 2 === 0 ? "Voicebot" : "Analista";
+}
+
 const ESTADO_FILTERS = ["Todos", "Fraude", "No Fraude"] as const;
+const RESOLUTION_FILTERS = ["Todos", "Voicebot", "Analista"] as const;
 
 const taxonomyColors: Record<TipoAlerta, string> = {
   "Fraude tarjeta": "bg-[#fee2e2] text-[#991b1b]",
@@ -81,6 +96,10 @@ const verdictBadges: Record<Veredicto, string> = {
 const estadoBadges: Record<EstadoFraude, string> = {
   "Fraude": "bg-[#fee2e2] text-[#991b1b]",
   "No Fraude": "bg-[#dcfce7] text-[#166534]",
+};
+const resolutionBadges: Record<MetodoResolucion, string> = {
+  "Voicebot": "bg-[#ede9fe] text-[#5b21b6]",
+  "Analista": "bg-primary-light text-primary",
 };
 
 const samples: Array<{ tipoAlerta: TipoAlerta; segmento: Exclude<Segmento, "Todos">; canal: string; agent: string; verdict: Veredicto }> = [
@@ -105,8 +124,10 @@ const initialActivity: HistRow[] = Array.from({ length: 14 }).map((_, i) => {
     monto: montos[i % montos.length],
     analista: analistas[i % analistas.length],
     estado: (i % 3 === 0 ? "No Fraude" : "Fraude") as EstadoFraude,
+    resolutionMethod: pickResolutionMethod(i),
     canalFiltro,
     subcanalFiltro: pickSubcanal(canalFiltro, i),
+    reglas: pickReglas(i),
     ...s,
   };
 });
@@ -126,8 +147,10 @@ function randomHistRows(count: number): HistRow[] {
       monto: montos[Math.floor(Math.random() * montos.length)],
       analista: analistas[Math.floor(Math.random() * analistas.length)],
       estado: (Math.random() < 0.3 ? "No Fraude" : "Fraude") as EstadoFraude,
+      resolutionMethod: pickResolutionMethod(i),
       canalFiltro,
       subcanalFiltro: pickSubcanal(canalFiltro, i),
+      reglas: pickReglas(i),
       ...s,
     };
   });
@@ -137,7 +160,7 @@ const GRANULARITIES = ["Último día", "Semana", "Mes"] as const;
 type Granularity = typeof GRANULARITIES[number];
 const GRANULARITY_COUNTS: Record<Granularity, number> = { "Último día": 14, "Semana": 30, "Mes": 60 };
 
-type ColKey = "estado" | "time" | "id" | "usuario" | "segmento" | "canal" | "monto" | "tipoAlerta" | "verdict" | "analista" | "agent";
+type ColKey = "estado" | "time" | "id" | "usuario" | "segmento" | "canal" | "reglas" | "monto" | "tipoAlerta" | "verdict" | "resolutionMethod" | "analista" | "agent";
 
 const columns: { key: ColKey; label: string; align?: "right" }[] = [
   { key: "estado", label: "Estado" },
@@ -147,8 +170,10 @@ const columns: { key: ColKey; label: string; align?: "right" }[] = [
   { key: "tipoAlerta", label: "Categoría" },
   { key: "segmento", label: "Segmento" },
   { key: "canal", label: "Canal" },
-  { key: "monto", label: "Monto", align: "right" },
+  { key: "reglas", label: "Reglas" },
+  { key: "monto", label: "Monto" },
   { key: "verdict", label: "Veredicto" },
+  { key: "resolutionMethod", label: "Método resolución" },
   { key: "analista", label: "Analista" },
   { key: "agent", label: "Sub-agente" },
 ];
@@ -157,6 +182,7 @@ function sortValue(row: HistRow, key: ColKey): string | number {
   if (key === "time") return row.minutesAgo;
   if (key === "id") return Number(row.id.replace(/\D/g, ""));
   if (key === "monto") return row.monto;
+  if (key === "reglas") return row.reglas.join(", ");
   return row[key];
 }
 
@@ -190,6 +216,18 @@ function generateMockBatch(): BatchResult[] {
     }
   }
   return results;
+}
+
+function downloadTemplate() {
+  const header = "ID alerta,Estado (Fraude/No Fraude)\n";
+  const example = "ALR-48210,Fraude\n";
+  const blob = new Blob([header + example], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "plantilla-alertas-marcadas.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // mock: content is plain text, not a valid zip archive — placeholder for the demo download
@@ -250,9 +288,11 @@ function HistoricoFraudePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pendingMark, setPendingMark] = useState<"fraude" | "fp" | null>(null);
   const tableRefresh = useAutoRefresh();
+  const { hidden: hiddenCols, toggle: toggleCol } = useHiddenColumns<ColKey>("historico-fraude");
+  const visibleColumns = useMemo(() => columns.filter((c) => !hiddenCols.has(c.key)), [hiddenCols]);
 
-  const [filters, setFilters] = useState<{ canal: Canal; subcanal: string; segmento: Segmento; monto: MontoTier; estado: typeof ESTADO_FILTERS[number] }>({
-    canal: "Todos", subcanal: "Todos", segmento: "Todos", monto: "Todos", estado: "Todos",
+  const [filters, setFilters] = useState<AlertFiltersValue & { estado: typeof ESTADO_FILTERS[number]; resolutionMethod: typeof RESOLUTION_FILTERS[number] }>({
+    canal: "Todos", subcanal: "Todos", segmento: "Todos", monto: "Todos", reglas: [], estado: "Todos", resolutionMethod: "Todos",
   });
   const [granularity, setGranularity] = useState<Granularity | null>("Último día");
   const [pendingRange, setPendingRange] = useState<DateRange | undefined>(undefined);
@@ -358,11 +398,9 @@ function HistoricoFraudePage() {
 
   const filteredActivity = useMemo(() => rows.filter((r) => {
     if (histSearch.trim() && !r.id.toLowerCase().includes(histSearch.toLowerCase())) return false;
-    if (filters.canal !== "Todos" && r.canalFiltro !== filters.canal) return false;
-    if (filters.subcanal !== "Todos" && r.subcanalFiltro !== filters.subcanal) return false;
-    if (filters.segmento !== "Todos" && r.segmento !== filters.segmento) return false;
-    if (!matchesMonto(r.monto, filters.monto)) return false;
+    if (!matchesAlertFilters({ canal: r.canalFiltro, subcanal: r.subcanalFiltro, segmento: r.segmento, monto: r.monto, reglas: r.reglas }, filters)) return false;
     if (filters.estado !== "Todos" && r.estado !== filters.estado) return false;
+    if (filters.resolutionMethod !== "Todos" && r.resolutionMethod !== filters.resolutionMethod) return false;
     return true;
   }), [rows, histSearch, filters]);
 
@@ -383,20 +421,17 @@ function HistoricoFraudePage() {
         <div className="sticky top-0 z-20 -mx-8 px-8 py-4 mb-6 bg-background border-b border-border flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-[20px] font-bold text-text-primary">Histórico de Gestión de Fraude</h1>
           <div className="flex items-center gap-2 flex-wrap">
-            <ChannelFilter
-              value={{ canal: filters.canal, subcanal: filters.subcanal, segmento: filters.segmento }}
-              onChange={(v) => setFilters((f) => ({ ...f, canal: v.canal, subcanal: v.subcanal, segmento: v.segmento }))}
-            />
-            <Select value={filters.monto} onValueChange={(v) => setFilters((f) => ({ ...f, monto: v as MontoTier }))}>
-              <SelectTrigger className="h-[30px] w-[150px] text-[11px]"><SelectValue placeholder="Monto" /></SelectTrigger>
-              <SelectContent>
-                {MONTO_TIERS.map((m) => <SelectItem key={m} value={m}>{m === "Todos" ? "Todos los montos" : m}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <AlertFiltersBar value={filters} onChange={(v) => setFilters((f) => ({ ...f, ...v }))} />
             <Select value={filters.estado} onValueChange={(v) => setFilters((f) => ({ ...f, estado: v as typeof ESTADO_FILTERS[number] }))}>
               <SelectTrigger className="h-[30px] w-[150px] text-[11px]"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 {ESTADO_FILTERS.map((e) => <SelectItem key={e} value={e}>{e === "Todos" ? "Todos los estados" : e}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filters.resolutionMethod} onValueChange={(v) => setFilters((f) => ({ ...f, resolutionMethod: v as typeof RESOLUTION_FILTERS[number] }))}>
+              <SelectTrigger className="h-[30px] w-[170px] text-[11px]"><SelectValue placeholder="Método resolución" /></SelectTrigger>
+              <SelectContent>
+                {RESOLUTION_FILTERS.map((m) => <SelectItem key={m} value={m}>{m === "Todos" ? "Todos los métodos" : m}</SelectItem>)}
               </SelectContent>
             </Select>
             <div className="inline-flex rounded-lg border border-border bg-surface p-1">
@@ -445,6 +480,13 @@ function HistoricoFraudePage() {
                 if (file) handleFileSelected(file);
               }}
             />
+            <button
+              onClick={downloadTemplate}
+              className="inline-flex items-center gap-2 h-[30px] px-3 rounded-lg border border-border text-text-primary text-[11px] font-medium hover:bg-surface"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar plantilla
+            </button>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={batchState === "processing"}
@@ -511,7 +553,10 @@ function HistoricoFraudePage() {
           <div className="px-5 pt-4 pb-3 border-b border-border space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-[14px] font-semibold text-text-primary">Histórico de Gestión de Fraude</h2>
-              <RefreshControl lastRefresh={tableRefresh.lastRefresh} onRefresh={tableRefresh.refresh} />
+              <div className="flex items-center gap-2">
+                <ColumnVisibilityMenu columns={columns} hidden={hiddenCols} onToggle={toggleCol} />
+                <RefreshControl lastRefresh={tableRefresh.lastRefresh} onRefresh={tableRefresh.refresh} />
+              </div>
             </div>
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-secondary" />
@@ -555,11 +600,11 @@ function HistoricoFraudePage() {
               <thead>
                 <tr className="text-[11px] uppercase tracking-wider text-text-secondary">
                   <th className="w-10 px-5 py-3"></th>
-                  {columns.map((col) => (
+                  {visibleColumns.map((col) => (
                     <th key={col.key} className={`font-normal py-3 px-5 whitespace-nowrap ${col.align === "right" ? "text-right" : "text-left"}`}>
                       <button
                         onClick={() => toggleSort(col.key)}
-                        className={`inline-flex items-center gap-1 hover:text-text-primary transition-colors ${sortKey === col.key ? "text-text-primary font-medium" : ""} ${col.align === "right" ? "flex-row-reverse" : ""}`}
+                        className={`inline-flex items-center gap-1 uppercase tracking-wider hover:text-text-primary transition-colors ${sortKey === col.key ? "text-text-primary font-medium" : ""} ${col.align === "right" ? "flex-row-reverse" : ""}`}
                       >
                         {col.label}
                         {sortKey === col.key ? (
@@ -576,7 +621,7 @@ function HistoricoFraudePage() {
               <tbody>
                 {sortedActivity.length === 0 ? (
                   <tr>
-                    <td colSpan={columns.length + 2} className="px-5 py-8 text-center text-[13px] text-text-secondary">
+                    <td colSpan={visibleColumns.length + 2} className="px-5 py-8 text-center text-[13px] text-text-secondary">
                       No se encontraron alertas con ese código.
                     </td>
                   </tr>
@@ -590,33 +635,71 @@ function HistoricoFraudePage() {
                         className="h-4 w-4 rounded border-border accent-[rgb(0,17,148)]"
                       />
                     </td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${estadoBadges[row.estado]}`}>
-                        {row.estado}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">{row.time}</td>
-                    <td className="px-5 py-3 text-[13px] font-medium text-text-primary tabular-nums whitespace-nowrap">{row.id}</td>
-                    <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">{row.usuario}</td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${taxonomyColors[row.tipoAlerta]}`}>
-                        {row.tipoAlerta}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${SEGMENTO_BADGES[row.segmento]}`}>
-                        {row.segmento}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">{row.canal}</td>
-                    <td className="px-5 py-3 text-[13px] text-text-primary tabular-nums text-right whitespace-nowrap">{formatMonto(row.monto)}</td>
-                    <td className="px-5 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${verdictBadges[row.verdict]}`}>
-                        {row.verdict}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">{row.analista}</td>
-                    <td className="px-5 py-3 text-[12px] text-text-secondary whitespace-nowrap">{row.agent}</td>
+                    {!hiddenCols.has("estado") && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${estadoBadges[row.estado]}`}>
+                          {row.estado}
+                        </span>
+                      </td>
+                    )}
+                    {!hiddenCols.has("time") && (
+                      <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">{row.time}</td>
+                    )}
+                    {!hiddenCols.has("id") && (
+                      <td className="px-5 py-3 text-[13px] font-medium text-text-primary tabular-nums whitespace-nowrap">{row.id}</td>
+                    )}
+                    {!hiddenCols.has("usuario") && (
+                      <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">{row.usuario}</td>
+                    )}
+                    {!hiddenCols.has("tipoAlerta") && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${taxonomyColors[row.tipoAlerta]}`}>
+                          {row.tipoAlerta}
+                        </span>
+                      </td>
+                    )}
+                    {!hiddenCols.has("segmento") && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${SEGMENTO_BADGES[row.segmento]}`}>
+                          {row.segmento}
+                        </span>
+                      </td>
+                    )}
+                    {!hiddenCols.has("canal") && (
+                      <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">{row.canal}</td>
+                    )}
+                    {!hiddenCols.has("reglas") && (
+                      <td className="px-5 py-3">
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {row.reglas.map((r) => (
+                            <span key={r} className="inline-flex items-center px-1.5 py-0.5 rounded bg-[#f3f4f6] text-[#374151] text-[10px] font-medium whitespace-nowrap">{r}</span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                    {!hiddenCols.has("monto") && (
+                      <td className="px-5 py-3 text-[13px] text-text-primary tabular-nums whitespace-nowrap">{formatMonto(row.monto)}</td>
+                    )}
+                    {!hiddenCols.has("verdict") && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${verdictBadges[row.verdict]}`}>
+                          {row.verdict}
+                        </span>
+                      </td>
+                    )}
+                    {!hiddenCols.has("resolutionMethod") && (
+                      <td className="px-5 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${resolutionBadges[row.resolutionMethod]}`}>
+                          {row.resolutionMethod}
+                        </span>
+                      </td>
+                    )}
+                    {!hiddenCols.has("analista") && (
+                      <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">{row.analista}</td>
+                    )}
+                    {!hiddenCols.has("agent") && (
+                      <td className="px-5 py-3 text-[12px] text-text-secondary whitespace-nowrap">{row.agent}</td>
+                    )}
                     <td className="px-5 py-3 text-right whitespace-nowrap">
                       <Link to="/alerta/$id" params={{ id: row.id }}
                         className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-text-primary text-[12px] font-medium hover:bg-surface">

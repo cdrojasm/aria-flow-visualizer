@@ -38,6 +38,17 @@ export type DatasetSummaryResponse = {
   error: string | null;
 };
 
+// null = this run tested whatever configuration was active at dispatch
+// time (the only behavior before configuration_ref existed).
+export type ConfigurationRef = { configuration_id: string; version: number };
+
+export type TestRunConfig = {
+  prompt_overrides: Record<string, string>;
+  model_overrides: Record<string, string>;
+  max_feedback_iterations: number;
+  configuration_ref: ConfigurationRef | null;
+};
+
 export type TestRunResponse = {
   id: string;
   name: string;
@@ -47,6 +58,7 @@ export type TestRunResponse = {
   created_at: string;
   updated_at: string;
   finished_at: string | null;
+  config: TestRunConfig;
 };
 
 // Arbitrary JSON — step input/output payloads are opaque blobs from the
@@ -92,11 +104,7 @@ export type TestRunDetailResponse = {
   id: string;
   name: string;
   dataset_name: string;
-  config: {
-    prompt_overrides: Record<string, string>;
-    model_overrides: Record<string, string>;
-    max_feedback_iterations: number;
-  };
+  config: TestRunConfig;
   status: TestRunStatus;
   total: number;
   succeeded: number;
@@ -211,6 +219,13 @@ export const startTestRun = createServerFn({ method: "POST" })
           // How many classification<->adversarial feedback loops a case
           // gets before escalating to an analyst. Backend default is 2.
           max_feedback_iterations: z.number().int().min(0).optional(),
+          // Pins this run to one specific (possibly inactive)
+          // ConfigurationRecord instead of whatever is active at dispatch
+          // time - lets multiple test runs each target a different
+          // configuration concurrently.
+          configuration_ref: z
+            .object({ configuration_id: z.string().min(1), version: z.number().int() })
+            .nullish(),
         })
         .optional(),
       // Omit both = every row. sample_size alone = stratified by the
