@@ -251,6 +251,10 @@ export type AnalystPlaybook = {
   name: string;
   strategy: string;
   resolutionTag: ResolutionTag;
+  // Which resolution_method_catalog entry the admin picked - resolutionTag
+  // stays in sync with the picked entry's fixed tag, see
+  // ResolutionMethodCatalogManager.
+  resolutionMethodId?: string;
 };
 
 export type VoicebotCategoryPrompt = {

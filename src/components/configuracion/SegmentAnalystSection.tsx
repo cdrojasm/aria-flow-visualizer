@@ -1,5 +1,6 @@
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   RESOLUTION_TAG_LABELS,
@@ -9,19 +10,22 @@ import {
   type Taxonomy,
   type VoicebotCategoryPrompt,
 } from "@/data/configs";
+import { listResolutionMethods } from "@/lib/api/resolutionMethod.functions";
 import { MarcacionCatalogManager } from "./MarcacionCatalogManager";
+import { ResolutionMethodCatalogManager } from "./ResolutionMethodCatalogManager";
 import { Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor } from "./shared/PromptEditor";
 
-const RESOLUTION_TAGS: ResolutionTag[] = ["scale_to_analyst", "send_to_voicebot", "handle_by_aria"];
-
 /* ─── Analista + Voicebot (Phase 5) ─────────────────────
-   Playbooks map a semantic strategy to one resolution tag. When the tag
-   is "handle_by_aria" the agent marks the alert with a marcación category
-   at alert-review time - the category itself is runtime-assignable
-   reference data (managed catalog, see MarcacionCatalogManager), not a
-   field on the playbook. Voicebot has one base prompt plus optional
-   per-taxonomy prompts, dynamically concatenated at runtime. */
+   Playbooks map a semantic strategy to one resolution method (catalog,
+   see ResolutionMethodCatalogManager) - each method carries a fixed
+   resolutionTag underneath, kept denormalized on the playbook for
+   whatever eventually reads it. When the tag is "handle_by_aria" the
+   agent marks the alert with a marcación category at alert-review time -
+   the category itself is separate runtime-assignable reference data
+   (managed catalog, see MarcacionCatalogManager), not a field on the
+   playbook. Voicebot has one base prompt plus optional per-taxonomy
+   prompts, dynamically concatenated at runtime. */
 
 export function SegmentAnalystSection({
   value,
@@ -37,6 +41,16 @@ export function SegmentAnalystSection({
   const [editing, setEditing] = useState<AnalystPlaybook | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showResolutionCatalog, setShowResolutionCatalog] = useState(false);
+
+  const resolutionMethodsQuery = useQuery({
+    queryKey: ["resolutionMethods"],
+    queryFn: () => listResolutionMethods({ data: { activeOnly: true } }),
+  });
+  const resolutionMethods = resolutionMethodsQuery.data ?? [];
+  const resolutionMethodLabel = (p: AnalystPlaybook) =>
+    resolutionMethods.find((m) => m.id === p.resolutionMethodId)?.value ??
+    RESOLUTION_TAG_LABELS[p.resolutionTag];
 
   const openCreate = () => {
     setEditing({ id: "", name: "", strategy: "", resolutionTag: "scale_to_analyst" });
@@ -49,7 +63,7 @@ export function SegmentAnalystSection({
   const removePlaybook = (id: string) =>
     onChange({ ...value, playbooks: value.playbooks.filter((p) => p.id !== id) });
   const savePlaybook = () => {
-    if (!editing || !editing.name.trim()) return;
+    if (!editing || !editing.name.trim() || !editing.resolutionMethodId) return;
     const playbooks = editing.id
       ? value.playbooks.map((p) => (p.id === editing.id ? editing : p))
       : [...value.playbooks, { ...editing, id: `pb-${Date.now()}` }];
@@ -88,8 +102,15 @@ export function SegmentAnalystSection({
           <div>
             <h2 className="text-[14px] font-semibold text-text-primary">Playbooks</h2>
             <p className="text-[12px] text-text-secondary mt-0.5">
-              Estrategia semántica y resolución esperada para cada tipo de caso. "Resolver con ARIA" marca la
-              alerta con una categoría de{" "}
+              Estrategia semántica y{" "}
+              <button
+                type="button"
+                onClick={() => setShowResolutionCatalog(true)}
+                className="text-primary hover:underline"
+              >
+                método de resolución
+              </button>{" "}
+              esperado para cada tipo de caso. "Resolver con ARIA" marca la alerta con una categoría de{" "}
               <button type="button" onClick={() => setShowCatalog(true)} className="text-primary hover:underline">
                 marcación
               </button>
@@ -111,7 +132,7 @@ export function SegmentAnalystSection({
                 <p className="text-[13px] font-medium text-text-primary">{p.name}</p>
                 <p className="text-[12px] text-text-secondary mt-0.5">{p.strategy}</p>
                 <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px]">
-                  {RESOLUTION_TAG_LABELS[p.resolutionTag]}
+                  {resolutionMethodLabel(p)}
                 </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -231,15 +252,28 @@ export function SegmentAnalystSection({
                   className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
                 />
               </Field>
-              <Field label="Resolución">
+              <Field label="Resolución" hint="Método de resolución del catálogo - determina la vía (analista, voicebot o ARIA) que ARIA ejecuta.">
                 <select
-                  value={editing.resolutionTag}
-                  onChange={(e) => setEditing({ ...editing, resolutionTag: e.target.value as ResolutionTag })}
+                  value={editing.resolutionMethodId ?? ""}
+                  onChange={(e) => {
+                    const method = resolutionMethods.find((m) => m.id === e.target.value);
+                    if (!method) return;
+                    setEditing({
+                      ...editing,
+                      resolutionMethodId: method.id,
+                      resolutionTag: method.resolution_tag as ResolutionTag,
+                    });
+                  }}
                   className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
                 >
-                  {RESOLUTION_TAGS.map((tag) => (
-                    <option key={tag} value={tag}>
-                      {RESOLUTION_TAG_LABELS[tag]}
+                  {!editing.resolutionMethodId && (
+                    <option value="" disabled>
+                      Selecciona un método
+                    </option>
+                  )}
+                  {resolutionMethods.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.value} ({RESOLUTION_TAG_LABELS[m.resolution_tag as ResolutionTag]})
                     </option>
                   ))}
                 </select>
@@ -251,7 +285,7 @@ export function SegmentAnalystSection({
               </button>
               <button
                 onClick={savePlaybook}
-                disabled={!editing.name.trim()}
+                disabled={!editing.name.trim() || !editing.resolutionMethodId}
                 className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editing.id ? "Guardar" : "Crear"}
@@ -262,6 +296,7 @@ export function SegmentAnalystSection({
       )}
 
       <MarcacionCatalogManager open={showCatalog} onOpenChange={setShowCatalog} />
+      <ResolutionMethodCatalogManager open={showResolutionCatalog} onOpenChange={setShowResolutionCatalog} />
     </div>
   );
 }

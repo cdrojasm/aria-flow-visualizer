@@ -122,6 +122,7 @@ export type ApiAnalystPlaybook = {
   name: string;
   strategy: string;
   resolution_tag: "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria";
+  resolution_method_id?: string | null;
 };
 export type ApiVoicebotCategoryPrompt = { id: string; taxonomy_id: string; prompt: string };
 export type ApiVoicebotConfig = {

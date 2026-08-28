@@ -166,6 +166,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       name: p.name,
       strategy: p.strategy,
       resolution_tag: p.resolutionTag,
+      resolution_method_id: p.resolutionMethodId,
     })),
     voicebot,
   };
@@ -246,6 +247,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         name: p.name,
         strategy: p.strategy,
         resolutionTag: p.resolution_tag,
+        resolutionMethodId: p.resolution_method_id ?? undefined,
       })),
       voicebot: {
         basePrompt: a.analyst.voicebot.base_prompt,
