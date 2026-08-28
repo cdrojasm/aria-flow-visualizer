@@ -3,7 +3,6 @@ import { useState } from "react";
 
 import { Switch } from "@/components/ui/switch";
 import {
-  ALL_VARIABLES,
   COMPARISON_OPERATORS,
   CRITERIA_MODES_BY_KIND,
   CRITERIA_MODE_LABELS,
@@ -17,6 +16,7 @@ import {
   type ProfilingConfig,
   type ProfilingStrategy,
 } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { Field, TagInput, VariablePicker } from "./shared/FormControls";
 
 const FIELD_KIND_LABELS: Record<FieldKind, string> = {
@@ -39,6 +39,8 @@ export function SegmentProfilingSection({
   onChange: (value: ProfilingConfig) => void;
   disabled?: boolean;
 }) {
+  const { variables } = useVariableCatalog();
+
   const updateStrategy = (index: number, patch: Partial<ProfilingStrategy>) => {
     const strategies = value.strategies.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange({ ...value, strategies });
@@ -59,6 +61,7 @@ export function SegmentProfilingSection({
             value={value.fieldCategorizations}
             onChange={(fieldCategorizations) => onChange({ ...value, fieldCategorizations })}
             disabled={disabled}
+            availableVariables={variables}
           />
         </div>
       </section>
@@ -70,7 +73,7 @@ export function SegmentProfilingSection({
         </div>
         {PROFILING_STRATEGY_KEYS.map((key, index) => {
           const strategy = value.strategies.find((s) => s.key === key) ?? value.strategies[index];
-          const pool = [...ALL_VARIABLES, ...producedBefore(index)];
+          const pool = [...variables, ...producedBefore(index)];
           return (
             <section key={key} className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
               <div className="px-6 py-4 border-b border-border">
@@ -148,15 +151,17 @@ function FieldCategorizationTable({
   value,
   onChange,
   disabled,
+  availableVariables,
 }: {
   value: FieldCategorization[];
   onChange: (value: FieldCategorization[]) => void;
   disabled?: boolean;
+  availableVariables: string[];
 }) {
   const [newField, setNewField] = useState("");
   const [newKind, setNewKind] = useState<FieldKind>("categorico");
 
-  const available = ALL_VARIABLES.filter((v) => !value.some((fc) => fc.field === v));
+  const available = availableVariables.filter((v) => !value.some((fc) => fc.field === v));
 
   const add = () => {
     if (!newField) return;

@@ -469,13 +469,6 @@ export const initialSimilarCases: SimilarCase[] = [
   { id: "sc-1", text: "Cliente reporta llamada de 'soporte' pidiendo el código OTP recibido por SMS; minutos después se registra una transferencia a un tercero nuevo.", modusOperandiId: "mo-1", taxonomyId: "tx-2" },
 ];
 
-export const ALL_VARIABLES = [
-  "Altamira", "Documento", "Celular", "Nombre del cliente", "Teléfono adicional",
-  "Segmento", "Fecha de alta", "Correo", "Saldo", "Dirección", "Fecha de nacimiento",
-  "Segmento empresa", "País de origen", "Canal de ingreso", "Tipo de cuenta",
-  "Última transacción", "Número de cuenta", "Oficina", "Producto",
-];
-
 export const EVALUATION_VARIABLES = [
   "CoT (cadena de razonamiento)", "Variables de entrada", "Score de confianza",
   "Taxonomía asignada", "Red flag detectada", "Prompt utilizado",

@@ -1,7 +1,9 @@
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Settings, Trash2, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { ALL_VARIABLES, type DistributionValue, type SamplingCriterion } from "@/data/configs";
+import type { DistributionValue, SamplingCriterion } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
+import { VariableCatalogManager } from "../VariableCatalogManager";
 
 /* ─── Shared form controls, extracted verbatim from configuracion.tsx ──
    (Phase 2) so the new per-segment components (SegmentMonitoringSection,
@@ -64,9 +66,12 @@ export function TagInput({ value, onChange, placeholder }: { value: string[]; on
   );
 }
 
-export function VariablePicker({ value, onChange, pool = ALL_VARIABLES }: { value: string[]; onChange: (v: string[]) => void; pool?: string[] }) {
+export function VariablePicker({ value, onChange, pool }: { value: string[]; onChange: (v: string[]) => void; pool?: string[] }) {
   const [search, setSearch] = useState("");
-  const available = pool.filter((v) => !value.includes(v) && v.toLowerCase().includes(search.toLowerCase()));
+  const [showManager, setShowManager] = useState(false);
+  const { variables } = useVariableCatalog();
+  const effectivePool = pool ?? variables;
+  const available = effectivePool.filter((v) => !value.includes(v) && v.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-2">
@@ -78,8 +83,14 @@ export function VariablePicker({ value, onChange, pool = ALL_VARIABLES }: { valu
           </span>
         ))}
       </div>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar variable…"
-        className="w-full h-8 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary" />
+      <div className="flex items-center gap-1.5">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar variable…"
+          className="flex-1 h-8 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary" />
+        <button type="button" onClick={() => setShowManager(true)} title="Gestionar variables"
+          className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-md border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors">
+          <Settings className="h-3.5 w-3.5" />
+        </button>
+      </div>
       <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
         {available.length === 0 && <span className="text-[11px] text-text-secondary">Sin coincidencias.</span>}
         {available.map((v) => (
@@ -89,6 +100,7 @@ export function VariablePicker({ value, onChange, pool = ALL_VARIABLES }: { valu
           </button>
         ))}
       </div>
+      <VariableCatalogManager open={showManager} onOpenChange={setShowManager} />
     </div>
   );
 }
