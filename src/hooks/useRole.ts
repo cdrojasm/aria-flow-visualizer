@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  admin: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/testing", "/configuracion"],
+  admin: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/testing", "/biblioteca", "/configuracion"],
   analyst: ["/cola", "/dashboard"],
   datascience: ["/historico-fraude", "/monitor", "/dashboard"],
 };

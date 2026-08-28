@@ -1,7 +1,13 @@
-import { ChevronDown, ChevronUp, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Library, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import type { Flag, FlagType, ModusOperandi, SegmentAgentConfig, Taxonomy } from "@/data/configs";
+import {
+  listFlagLibraryEntries,
+  listModusOperandiLibraryEntries,
+  listTaxonomyLibraryEntries,
+} from "@/lib/api/knowledgeLibrary.functions";
 import { SegmentSimilarCasesSection } from "./SegmentSimilarCasesSection";
 import { Field, TagInput, VariablePicker } from "./shared/FormControls";
 
@@ -35,6 +41,77 @@ export function SegmentKnowledgeBaseSection({
   const [editingFlag, setEditingFlag] = useState<Flag | null>(null);
   const [showFlagForm, setShowFlagForm] = useState(false);
   const [camposOpen, setCamposOpen] = useState(true);
+
+  const [showImportTax, setShowImportTax] = useState(false);
+  const [showImportMO, setShowImportMO] = useState(false);
+  const [showImportFlag, setShowImportFlag] = useState(false);
+  const libraryTaxonomiesQuery = useQuery({
+    queryKey: ["libraryTaxonomies"],
+    queryFn: () => listTaxonomyLibraryEntries({ data: { activeOnly: true } }),
+    enabled: showImportTax || showImportMO,
+  });
+  const libraryModusOperandiQuery = useQuery({
+    queryKey: ["libraryModusOperandi"],
+    queryFn: () => listModusOperandiLibraryEntries({ data: { activeOnly: true } }),
+    enabled: showImportMO,
+  });
+  const libraryFlagsQuery = useQuery({
+    queryKey: ["libraryFlags"],
+    queryFn: () => listFlagLibraryEntries({ data: { activeOnly: true } }),
+    enabled: showImportFlag,
+  });
+  const libraryTaxonomies = libraryTaxonomiesQuery.data ?? [];
+  const libraryModusOperandi = libraryModusOperandiQuery.data ?? [];
+  const libraryFlags = libraryFlagsQuery.data ?? [];
+
+  // Snapshot-copy from the global biblioteca (see routes/biblioteca.tsx) -
+  // never a live reference, matches the confirmed backlog decision.
+  // Matched by `code` (taxonomies) so re-importing an already-imported
+  // entry is a no-op instead of a duplicate row.
+  const importTaxonomy = (entry: Taxonomy) => {
+    if (value.taxonomies.some((t) => t.code === entry.code)) { setShowImportTax(false); return; }
+    onChange({ taxonomies: [...value.taxonomies, { ...entry, id: `tx-${Date.now()}`, active: true }] });
+    setShowImportTax(false);
+  };
+
+  // MOs need a local taxonomyId - cascades the parent taxonomy in too
+  // (matched/created the same way as importTaxonomy) so the imported MO
+  // never dangles on a taxonomy that doesn't exist in this segment yet.
+  const importModusOperandi = (entry: (typeof libraryModusOperandi)[number]) => {
+    const libTax = libraryTaxonomies.find((t) => t.id === entry.taxonomy_library_id);
+    let taxonomies = value.taxonomies;
+    let localTax = libTax ? taxonomies.find((t) => t.code === libTax.code) : undefined;
+    if (!localTax && libTax) {
+      localTax = { id: `tx-${Date.now()}`, code: libTax.code, name: libTax.name, description: libTax.description, variables: [...libTax.variables], examples: [...libTax.examples], active: true };
+      taxonomies = [...taxonomies, localTax];
+    }
+    if (!localTax) { setShowImportMO(false); return; }
+    if (value.modusOperandi.some((m) => m.title === entry.title && m.taxonomyId === localTax!.id)) {
+      onChange({ taxonomies });
+      setShowImportMO(false);
+      return;
+    }
+    const modusOperandi = [...value.modusOperandi, {
+      id: `mo-${Date.now()}`, title: entry.title, narrative: entry.narrative, taxonomyId: localTax.id,
+      evolvedVariables: [...entry.evolved_variables], active: true,
+    }];
+    onChange({ taxonomies, modusOperandi });
+    setShowImportMO(false);
+  };
+
+  // modusOperandiIds intentionally starts empty - there's no reliable
+  // natural key to match a library MO to a local one (titles aren't
+  // guaranteed unique), so re-linking is left to the existing flag edit
+  // modal rather than guessing.
+  const importFlag = (entry: (typeof libraryFlags)[number]) => {
+    if (value.flags.some((f) => f.name === entry.name && f.flagType === entry.flag_type)) { setShowImportFlag(false); return; }
+    const flags = [...value.flags, {
+      id: `fl-${Date.now()}`, flagType: entry.flag_type, name: entry.name, description: entry.description,
+      evolvedVariables: [...entry.evolved_variables], modusOperandiIds: [],
+    }];
+    onChange({ flags });
+    setShowImportFlag(false);
+  };
 
   const openCreate = () => { setEditing({ id: "", code: "", name: "", description: "", variables: [], examples: [], active: true }); setShowForm(true); };
   const openEdit = (t: Taxonomy) => { setEditing({ ...t, variables: [...t.variables], examples: [...t.examples] }); setShowForm(true); };
@@ -75,9 +152,14 @@ export function SegmentKnowledgeBaseSection({
             <h3 className="text-[13px] font-semibold text-text-primary">Taxonomías de fraude</h3>
             <p className="text-[12px] text-text-secondary mt-0.5">Categorías abstractas de fraude que el agente puede asignar a cada alerta.</p>
           </div>
-          <button onClick={openCreate} disabled={disabled} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50">
-            <Plus className="h-4 w-4" /> Nueva taxonomía
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowImportTax(true)} disabled={disabled} className="inline-flex items-center gap-2 border border-border text-text-secondary px-3 py-2 rounded-md text-[13px] font-medium hover:border-primary hover:text-primary disabled:opacity-50">
+              <Library className="h-4 w-4" /> Importar de biblioteca
+            </button>
+            <button onClick={openCreate} disabled={disabled} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50">
+              <Plus className="h-4 w-4" /> Nueva taxonomía
+            </button>
+          </div>
         </div>
         <table className="w-full text-[13px]">
           <thead>
@@ -132,9 +214,14 @@ export function SegmentKnowledgeBaseSection({
             <h3 className="text-[13px] font-semibold text-text-primary">Modus operandi</h3>
             <p className="text-[12px] text-text-secondary mt-0.5">Casos concretos que aplican una taxonomía en la práctica.</p>
           </div>
-          <button onClick={() => openCreateMO()} disabled={disabled || value.taxonomies.length === 0} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
-            <Plus className="h-4 w-4" /> Nuevo modus operandi
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowImportMO(true)} disabled={disabled} className="inline-flex items-center gap-2 border border-border text-text-secondary px-3 py-2 rounded-md text-[13px] font-medium hover:border-primary hover:text-primary disabled:opacity-50">
+              <Library className="h-4 w-4" /> Importar de biblioteca
+            </button>
+            <button onClick={() => openCreateMO()} disabled={disabled || value.taxonomies.length === 0} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+              <Plus className="h-4 w-4" /> Nuevo modus operandi
+            </button>
+          </div>
         </div>
         <div className="divide-y divide-border">
           {value.modusOperandi.map((m) => {
@@ -168,9 +255,14 @@ export function SegmentKnowledgeBaseSection({
             <h3 className="text-[13px] font-semibold text-text-primary">Red / Yellow flags</h3>
             <p className="text-[12px] text-text-secondary mt-0.5">Comportamientos de alerta, cada una asociable a uno o varios modus operandi.</p>
           </div>
-          <button onClick={openCreateFlag} disabled={disabled} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50">
-            <Plus className="h-4 w-4" /> Nueva flag
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowImportFlag(true)} disabled={disabled} className="inline-flex items-center gap-2 border border-border text-text-secondary px-3 py-2 rounded-md text-[13px] font-medium hover:border-primary hover:text-primary disabled:opacity-50">
+              <Library className="h-4 w-4" /> Importar de biblioteca
+            </button>
+            <button onClick={openCreateFlag} disabled={disabled} className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50">
+              <Plus className="h-4 w-4" /> Nueva flag
+            </button>
+          </div>
         </div>
         <div className="divide-y divide-border">
           {value.flags.map((f) => (
@@ -365,6 +457,77 @@ export function SegmentKnowledgeBaseSection({
                 className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
                 {editingFlag.id ? "Guardar" : "Crear"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import taxonomy from library */}
+      {showImportTax && (
+        <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowImportTax(false)}>
+          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-[14px] font-semibold text-text-primary">Importar taxonomía de biblioteca</h3>
+              <button onClick={() => setShowImportTax(false)} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="max-h-96 overflow-y-auto divide-y divide-border">
+              {libraryTaxonomies.map((t) => (
+                <button key={t.id} onClick={() => importTaxonomy(t)} className="w-full text-left px-5 py-3 hover:bg-surface">
+                  <span className="text-[13px] font-medium text-text-primary">{t.name}</span>
+                  <span className="ml-2 font-mono text-[11px] text-text-secondary">{t.code}</span>
+                  <p className="text-[12px] text-text-secondary mt-0.5 truncate">{t.description}</p>
+                </button>
+              ))}
+              {libraryTaxonomies.length === 0 && <p className="px-5 py-8 text-center text-text-secondary text-[13px]">Sin taxonomías en la biblioteca.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import modus operandi from library */}
+      {showImportMO && (
+        <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowImportMO(false)}>
+          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-[14px] font-semibold text-text-primary">Importar modus operandi de biblioteca</h3>
+              <button onClick={() => setShowImportMO(false)} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="px-5 pt-3 text-[11px] text-text-secondary">Su taxonomía se importa junto con él si aún no está en este segmento.</p>
+            <div className="max-h-96 overflow-y-auto divide-y divide-border">
+              {libraryModusOperandi.map((m) => {
+                const tax = libraryTaxonomies.find((t) => t.id === m.taxonomy_library_id);
+                return (
+                  <button key={m.id} onClick={() => importModusOperandi(m)} className="w-full text-left px-5 py-3 hover:bg-surface">
+                    <span className="text-[13px] font-medium text-text-primary">{m.title}</span>
+                    {tax && <span className="ml-2 font-mono text-[11px] text-text-secondary">{tax.code}</span>}
+                    <p className="text-[12px] text-text-secondary mt-0.5 truncate">{m.narrative}</p>
+                  </button>
+                );
+              })}
+              {libraryModusOperandi.length === 0 && <p className="px-5 py-8 text-center text-text-secondary text-[13px]">Sin modus operandi en la biblioteca.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import flag from library */}
+      {showImportFlag && (
+        <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowImportFlag(false)}>
+          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-[14px] font-semibold text-text-primary">Importar flag de biblioteca</h3>
+              <button onClick={() => setShowImportFlag(false)} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
+            </div>
+            <p className="px-5 pt-3 text-[11px] text-text-secondary">Sus vínculos a modus operandi no se copian — asócialos después de importar.</p>
+            <div className="max-h-96 overflow-y-auto divide-y divide-border">
+              {libraryFlags.map((f) => (
+                <button key={f.id} onClick={() => importFlag(f)} className="w-full text-left px-5 py-3 hover:bg-surface">
+                  <span className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${FLAG_TYPE_STYLES[f.flag_type]}`}>{FLAG_TYPE_LABELS[f.flag_type]}</span>
+                  <span className="ml-2 text-[13px] font-medium text-text-primary">{f.name}</span>
+                  <p className="text-[12px] text-text-secondary mt-0.5 truncate">{f.description}</p>
+                </button>
+              ))}
+              {libraryFlags.length === 0 && <p className="px-5 py-8 text-center text-text-secondary text-[13px]">Sin flags en la biblioteca.</p>}
             </div>
           </div>
         </div>
