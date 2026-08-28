@@ -1,15 +1,13 @@
-.PHONY: help build build-ssr build-static deploy run down logs shell
+.PHONY: help build build-static deploy run down logs shell
 
 .DEFAULT_GOAL := help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build SSR image
-	docker compose build
-
-# SSR deploy: docker image running node server (dist/server + dist/client)
-build-ssr: ## Build SSR image (same as build)
+# nginx image serving the static SPA build (dist/client), proxying /api and
+# /health to the backend api container - see nginx.conf.
+build: ## Build static SPA image (nginx)
 	docker compose build
 
 # Static deploy (GitHub Pages): SPA shell in dist/client, publish that dir
@@ -32,7 +30,7 @@ down: ## Stop app
 	docker compose down
 
 logs: ## Tail app logs
-	docker compose logs -f app
+	docker compose logs -f web
 
 shell: ## Shell into running app container
-	docker compose exec app sh
+	docker compose exec web sh

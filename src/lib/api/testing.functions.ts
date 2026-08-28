@@ -1,23 +1,8 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+import { apiFetch, API_BASE } from "./client";
 
-import { getServerConfig } from "../config.server";
-
-// Server functions wrapping the backend's batch-test-run API
+// Client functions wrapping the backend's batch-test-run API
 // (../backend, base path /api/v0 — see its CLAUDE.md for the hexagonal
 // layout, not relevant here since we only call the HTTP surface).
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const { apiUrl } = getServerConfig();
-  const res = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<T>;
-}
 
 export type TestRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type StepStatus = "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
@@ -62,9 +47,7 @@ export type TestRunResponse = {
 };
 
 // Arbitrary JSON — step input/output payloads are opaque blobs from the
-// backend, shaped differently per step. A recursive union (rather than
-// Record<string, unknown>) is what TanStack Start's serializability check
-// on createServerFn return types actually accepts.
+// backend, shaped differently per step.
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
 export type TestCaseSummary = {
@@ -147,97 +130,94 @@ export type TestCaseDetailResponse = {
   steps: WorkflowStepResponse[];
 };
 
-export const getDatasets = createServerFn({ method: "GET" }).handler(() =>
-  apiFetch<DatasetRecord[]>("/api/v0/datasets"),
-);
+export function getDatasets(): Promise<DatasetRecord[]> {
+  return apiFetch("/api/v0/datasets");
+}
 
 // FormData payload (the uploaded CSV file) - bypasses apiFetch's forced
 // JSON Content-Type so the browser's multipart boundary reaches the
 // backend intact.
-export const uploadDataset = createServerFn({ method: "POST" })
-  .inputValidator((data: FormData) => data)
-  .handler(async ({ data }) => {
-    const { apiUrl } = getServerConfig();
-    const res = await fetch(`${apiUrl}/api/v0/datasets`, { method: "POST", body: data });
-    if (!res.ok) {
-      throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
-    }
-    return res.json() as Promise<{ name: string; status: DatasetStatus }>;
-  });
+export async function uploadDataset({
+  data,
+}: {
+  data: FormData;
+}): Promise<{ name: string; status: DatasetStatus }> {
+  const res = await fetch(`${API_BASE}/api/v0/datasets`, { method: "POST", body: data });
+  if (!res.ok) {
+    throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
+  }
+  return res.json() as Promise<{ name: string; status: DatasetStatus }>;
+}
 
-export const getDatasetSummary = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ name: z.string().min(1) }))
-  .handler(({ data }) =>
-    apiFetch<DatasetSummaryResponse>(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`),
-  );
+export function getDatasetSummary({
+  data,
+}: {
+  data: { name: string };
+}): Promise<DatasetSummaryResponse> {
+  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`);
+}
 
-export const deleteDataset = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ name: z.string().min(1) }))
-  .handler(({ data }) =>
-    apiFetch<{ name: string; deleted: boolean }>(
-      `/api/v0/datasets/${encodeURIComponent(data.name)}`,
-      { method: "DELETE" },
-    ),
-  );
+export function deleteDataset({
+  data,
+}: {
+  data: { name: string };
+}): Promise<{ name: string; deleted: boolean }> {
+  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}`, { method: "DELETE" });
+}
 
-export const listTestRuns = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ order: z.enum(["asc", "desc"]).default("desc") }).optional())
-  .handler(({ data }) =>
-    apiFetch<TestRunResponse[]>(`/api/v0/test-runs?order=${data?.order ?? "desc"}`),
-  );
+export function listTestRuns({
+  data,
+}: {
+  data?: { order: "asc" | "desc" };
+} = {}): Promise<TestRunResponse[]> {
+  return apiFetch(`/api/v0/test-runs?order=${data?.order ?? "desc"}`);
+}
 
-export const deleteTestRuns = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ test_run_ids: z.array(z.string()).min(1) }))
-  .handler(({ data }) =>
-    apiFetch<{ deleted_test_runs: number; deleted_cases: number }>("/api/v0/test-runs", {
-      method: "DELETE",
-      body: JSON.stringify(data),
-    }),
-  );
+export function deleteTestRuns({
+  data,
+}: {
+  data: { test_run_ids: string[] };
+}): Promise<{ deleted_test_runs: number; deleted_cases: number }> {
+  return apiFetch("/api/v0/test-runs", { method: "DELETE", body: JSON.stringify(data) });
+}
 
-export const getTestRun = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ id: z.string().min(1) }))
-  .handler(({ data }) => apiFetch<TestRunDetailResponse>(`/api/v0/test-runs/${data.id}`));
+export function getTestRun({ data }: { data: { id: string } }): Promise<TestRunDetailResponse> {
+  return apiFetch(`/api/v0/test-runs/${data.id}`);
+}
 
-export const getTestCase = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ runId: z.string().min(1), workflowExecutionId: z.string().min(1) }))
-  .handler(({ data }) =>
-    apiFetch<TestCaseDetailResponse>(
-      `/api/v0/test-runs/${data.runId}/cases/${data.workflowExecutionId}`,
-    ),
-  );
+export function getTestCase({
+  data,
+}: {
+  data: { runId: string; workflowExecutionId: string };
+}): Promise<TestCaseDetailResponse> {
+  return apiFetch(`/api/v0/test-runs/${data.runId}/cases/${data.workflowExecutionId}`);
+}
 
-export const startTestRun = createServerFn({ method: "POST" })
-  .inputValidator(
-    z.object({
-      name: z.string().min(1),
-      dataset_name: z.string().min(1),
-      config: z
-        .object({
-          prompt_overrides: z.record(z.string()).default({}),
-          model_overrides: z.record(z.string()).default({}),
-          // How many classification<->adversarial feedback loops a case
-          // gets before escalating to an analyst. Backend default is 2.
-          max_feedback_iterations: z.number().int().min(0).optional(),
-          // Pins this run to one specific (possibly inactive)
-          // ConfigurationRecord instead of whatever is active at dispatch
-          // time - lets multiple test runs each target a different
-          // configuration concurrently.
-          configuration_ref: z
-            .object({ configuration_id: z.string().min(1), version: z.number().int() })
-            .nullish(),
-        })
-        .optional(),
-      // Omit both = every row. sample_size alone = stratified by the
-      // dataset's own no-risk/risk-suspected/risk proportions. Both =
-      // stratified by these exact percentages instead.
-      sample_size: z.number().int().positive().optional(),
-      sample_distribution: z.record(z.number()).optional(),
-    }),
-  )
-  .handler(({ data }) =>
-    apiFetch<{ test_run_id: string; dispatched_count: number }>("/api/v0/test-runs", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  );
+export type StartTestRunRequest = {
+  name: string;
+  dataset_name: string;
+  config?: {
+    prompt_overrides?: Record<string, string>;
+    model_overrides?: Record<string, string>;
+    // How many classification<->adversarial feedback loops a case gets
+    // before escalating to an analyst. Backend default is 2.
+    max_feedback_iterations?: number;
+    // Pins this run to one specific (possibly inactive) ConfigurationRecord
+    // instead of whatever is active at dispatch time - lets multiple test
+    // runs each target a different configuration concurrently.
+    configuration_ref?: { configuration_id: string; version: number } | null;
+  };
+  // Omit both = every row. sample_size alone = stratified by the dataset's
+  // own no-risk/risk-suspected/risk proportions. Both = stratified by these
+  // exact percentages instead.
+  sample_size?: number;
+  sample_distribution?: Record<string, number>;
+};
+
+export function startTestRun({
+  data,
+}: {
+  data: StartTestRunRequest;
+}): Promise<{ test_run_id: string; dispatched_count: number }> {
+  return apiFetch("/api/v0/test-runs", { method: "POST", body: JSON.stringify(data) });
+}

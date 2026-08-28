@@ -1,27 +1,12 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
+import { apiFetch, API_BASE } from "./client";
 
-import { getServerConfig } from "../config.server";
-
-// Server functions wrapping the backend's configuration CRUD/versioning API
+// Client functions wrapping the backend's configuration CRUD/versioning API
 // (../backend, base path /api/v0/configurations — see backend/CLAUDE.md).
 // Types here are a field-for-field mirror of
 // backend/src/infrastructure/entrypoint/api/schemas.py's Configuration*
 // section (snake_case, as the wire format is). src/lib/api/
 // configurationMapping.ts converts to/from the frontend's camelCase
 // ConfigSettings (src/data/configs.ts).
-
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const { apiUrl } = getServerConfig();
-  const res = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!res.ok) {
-    throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<T>;
-}
 
 // --- Wire types (snake_case, mirrors schemas.py) --------------------------
 
@@ -257,56 +242,58 @@ export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
   created_by: string | null;
 };
 
-// --- Server functions -------------------------------------------------------
+// --- Client functions -------------------------------------------------------
 
-export const listConfigurations = createServerFn({ method: "GET" }).handler(() =>
-  apiFetch<ConfigurationSummaryResponse[]>("/api/v0/configurations"),
-);
+export function listConfigurations(): Promise<ConfigurationSummaryResponse[]> {
+  return apiFetch("/api/v0/configurations");
+}
 
-export const getActiveConfiguration = createServerFn({ method: "GET" }).handler(async () => {
-  const { apiUrl } = getServerConfig();
-  const res = await fetch(`${apiUrl}/api/v0/configurations/active`, {
+export async function getActiveConfiguration(): Promise<ConfigurationDetailResponse | null> {
+  const res = await fetch(`${API_BASE}/api/v0/configurations/active`, {
     headers: { "Content-Type": "application/json" },
   });
   if (res.status === 404) return null;
   if (!res.ok)
     throw new Error(`/api/v0/configurations/active -> ${res.status}: ${await res.text()}`);
   return res.json() as Promise<ConfigurationDetailResponse>;
-});
+}
 
-export const listConfigurationVersions = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ configurationId: z.string().min(1) }))
-  .handler(({ data }) =>
-    apiFetch<ConfigurationSummaryResponse[]>(
-      `/api/v0/configurations/${encodeURIComponent(data.configurationId)}`,
-    ),
-  );
+export function listConfigurationVersions({
+  data,
+}: {
+  data: { configurationId: string };
+}): Promise<ConfigurationSummaryResponse[]> {
+  return apiFetch(`/api/v0/configurations/${encodeURIComponent(data.configurationId)}`);
+}
 
-export const getConfigurationVersion = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ configurationId: z.string().min(1), version: z.number().int() }))
-  .handler(({ data }) =>
-    apiFetch<ConfigurationDetailResponse>(
-      `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}`,
-    ),
+export function getConfigurationVersion({
+  data,
+}: {
+  data: { configurationId: string; version: number };
+}): Promise<ConfigurationDetailResponse> {
+  return apiFetch(
+    `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}`,
   );
+}
 
 // data is the full CreateConfigurationRequest — passed as an opaque JSON
-// value (not re-validated field by field with zod) since it's already
-// built by src/lib/api/configurationMapping.ts from typed frontend state.
-export const createConfiguration = createServerFn({ method: "POST" })
-  .inputValidator((data: CreateConfigurationRequest) => data)
-  .handler(({ data }) =>
-    apiFetch<ConfigurationDetailResponse>("/api/v0/configurations", {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  );
+// value, already built by src/lib/api/configurationMapping.ts from typed
+// frontend state.
+export function createConfiguration({
+  data,
+}: {
+  data: CreateConfigurationRequest;
+}): Promise<ConfigurationDetailResponse> {
+  return apiFetch("/api/v0/configurations", { method: "POST", body: JSON.stringify(data) });
+}
 
-export const activateConfiguration = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ configurationId: z.string().min(1), version: z.number().int() }))
-  .handler(({ data }) =>
-    apiFetch<ConfigurationDetailResponse>(
-      `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}/activate`,
-      { method: "POST" },
-    ),
+export function activateConfiguration({
+  data,
+}: {
+  data: { configurationId: string; version: number };
+}): Promise<ConfigurationDetailResponse> {
+  return apiFetch(
+    `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}/activate`,
+    { method: "POST" },
   );
+}
