@@ -403,6 +403,10 @@ export type VersionEntry = {
   // settings are lazy-fetched per version rather than eagerly attached.
   settings?: ConfigSettings;
   testRun?: TestRunIndicators;
+  // Sticky - true once this version has ever gone to production. A save
+  // based on a version where this is false overwrites it in place instead
+  // of minting a new version (see saveVersion in routes/configuracion.tsx).
+  everActivated?: boolean;
 };
 
 export type AgentConfig = {

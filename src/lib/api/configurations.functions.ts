@@ -230,6 +230,11 @@ export type ConfigurationSummaryResponse = {
   name: string;
   description: string;
   active: boolean;
+  // Sticky - true once this version has ever gone to production, even if a
+  // later version has since taken over. A save with based_on_version
+  // pointing at a version where this is false overwrites it in place
+  // instead of minting a new version.
+  ever_activated: boolean;
   created_at: string;
   updated_at: string;
 };

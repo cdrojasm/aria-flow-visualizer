@@ -166,6 +166,7 @@ function ConfiguracionPage() {
       version: v.version,
       settings: v.version === selectedVersion && historicalDetailQuery.data ? settingsFromConfigurationDetail(historicalDetailQuery.data) : undefined,
       testRun: versionTestRuns[`${selectedConfigId}:${v.version}`],
+      everActivated: v.ever_activated,
     }));
 
   const selectedConfig: AgentConfig = {
@@ -196,6 +197,15 @@ function ConfiguracionPage() {
   const settings = isDraftView ? selectedConfig.workingCopy : (viewingVersion?.settings ?? defaultSettings());
   const readOnlyHistorical = !isDraftView;
   const locked = readOnlyHistorical || selectedConfig.testState === "testing" || settingsLoading || apiDown;
+  const unsaved = isTempId(selectedConfigId);
+  // Mirrors CreateConfigurationUseCase's overwrite condition: a save only
+  // mints a new version if the draft's base was never activated - and only
+  // once that base version is actually known (not unsaved/loading), so the
+  // label defaults to the safe "nueva versión" phrasing while unsure.
+  const basedOnVersionEntry = selectedDraft?.basedOnVersion != null
+    ? versions.find((v) => v.version === selectedDraft.basedOnVersion)
+    : undefined;
+  const willOverwrite = !unsaved && !!basedOnVersionEntry && basedOnVersionEntry.everActivated === false;
   const showDraftRow = selectedConfig.dirtyTabs.length > 0 || (selectedListItem?.latestVersion == null);
 
   const defaultVersionFor = (c: AgentConfig): number | "draft" => {
@@ -232,7 +242,7 @@ function ConfiguracionPage() {
   // startTestRun (src/lib/api/testing.functions.ts) if that's meant to gate
   // activation for real.
   const runCycle = () => {
-    if (!isDraftView || !selectedConfigId) return;
+    if (!isDraftView || !selectedConfigId || isTempId(selectedConfigId)) return;
     setDrafts((prev) => ({ ...prev, [selectedConfigId]: { ...prev[selectedConfigId], testState: "testing" } }));
     setTimeout(() => {
       const accuracy = 92 + Math.random() * 7;
@@ -598,22 +608,31 @@ function ConfiguracionPage() {
               </div>
               <p className="text-[12px] text-text-secondary mt-0.5">
                 {dirtyTabLabels
-                  ? <>Cambios sin validar en <span className="font-medium">{dirtyTabLabels}</span>. El ciclo de prueba puede tardar — puedes guardar esta configuración como nueva versión sin esperarlo.</>
-                  : "El ciclo de prueba puede tardar — puedes guardar esta configuración como nueva versión sin esperarlo."}
+                  ? <>Cambios sin validar en <span className="font-medium">{dirtyTabLabels}</span>. El ciclo de prueba puede tardar — puedes guardar esta configuración {willOverwrite ? "sin esperarlo" : "como nueva versión sin esperarlo"}.</>
+                  : `El ciclo de prueba puede tardar — puedes guardar esta configuración ${willOverwrite ? "sin esperarlo" : "como nueva versión sin esperarlo"}.`}
               </p>
             </div>
             <div className="p-6 space-y-5">
               <div className="flex items-center gap-3">
-                <button onClick={runCycle} disabled={locked}
+                <button onClick={runCycle} disabled={locked || unsaved} title={unsaved ? "Guarda esta configuración como versión antes de correr el ciclo" : undefined}
                   className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
                   {locked ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                   {locked ? "Corriendo ciclo…" : "Correr ciclo"}
                 </button>
                 <button onClick={saveVersion} disabled={locked}
                   className="inline-flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <Save className="h-4 w-4" /> Guardar como nueva versión
+                  <Save className="h-4 w-4" /> {willOverwrite ? `Guardar cambios en v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión"}
                 </button>
               </div>
+
+              {unsaved && (
+                <p className="text-[11px] text-warning">Guarda esta configuración como versión primero — el ciclo de validación corre sobre una versión guardada.</p>
+              )}
+              {willOverwrite && (
+                <p className="text-[11px] text-text-secondary">
+                  Esta versión nunca se ha desplegado a producción — guardar sobrescribe v{selectedDraft?.basedOnVersion} en vez de crear una versión nueva.
+                </p>
+              )}
 
               {!hasSucceededTestRun && !testRunsQuery.isLoading ? (
                 <p className="text-[11px] text-warning">
