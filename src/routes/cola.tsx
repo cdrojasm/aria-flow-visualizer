@@ -6,7 +6,7 @@ import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { AlertFiltersBar, matchesAlertFilters, type AlertFiltersValue } from "@/components/AlertFiltersBar";
 import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
-import { SEGMENTO_BADGES, type Canal, type Segmento } from "@/data/channels";
+import { segmentoBadgeClass, type Canal, type Segmento } from "@/data/channels";
 
 export const Route = createFileRoute("/cola")({
   head: () => ({
@@ -211,7 +211,7 @@ function AmountChannelSegmentoCells({ row, hidden }: { row: BaseRow; hidden: Set
       )}
       {!hidden.has("segmento") && (
         <td className="py-3 pr-4 whitespace-nowrap">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${SEGMENTO_BADGES[row.segmento]}`}>{row.segmento}</span>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${segmentoBadgeClass(row.segmento)}`}>{row.segmento}</span>
         </td>
       )}
       {!hidden.has("reglas") && (

@@ -14,10 +14,12 @@ import { deleteDataset, getDatasetSummary } from "@/lib/api/testing.functions";
 
 /* ─── Dataset detail, extracted from testing/index.tsx (Phase A) ────────
    Was an inline <section> competing with "Iniciar prueba" for visual
-   protagonism on the page - now a modal, same auto-open-on-select trigger
-   (parent passes datasetName from its own selectedDataset state), same
-   data/behavior, just a different container. Self-contained: owns its own
-   query, delete mutation, and polling - nothing here is read by the parent. */
+   protagonism on the page - now a modal. `open` is its own state, separate
+   from the parent's selectedDataset (which the "Iniciar prueba" flow also
+   needs) - closing this modal must not clear that selection, only a "Ver
+   detalle" button (shown once a dataset is picked) opens it. Self-
+   contained: owns its own query, delete mutation, and polling - nothing
+   here is read by the parent except via onDeleted. */
 
 const DATASET_STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-warning/10 text-warning",
@@ -47,10 +49,14 @@ const FIELD_VALUES_COLLAPSE_THRESHOLD = 10;
 
 export function DatasetDetailModal({
   datasetName,
+  open,
   onClose,
+  onDeleted,
 }: {
   datasetName: string | null;
+  open: boolean;
   onClose: () => void;
+  onDeleted?: () => void;
 }) {
   const queryClient = useQueryClient();
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
@@ -67,6 +73,7 @@ export function DatasetDetailModal({
       queryClient.invalidateQueries({ queryKey: ["datasets"] });
       queryClient.removeQueries({ queryKey: ["datasetSummary", name] });
       onClose();
+      onDeleted?.();
     },
   });
 
@@ -99,7 +106,7 @@ export function DatasetDetailModal({
   }
 
   return (
-    <Dialog open={!!datasetName} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Dataset: {datasetName}</DialogTitle>

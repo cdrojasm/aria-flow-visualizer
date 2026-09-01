@@ -47,7 +47,11 @@ export function SegmentAnalystSection({
     queryKey: ["resolutionMethods"],
     queryFn: () => listResolutionMethods({ data: { activeOnly: true } }),
   });
-  const resolutionMethods = resolutionMethodsQuery.data ?? [];
+  // block_soft/block_hard exist only for ShortageBehavior (configuracion.tsx's
+  // ShortageBehaviorEditor) - a playbook resolution can't mean "block".
+  const resolutionMethods = (resolutionMethodsQuery.data ?? []).filter(
+    (m) => m.resolution_tag !== "block_soft" && m.resolution_tag !== "block_hard",
+  );
   const resolutionMethodLabel = (p: AnalystPlaybook) =>
     resolutionMethods.find((m) => m.id === p.resolutionMethodId)?.value ??
     RESOLUTION_TAG_LABELS[p.resolutionTag];

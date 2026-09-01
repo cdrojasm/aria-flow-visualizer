@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, Library, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Library, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -22,8 +22,7 @@ const FLAG_TYPE_LABELS: Record<FlagType, string> = { red: "Roja", yellow: "Amari
    row), modus operandi (now with evolvedVariables + active/status), and
    a single unified red/yellow flags table, many-to-many with modus
    operandi (a flag picks any number of MOs; a MO can be picked by any
-   number of flags). Also hosts "Campos de alerta", unchanged from
-   Phase 2. */
+   number of flags). */
 
 export function SegmentKnowledgeBaseSection({
   value,
@@ -40,7 +39,6 @@ export function SegmentKnowledgeBaseSection({
   const [showMOForm, setShowMOForm] = useState(false);
   const [editingFlag, setEditingFlag] = useState<Flag | null>(null);
   const [showFlagForm, setShowFlagForm] = useState(false);
-  const [camposOpen, setCamposOpen] = useState(true);
 
   const [showImportTax, setShowImportTax] = useState(false);
   const [showImportMO, setShowImportMO] = useState(false);
@@ -293,22 +291,6 @@ export function SegmentKnowledgeBaseSection({
 
       {/* Casos similares */}
       <SegmentSimilarCasesSection value={value} onChange={onChange} disabled={disabled} />
-
-      {/* Campos de alerta */}
-      <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-        <button onClick={() => setCamposOpen((v) => !v)} className="w-full flex items-center justify-between px-6 py-4 border-b border-border text-left">
-          <div>
-            <h2 className="text-[14px] font-semibold text-text-primary">Campos de alerta</h2>
-            <p className="text-[12px] text-text-secondary mt-0.5">Selecciona qué campos se muestran en el detalle de cada alerta.</p>
-          </div>
-          {camposOpen ? <ChevronUp className="h-4 w-4 text-text-secondary" /> : <ChevronDown className="h-4 w-4 text-text-secondary" />}
-        </button>
-        {camposOpen && (
-          <div className="p-6">
-            <VariablePicker value={value.activeFields} onChange={(v) => onChange({ activeFields: v })} />
-          </div>
-        )}
-      </section>
 
       {/* Taxonomy modal */}
       {showForm && editing && (

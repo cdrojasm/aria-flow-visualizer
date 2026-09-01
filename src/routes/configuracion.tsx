@@ -14,12 +14,13 @@ import { SegmentSamplingTab } from "@/components/configuracion/SegmentSamplingTa
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
+import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
 import { registerTestRun, type TestRunIndicators } from "@/data/testRuns";
 import {
-  PROFILE_COLORS, defaultSettings,
+  PROFILE_COLORS, defaultSettings, buildSegmentsFromChannels, RESOLUTION_TAG_LABELS,
   type TabKey, type DayProfile,
   type SamplingIntervalUnit,
-  type ShortageBehavior, type ShortageAction, type AnalystCapacity, type DraftResult, type TestCleanupPolicy,
+  type ShortageBehavior, type ResolutionTag, type AnalystCapacity, type DraftResult, type TestCleanupPolicy,
   type VersionEntry, type AgentConfig, type ConfigSettings,
   type SegmentCode, type SegmentSettings,
 } from "@/data/configs";
@@ -29,6 +30,8 @@ import {
 } from "@/lib/api/configurations.functions";
 import { toCreateConfigurationRequest, settingsFromConfigurationDetail } from "@/lib/api/configurationMapping";
 import { uploadAnalystCapacityImport, getAnalystCapacityImport } from "@/lib/api/analystCapacity.functions";
+import { listChannelLibraryEntries } from "@/lib/api/channelLibrary.functions";
+import { listResolutionMethods, type ResolutionMethodResponse } from "@/lib/api/resolutionMethod.functions";
 import { listTestRuns } from "@/lib/api/testing.functions";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
@@ -86,6 +89,24 @@ function ConfiguracionPage() {
   // "has THIS draft been tested" - tighten once that link exists.
   const testRunsQuery = useQuery({ queryKey: ["testRuns", "desc"], queryFn: () => listTestRuns({ data: { order: "desc" } }) });
   const hasSucceededTestRun = (testRunsQuery.data ?? []).some((run) => run.status === "SUCCEEDED");
+  // Same resolution-method catalog AnalystPlaybook uses (see
+  // SegmentAnalystSection.tsx) - shortage behavior picks from it too now,
+  // via the block_soft/block_hard tags reserved for this use.
+  const resolutionMethodsQuery = useQuery({
+    queryKey: ["resolutionMethods"],
+    queryFn: () => listResolutionMethods({ data: { activeOnly: true } }),
+  });
+  const resolutionMethods = resolutionMethodsQuery.data ?? [];
+  const [showShortageResolutionCatalog, setShowShortageResolutionCatalog] = useState(false);
+  // Segment keys come from this catalog now (see biblioteca.tsx's
+  // "Canales" tab) - a fresh draft with no base config seeds its segments
+  // from these instead of the old fixed 2-value enum.
+  const channelsQuery = useQuery({
+    queryKey: ["channelLibrary"],
+    queryFn: () => listChannelLibraryEntries({ data: { activeOnly: true } }),
+  });
+  const channels = channelsQuery.data ?? [];
+  const channelLabels = Object.fromEntries(channels.map((c) => [c.id, c.name]));
 
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | "draft">("draft");
@@ -391,6 +412,9 @@ function ConfiguracionPage() {
       baseSettings = settingsFromConfigurationDetail(detail);
     } else {
       baseSettings = defaultSettings();
+      if (channels.length > 0) {
+        baseSettings = { ...baseSettings, segments: buildSegmentsFromChannels(channels) };
+      }
     }
     const clonedSettings: ConfigSettings = {
       ...baseSettings,
@@ -825,7 +849,7 @@ function ConfiguracionPage() {
                 <div className="p-6 space-y-6">
                   <LimitField label="Máximo de llamadas concurrentes" hint="Cantidad máxima de llamadas simultáneas que el componente voicebot puede sostener en paralelo." value={settings.voicebotMaxConcurrentCalls} onChange={(v) => patchSettings("ops", { voicebotMaxConcurrentCalls: v })} min={1} max={500} suffix="llamadas" />
                   <Field label="Escasez de voicebot" hint="Qué debe hacer ARIA cuando no logra asignar una llamada de voicebot disponible para una alerta.">
-                    <ShortageBehaviorEditor name="voicebot-shortage" exclude="move-to-voicebot" value={settings.voicebotShortageBehavior} onChange={(v) => patchSettings("ops", { voicebotShortageBehavior: v })} />
+                    <ShortageBehaviorEditor name="voicebot-shortage" excludeTag="send_to_voicebot" resolutionMethods={resolutionMethods} onManage={() => setShowShortageResolutionCatalog(true)} value={settings.voicebotShortageBehavior} onChange={(v) => patchSettings("ops", { voicebotShortageBehavior: v })} />
                   </Field>
                 </div>
               </section>
@@ -838,7 +862,7 @@ function ConfiguracionPage() {
                 <div className="p-6 space-y-6">
                   <AnalystCapacityEditor value={settings.analystCapacity} onChange={(v) => patchSettings("ops", { analystCapacity: v })} />
                   <Field label="Escasez de analistas" hint="Qué debe hacer ARIA cuando no hay analistas disponibles para recibir una alerta escalada.">
-                    <ShortageBehaviorEditor name="analyst-shortage" exclude="move-to-analyst" value={settings.analystShortageBehavior} onChange={(v) => patchSettings("ops", { analystShortageBehavior: v })} />
+                    <ShortageBehaviorEditor name="analyst-shortage" excludeTag="scale_to_analyst" resolutionMethods={resolutionMethods} onManage={() => setShowShortageResolutionCatalog(true)} value={settings.analystShortageBehavior} onChange={(v) => patchSettings("ops", { analystShortageBehavior: v })} />
                   </Field>
                 </div>
               </section>
@@ -936,6 +960,7 @@ function ConfiguracionPage() {
             <SegmentoTab
               value={settings.segments}
               onChange={(segments) => patchSettings("segmento", { segments })}
+              channels={channels}
               disabled={locked}
             />
           </fieldset>
@@ -945,6 +970,7 @@ function ConfiguracionPage() {
           <SegmentAgentTab
             value={settings.segments}
             onChange={(code, patch) => patchSegment("segmentoAgente", code, patch)}
+            channelLabels={channelLabels}
             disabled={locked}
           />
         )}
@@ -953,6 +979,7 @@ function ConfiguracionPage() {
           <SegmentSamplingTab
             value={settings.segments}
             onChange={(code, patch) => patchSegment("segmentoMuestreo", code, patch)}
+            channelLabels={channelLabels}
             disabled={locked}
           />
         )}
@@ -961,6 +988,7 @@ function ConfiguracionPage() {
           <SegmentEvaluationTab
             value={settings.segments}
             onChange={(code, patch) => patchSegment("segmentoEvaluacion", code, patch)}
+            channelLabels={channelLabels}
             disabled={locked}
           />
         )}
@@ -1062,6 +1090,11 @@ function ConfiguracionPage() {
           </div>
         </div>
       )}
+
+      <ResolutionMethodCatalogManager
+        open={showShortageResolutionCatalog}
+        onOpenChange={setShowShortageResolutionCatalog}
+      />
     </DashboardLayout>
   );
 }
@@ -1250,26 +1283,53 @@ function AnalystCapacityEditor({ value, onChange }: { value: AnalystCapacity; on
 }
 
 /* ─── Shortage behavior editor ──────────────────────── */
+/* Picks from the same resolution-method catalog AnalystPlaybook uses (see
+   SegmentAnalystSection.tsx + ResolutionMethodCatalogManager) - block_soft/
+   block_hard are the two tags reserved for this editor, on top of the 3
+   tags a playbook can use. excludeTag guards against a self-referential
+   loop (e.g. voicebot shortage routed right back to the voicebot). */
 
-const SHORTAGE_ACTIONS: { value: ShortageAction; label: string; hint: string }[] = [
-  { value: "block-soft", label: "Bloqueo soft", hint: "Marca la alerta como riesgosa y aplica un bloqueo soft sobre la cuenta." },
-  { value: "block-hard", label: "Bloqueo hard", hint: "Marca la alerta como riesgosa y aplica un bloqueo hard sobre la cuenta." },
-  { value: "pass", label: "Dejar pasar", hint: "No bloquea ni escala: la alerta continúa sin intervención adicional." },
-  { value: "move-to-analyst", label: "Mover a analista", hint: "Escala la alerta a un analista disponible." },
-  { value: "move-to-voicebot", label: "Mover a voicebot", hint: "Escala la alerta al voicebot." },
-];
-
-function ShortageBehaviorEditor({ value, onChange, name, exclude }: { value: ShortageBehavior; onChange: (v: ShortageBehavior) => void; name: string; exclude?: ShortageAction }) {
-  const options = SHORTAGE_ACTIONS.filter((o) => o.value !== exclude);
+function ShortageBehaviorEditor({
+  value,
+  onChange,
+  name,
+  excludeTag,
+  resolutionMethods,
+  onManage,
+}: {
+  value: ShortageBehavior;
+  onChange: (v: ShortageBehavior) => void;
+  name: string;
+  excludeTag?: ResolutionTag;
+  resolutionMethods: ResolutionMethodResponse[];
+  onManage: () => void;
+}) {
+  const options = resolutionMethods.filter((m) => m.resolution_tag !== excludeTag);
   return (
-    <div role="radiogroup" aria-label={name} className="flex flex-wrap gap-2">
-      {options.map((opt) => (
-        <button key={opt.value} type="button" role="radio" aria-checked={value.action === opt.value} title={opt.hint}
-          onClick={() => onChange({ action: opt.value })}
-          className={`px-3 py-1.5 rounded-full border text-[12px] font-medium transition-colors ${value.action === opt.value ? "border-primary bg-primary/10 text-primary" : "border-border text-text-secondary hover:border-primary/40 hover:text-text-primary"}`}>
-          {opt.label}
-        </button>
-      ))}
+    <div aria-label={name} className="flex items-center gap-2">
+      <select
+        value={value.resolutionMethodId ?? ""}
+        onChange={(e) => {
+          const method = options.find((m) => m.id === e.target.value);
+          if (!method) return;
+          onChange({ resolutionMethodId: method.id, resolutionTag: method.resolution_tag as ResolutionTag });
+        }}
+        className="h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
+      >
+        {!value.resolutionMethodId && (
+          <option value="" disabled>
+            Selecciona un método
+          </option>
+        )}
+        {options.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.value} ({RESOLUTION_TAG_LABELS[m.resolution_tag as ResolutionTag]})
+          </option>
+        ))}
+      </select>
+      <button type="button" onClick={onManage} className="text-[11px] font-medium text-primary hover:underline">
+        Gestionar métodos
+      </button>
     </div>
   );
 }

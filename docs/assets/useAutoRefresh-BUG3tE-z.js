@@ -1,0 +1,1 @@
+import{r as t}from"./index-giRkSOYl.js";function u(r=15e3){const[s,a]=t.useState(()=>new Date),e=t.useCallback(()=>a(new Date),[]);return t.useEffect(()=>{const n=setInterval(e,r);return()=>clearInterval(n)},[r,e]),{lastRefresh:s,refresh:e}}export{u};

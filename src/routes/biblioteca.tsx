@@ -5,6 +5,14 @@ import { useState } from "react";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Field, TagInput, VariablePicker } from "@/components/configuracion/shared/FormControls";
+import { TAG_CATEGORY_LABELS, type TagCategory } from "@/data/configs";
+import {
+  createTag,
+  deleteTag,
+  listTags,
+  updateTag,
+  type TagEntryResponse,
+} from "@/lib/api/configuration.functions";
 import {
   createFlagLibraryEntry,
   createModusOperandiLibraryEntry,
@@ -28,6 +36,13 @@ import {
   type SimilarCaseLibraryEntry,
   type TaxonomyLibraryEntry,
 } from "@/lib/api/knowledgeLibrary.functions";
+import {
+  createChannelLibraryEntry,
+  deleteChannelLibraryEntry,
+  listChannelLibraryEntries,
+  updateChannelLibraryEntry,
+  type ChannelLibraryEntry,
+} from "@/lib/api/channelLibrary.functions";
 
 export const Route = createFileRoute("/biblioteca")({
   head: () => ({
@@ -59,8 +74,24 @@ const FLAG_TYPE_STYLES: Record<FlagTypeValue, string> = {
 };
 const FLAG_TYPE_LABELS: Record<FlagTypeValue, string> = { red: "Roja", yellow: "Amarilla" };
 
+// Event-shape catalogs (an alert's integration point / triggered rule /
+// event type) - moved here from SegmentoTab's filter builder header (still
+// used there via TagMultiSelect to build filter conditions; only the
+// admin CRUD moved) because they're global reference data, same footing
+// as the taxonomy/MO/flag/similar-case catalogs above, not a per-segment
+// setting.
+const EVENT_CATALOG_OPTIONS: TagCategory[] = ["integration_point", "triggered_rule", "event_type"];
+
+type BibliotecaTab = "conocimiento" | "eventos" | "canales";
+const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
+  { key: "conocimiento", label: "Conocimiento de fraude" },
+  { key: "eventos", label: "Catálogos de eventos" },
+  { key: "canales", label: "Canales" },
+];
+
 function BibliotecaPage() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<BibliotecaTab>("conocimiento");
 
   const taxonomiesQuery = useQuery({
     queryKey: ["libraryTaxonomies"],
@@ -90,6 +121,43 @@ function BibliotecaPage() {
     queryClient.invalidateQueries({ queryKey: ["libraryFlags"] });
     queryClient.invalidateQueries({ queryKey: ["librarySimilarCases"] });
   };
+
+  // --- Channels ---------------------------------------------------------------
+  // Same query key configuracion.tsx's SegmentoTab uses, so saving a channel
+  // here invalidates that tab's "Agregar canal" list too.
+  const channelsQuery = useQuery({
+    queryKey: ["channelLibrary"],
+    queryFn: () => listChannelLibraryEntries({ data: { activeOnly: false } }),
+  });
+  const channels = channelsQuery.data ?? [];
+  const invalidateChannels = () => queryClient.invalidateQueries({ queryKey: ["channelLibrary"] });
+
+  const [editingChannel, setEditingChannel] = useState<Partial<ChannelLibraryEntry> | null>(null);
+  const [showChannelForm, setShowChannelForm] = useState(false);
+  const saveChannelMutation = useMutation({
+    mutationFn: (draft: Partial<ChannelLibraryEntry>) =>
+      draft.id
+        ? updateChannelLibraryEntry({
+            data: { entryId: draft.id, code: draft.code, name: draft.name, description: draft.description },
+          })
+        : createChannelLibraryEntry({
+            data: { code: draft.code ?? "", name: draft.name ?? "", description: draft.description ?? "" },
+          }),
+    onSuccess: () => {
+      invalidateChannels();
+      setShowChannelForm(false);
+      setEditingChannel(null);
+    },
+  });
+  const deleteChannelMutation = useMutation({
+    mutationFn: (entryId: string) => deleteChannelLibraryEntry({ data: { entryId } }),
+    onSuccess: invalidateChannels,
+  });
+  const toggleChannelActive = useMutation({
+    mutationFn: (entry: ChannelLibraryEntry) =>
+      updateChannelLibraryEntry({ data: { entryId: entry.id, active: !entry.active } }),
+    onSuccess: invalidateChannels,
+  });
 
   // --- Taxonomies -----------------------------------------------------------
   const [editingTax, setEditingTax] = useState<Partial<TaxonomyLibraryEntry> | null>(null);
@@ -243,12 +311,143 @@ function BibliotecaPage() {
         <header>
           <h1 className="text-[20px] font-semibold text-text-primary">Biblioteca</h1>
           <p className="text-[13px] text-text-secondary mt-1">
-            Catálogo global de taxonomías, modus operandi, flags y casos similares. Las configuraciones por
-            segmento importan (copian) desde aquí para construir su propio conocimiento — editar una entrada
-            aquí no afecta configuraciones ya construidas.
+            Catálogo global de taxonomías, modus operandi, flags, casos similares y catálogos de eventos. Las
+            configuraciones por segmento importan (copian) desde aquí para construir su propio conocimiento —
+            editar una entrada aquí no afecta configuraciones ya construidas.
           </p>
         </header>
 
+        <div className="flex items-center gap-1 border-b border-border">
+          {BIBLIOTECA_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${activeTab === t.key ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text-primary"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "eventos" && (
+          <div className="space-y-6">
+            {EVENT_CATALOG_OPTIONS.map((category) => (
+              <EventCatalogSection key={category} category={category} />
+            ))}
+          </div>
+        )}
+
+        {activeTab === "canales" && (
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div>
+                <h2 className="text-[14px] font-semibold text-text-primary">Canales</h2>
+                <p className="text-[12px] text-text-secondary mt-0.5">
+                  Los segmentos que una configuración puede activar (ej. tarjetas, canales digitales) - el orden de
+                  desempate entre segmentos se define por configuración, en el tab Segmento.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingChannel({ code: "", name: "", description: "" });
+                  setShowChannelForm(true);
+                }}
+                className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" /> Nuevo canal
+              </button>
+            </div>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-text-secondary text-left border-b border-border">
+                  <th className="px-6 py-2 font-medium">Código</th>
+                  <th className="px-3 py-2 font-medium">Nombre</th>
+                  <th className="px-3 py-2 font-medium">Descripción</th>
+                  <th className="px-3 py-2 font-medium">Estado</th>
+                  <th className="px-3 py-2 font-medium w-24"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {channels.map((c) => (
+                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-surface align-top">
+                    <td className="px-6 py-3 font-mono text-[12px]">{c.code}</td>
+                    <td className="px-3 py-3 font-medium text-text-primary">{c.name}</td>
+                    <td className="px-3 py-3 text-text-secondary max-w-xs truncate">{c.description}</td>
+                    <td className="px-3 py-3">
+                      <button
+                        onClick={() => toggleChannelActive.mutate(c)}
+                        className={`text-[11px] uppercase tracking-wider ${c.active ? "text-success" : "text-text-secondary"}`}
+                      >
+                        {c.active ? "Activo" : "Inactivo"}
+                      </button>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            setEditingChannel({ ...c });
+                            setShowChannelForm(true);
+                          }}
+                          className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteChannelMutation.mutate(c.id)}
+                          className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {channels.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-8 text-center text-text-secondary">
+                      Sin canales en la biblioteca.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {showChannelForm && editingChannel && (
+          <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowChannelForm(false)}>
+            <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+                <h3 className="text-[14px] font-semibold text-text-primary">{editingChannel.id ? "Editar canal" : "Nuevo canal"}</h3>
+                <button onClick={() => setShowChannelForm(false)} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="p-5 space-y-4">
+                <Field label="Código">
+                  <input value={editingChannel.code ?? ""} onChange={(e) => setEditingChannel({ ...editingChannel, code: e.target.value })}
+                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] font-mono focus:outline-none focus:border-primary" placeholder="tarjetas" />
+                </Field>
+                <Field label="Nombre">
+                  <input value={editingChannel.name ?? ""} onChange={(e) => setEditingChannel({ ...editingChannel, name: e.target.value })}
+                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary" placeholder="Tarjetas" />
+                </Field>
+                <Field label="Descripción">
+                  <textarea value={editingChannel.description ?? ""} onChange={(e) => setEditingChannel({ ...editingChannel, description: e.target.value })}
+                    rows={3} className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none" />
+                </Field>
+              </div>
+              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+                <button onClick={() => setShowChannelForm(false)} className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface">Cancelar</button>
+                <button onClick={() => saveChannelMutation.mutate(editingChannel)} disabled={!editingChannel.code?.trim() || !editingChannel.name?.trim() || saveChannelMutation.isPending}
+                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {editingChannel.id ? "Guardar" : "Crear"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "conocimiento" && (
+          <>
         {/* Taxonomías */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -506,6 +705,8 @@ function BibliotecaPage() {
             )}
           </div>
         </section>
+          </>
+        )}
 
         {/* Taxonomy modal */}
         {showTaxForm && editingTax && (
@@ -687,5 +888,114 @@ function BibliotecaPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+
+/* ─── One event-catalog entity (Punto de integración / Regla disparada /
+   Tipo de evento) - own query, own list, own add/toggle/delete, rendered
+   inline like Taxonomías/Canales above (not a shared "Gestionar" button
+   hiding all 3 behind one dialog - each entity gets its own visible list
+   with the actions that fit it: add a value, deactivate, delete). */
+
+function EventCatalogSection({ category }: { category: TagCategory }) {
+  const queryClient = useQueryClient();
+  const tagsQuery = useQuery({
+    queryKey: ["tags", category],
+    queryFn: () => listTags({ data: { category, activeOnly: false } }),
+  });
+  const tags = tagsQuery.data ?? [];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["tags", category] });
+
+  const [newValue, setNewValue] = useState("");
+  const createMutation = useMutation({
+    mutationFn: (value: string) => createTag({ data: { category, value } }),
+    onSuccess: () => {
+      setNewValue("");
+      invalidate();
+    },
+  });
+  const toggleActiveMutation = useMutation({
+    mutationFn: (tag: TagEntryResponse) => updateTag({ data: { category, tagId: tag.id, active: !tag.active } }),
+    onSuccess: invalidate,
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (tagId: string) => deleteTag({ data: { category, tagId } }),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+        <div>
+          <h2 className="text-[14px] font-semibold text-text-primary">{TAG_CATEGORY_LABELS[category]}</h2>
+          <p className="text-[12px] text-text-secondary mt-0.5">
+            Valores disponibles para este filtro. Un valor desactivado deja de aparecer al construir nuevas
+            condiciones.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newValue.trim()) createMutation.mutate(newValue.trim());
+            }}
+            placeholder={`Nuevo valor de ${TAG_CATEGORY_LABELS[category].toLowerCase()}…`}
+            className="h-9 w-64 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => newValue.trim() && createMutation.mutate(newValue.trim())}
+            disabled={!newValue.trim()}
+            className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="h-4 w-4" /> Agregar
+          </button>
+        </div>
+      </div>
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-text-secondary text-left border-b border-border">
+            <th className="px-6 py-2 font-medium">Valor</th>
+            <th className="px-3 py-2 font-medium w-28">Estado</th>
+            <th className="px-3 py-2 font-medium w-16"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {tags.map((t) => (
+            <tr key={t.id} className="border-b border-border last:border-0 hover:bg-surface">
+              <td className={`px-6 py-3 ${t.active ? "text-text-primary" : "text-text-secondary line-through"}`}>
+                {t.value}
+              </td>
+              <td className="px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => toggleActiveMutation.mutate(t)}
+                  className={`text-[11px] uppercase tracking-wider ${t.active ? "text-success" : "text-text-secondary"}`}
+                >
+                  {t.active ? "Activo" : "Inactivo"}
+                </button>
+              </td>
+              <td className="px-3 py-3">
+                <button
+                  type="button"
+                  onClick={() => deleteMutation.mutate(t.id)}
+                  className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+          {tags.length === 0 && (
+            <tr>
+              <td colSpan={3} className="px-6 py-8 text-center text-text-secondary">
+                Sin valores en {TAG_CATEGORY_LABELS[category].toLowerCase()}.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </section>
   );
 }

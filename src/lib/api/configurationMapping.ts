@@ -299,6 +299,7 @@ function segmentToApi(s: SegmentSettings): ApiSegmentSettings {
     filter: filterGroupToApi(s.filter),
     monitoring: monitoringToApi(s.monitoring),
     agent: agentToApi(s.agent),
+    order: s.order,
   };
 }
 function segmentFromApi(s: ApiSegmentSettings): SegmentSettings {
@@ -307,6 +308,7 @@ function segmentFromApi(s: ApiSegmentSettings): SegmentSettings {
     filter: filterGroupFromApi(s.filter),
     monitoring: monitoringFromApi(s.monitoring),
     agent: agentFromApi(s.agent),
+    order: s.order,
   };
 }
 
@@ -354,8 +356,14 @@ export function toCreateConfigurationRequest(
       queue_discard_amount_threshold: settings.queueDiscardAmountThreshold,
       queue_rule_filter_enabled: settings.queueRuleFilterEnabled,
       queue_allowed_triggered_rules: settings.queueAllowedTriggeredRules,
-      voicebot_shortage_behavior: { action: settings.voicebotShortageBehavior.action },
-      analyst_shortage_behavior: { action: settings.analystShortageBehavior.action },
+      voicebot_shortage_behavior: {
+        resolution_tag: settings.voicebotShortageBehavior.resolutionTag,
+        resolution_method_id: settings.voicebotShortageBehavior.resolutionMethodId ?? null,
+      },
+      analyst_shortage_behavior: {
+        resolution_tag: settings.analystShortageBehavior.resolutionTag,
+        resolution_method_id: settings.analystShortageBehavior.resolutionMethodId ?? null,
+      },
     },
     test: {
       max_test_instances: settings.maxTestInstances,
@@ -397,8 +405,14 @@ export function settingsFromConfigurationDetail(
     queueDiscardAmountThreshold: detail.ops.queue_discard_amount_threshold,
     queueRuleFilterEnabled: detail.ops.queue_rule_filter_enabled,
     queueAllowedTriggeredRules: detail.ops.queue_allowed_triggered_rules,
-    voicebotShortageBehavior: { action: detail.ops.voicebot_shortage_behavior.action },
-    analystShortageBehavior: { action: detail.ops.analyst_shortage_behavior.action },
+    voicebotShortageBehavior: {
+      resolutionTag: detail.ops.voicebot_shortage_behavior.resolution_tag,
+      resolutionMethodId: detail.ops.voicebot_shortage_behavior.resolution_method_id,
+    },
+    analystShortageBehavior: {
+      resolutionTag: detail.ops.analyst_shortage_behavior.resolution_tag,
+      resolutionMethodId: detail.ops.analyst_shortage_behavior.resolution_method_id,
+    },
     maxTestInstances: detail.test.max_test_instances,
     maxConcurrentExperiments: detail.test.max_concurrent_experiments,
     experimentTimeoutMinutes: detail.test.experiment_timeout_minutes,

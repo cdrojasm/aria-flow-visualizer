@@ -12,7 +12,7 @@ import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { AlertFiltersBar, matchesAlertFilters, type AlertFiltersValue } from "@/components/AlertFiltersBar";
 import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
-import { subcanalesFor, SEGMENTO_BADGES, type Canal, type Segmento } from "@/data/channels";
+import { subcanalesFor, segmentoBadgeClass, type Canal, type Segmento } from "@/data/channels";
 import { REGLAS_GATILLADAS } from "@/data/rules";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -660,7 +660,7 @@ function HistoricoFraudePage() {
                     )}
                     {!hiddenCols.has("segmento") && (
                       <td className="px-5 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${SEGMENTO_BADGES[row.segmento]}`}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${segmentoBadgeClass(row.segmento)}`}>
                           {row.segmento}
                         </span>
                       </td>

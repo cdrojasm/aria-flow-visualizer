@@ -22,8 +22,9 @@ import {
 
 /* ─── Admin CRUD for the marcación catalog ───────────
    Opened from the Analista subtab, next to the "handle_by_aria" resolution
-   tag - see SegmentAnalystSection.tsx. Same pattern as TagCatalogManager
-   but flat (no category partition) plus a risk_label per row. Hits the
+   tag - see SegmentAnalystSection.tsx. Same CRUD shape as biblioteca.tsx's
+   EventCatalogSection, but as a dialog (not inline) and flat (no category
+   partition) plus a risk_label per row. Hits the
    real backend immediately, same as the tag catalog. */
 
 const RISK_LABEL_OPTIONS: { value: RiskLabel; label: string }[] = [

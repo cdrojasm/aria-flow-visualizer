@@ -5,7 +5,13 @@ import { apiFetch } from "./client";
 // Client functions wrapping the backend's resolution-method-catalog API,
 // mirroring marcacion.functions.ts.
 
-const resolutionTag = z.enum(["scale_to_analyst", "send_to_voicebot", "handle_by_aria"]);
+const resolutionTag = z.enum([
+  "scale_to_analyst",
+  "send_to_voicebot",
+  "handle_by_aria",
+  "block_soft",
+  "block_hard",
+]);
 
 export type ResolutionTagValue = z.infer<typeof resolutionTag>;
 

@@ -10,10 +10,13 @@ import {
   ArrowUpDown,
   Trash2,
   Upload,
+  Eye,
   Radio,
   RotateCcw,
   Search,
   X,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DatasetDetailModal } from "@/components/testing/DatasetDetailModal";
@@ -25,7 +28,7 @@ import {
   uploadDataset,
   type TestRunResponse,
 } from "@/lib/api/testing.functions";
-import { listConfigurations } from "@/lib/api/configurations.functions";
+import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
 
 export const Route = createFileRoute("/testing/")({
   head: () => ({
@@ -68,6 +71,7 @@ function TestingPage() {
 
   const [runName, setRunName] = useState("");
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  const [showDatasetDetail, setShowDatasetDetail] = useState(false);
   const [sampleSize, setSampleSize] = useState("");
   // User-facing "intentos" = total classification tries (1 initial + N
   // feedback loops back from adversarial review). Backend's
@@ -77,6 +81,10 @@ function TestingPage() {
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
   const [selectedConfigurationId, setSelectedConfigurationId] = useState<string | null>(null);
+  // null = latest version of the selected lineage (default). Set when the
+  // user expands a lineage's version history and picks an older one.
+  const [selectedConfigVersion, setSelectedConfigVersion] = useState<number | null>(null);
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [nameFilter, setNameFilter] = useState("");
   const [datasetFilter, setDatasetFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<TestRunResponse["status"] | "">("");
@@ -89,6 +97,11 @@ function TestingPage() {
   const testRunsQuery = useQuery({
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
+  });
+  const configVersionsQuery = useQuery({
+    queryKey: ["configurationVersions", expandedConfigId],
+    queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
+    enabled: !!expandedConfigId,
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -139,9 +152,15 @@ function TestingPage() {
 
   const parsedSampleSize = sampleSize.trim() ? Number(sampleSize) : undefined;
   const parsedMaxAttempts = maxAttempts.trim() ? Number(maxAttempts) : 2;
-  const selectedConfiguration = (configurationsQuery.data ?? []).find(
+  const selectedConfigurationLineage = (configurationsQuery.data ?? []).find(
     (c) => c.configuration_id === selectedConfigurationId,
   );
+  // Version to actually run against: the one explicitly picked from the
+  // lineage's history, else the lineage's latest (list_latest's row).
+  const selectedConfiguration =
+    selectedConfigurationLineage && selectedConfigVersion != null
+      ? { ...selectedConfigurationLineage, version: selectedConfigVersion }
+      : selectedConfigurationLineage;
 
   const startMutation = useMutation({
     mutationFn: () =>
@@ -220,8 +239,8 @@ function TestingPage() {
             Nueva prueba
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
+          <div className="space-y-4">
+            <div className="max-w-sm">
               <label className="text-[11px] text-text-secondary block mb-1">
                 Nombre (opcional)
               </label>
@@ -233,7 +252,7 @@ function TestingPage() {
               />
             </div>
 
-            <div>
+            <div className="max-w-xl">
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-text-secondary">Dataset</label>
                 <button
@@ -264,18 +283,29 @@ function TestingPage() {
                 <p className="text-[12px] text-danger py-2">No se pudieron cargar los datasets.</p>
               )}
               {datasetsQuery.isSuccess && (
-                <select
-                  value={selectedDataset ?? ""}
-                  onChange={(e) => setSelectedDataset(e.target.value || null)}
-                  className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
-                >
-                  <option value="">Selecciona un dataset…</option>
-                  {datasets.map((ds) => (
-                    <option key={ds.name} value={ds.name}>
-                      {ds.name} ({ds.row_count} filas)
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedDataset ?? ""}
+                    onChange={(e) => setSelectedDataset(e.target.value || null)}
+                    className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] bg-background"
+                  >
+                    <option value="">Selecciona un dataset…</option>
+                    {datasets.map((ds) => (
+                      <option key={ds.name} value={ds.name}>
+                        {ds.name} ({ds.row_count} filas)
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowDatasetDetail(true)}
+                    disabled={!selectedDataset}
+                    title="Ver detalle del dataset"
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    <Eye className="h-3.5 w-3.5" /> Ver detalle
+                  </button>
+                </div>
               )}
               {uploadMutation.isError && (
                 <p className="text-[11px] text-danger mt-1">
@@ -284,7 +314,7 @@ function TestingPage() {
               )}
             </div>
 
-            <div>
+            <div className="max-w-sm">
               <label className="text-[11px] text-text-secondary block mb-1">
                 Cantidad de muestras (opcional)
               </label>
@@ -302,7 +332,7 @@ function TestingPage() {
               </p>
             </div>
 
-            <div>
+            <div className="max-w-sm">
               <label className="text-[11px] text-text-secondary block mb-1">
                 Intentos máx. del clasificador
               </label>
@@ -347,7 +377,11 @@ function TestingPage() {
                 )}
                 <button
                   type="button"
-                  onClick={() => setSelectedConfigurationId(null)}
+                  onClick={() => {
+                    setSelectedConfigurationId(null);
+                    setSelectedConfigVersion(null);
+                    setExpandedConfigId(null);
+                  }}
                   className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
                     selectedConfigurationId === null ? "bg-primary/5" : "hover:bg-surface"
                   }`}
@@ -358,27 +392,97 @@ function TestingPage() {
                 </button>
                 {configurations.map((c) => {
                   const selected = c.configuration_id === selectedConfigurationId;
+                  const expanded = c.configuration_id === expandedConfigId;
+                  const pickedVersion =
+                    selected && selectedConfigVersion != null ? selectedConfigVersion : c.version;
                   return (
-                    <button
-                      key={c.configuration_id}
-                      type="button"
-                      onClick={() => setSelectedConfigurationId(c.configuration_id)}
-                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${selected ? "bg-primary/5" : "hover:bg-surface"}`}
-                    >
-                      <div className="min-w-0">
-                        <span className="text-[13px] font-medium text-text-primary truncate">
-                          {c.name}:{c.version}
-                        </span>
-                        <p className="text-[11px] text-text-secondary truncate mt-0.5">
-                          {c.description}
-                        </p>
-                      </div>
-                      {c.active && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
-                          <Radio className="h-3.5 w-3.5" /> Producción
-                        </span>
+                    <div key={c.configuration_id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedConfigurationId(c.configuration_id);
+                          setSelectedConfigVersion(null);
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${selected ? "bg-primary/5" : "hover:bg-surface"}`}
+                      >
+                        <div className="min-w-0">
+                          <span className="text-[13px] font-medium text-text-primary truncate">
+                            {c.name}:{pickedVersion}
+                          </span>
+                          <p className="text-[11px] text-text-secondary truncate mt-0.5">
+                            {c.description}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {c.active && pickedVersion === c.version && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success">
+                              <Radio className="h-3.5 w-3.5" /> Producción
+                            </span>
+                          )}
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            title="Ver otras versiones"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedConfigId(expanded ? null : c.configuration_id);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.stopPropagation();
+                              setExpandedConfigId(expanded ? null : c.configuration_id);
+                            }}
+                            className="p-0.5 text-text-secondary hover:text-text-primary"
+                          >
+                            {expanded ? (
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </span>
+                        </div>
+                      </button>
+                      {expanded && (
+                        <div className="bg-surface/60 divide-y divide-border border-t border-border">
+                          {configVersionsQuery.isLoading && (
+                            <p className="px-3 py-2 pl-6 text-[11px] text-text-secondary">
+                              Cargando versiones…
+                            </p>
+                          )}
+                          {configVersionsQuery.isError && (
+                            <p className="px-3 py-2 pl-6 text-[11px] text-danger">
+                              No se pudieron cargar las versiones.
+                            </p>
+                          )}
+                          {configVersionsQuery.isSuccess &&
+                            [...configVersionsQuery.data]
+                              .sort((a, b) => b.version - a.version)
+                              .map((v) => {
+                                const versionSelected = selected && pickedVersion === v.version;
+                                return (
+                                  <button
+                                    key={v.version}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedConfigurationId(c.configuration_id);
+                                      setSelectedConfigVersion(v.version);
+                                    }}
+                                    className={`w-full flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 text-left transition-colors ${versionSelected ? "bg-primary/10" : "hover:bg-surface"}`}
+                                  >
+                                    <span className="text-[12px] text-text-primary">
+                                      v{v.version}
+                                    </span>
+                                    {v.active && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
+                                        <Radio className="h-3.5 w-3.5" /> Producción
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                        </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -407,7 +511,12 @@ function TestingPage() {
           </div>
         </section>
 
-        <DatasetDetailModal datasetName={selectedDataset} onClose={() => setSelectedDataset(null)} />
+        <DatasetDetailModal
+          datasetName={selectedDataset}
+          open={showDatasetDetail}
+          onClose={() => setShowDatasetDetail(false)}
+          onDeleted={() => setSelectedDataset(null)}
+        />
 
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">

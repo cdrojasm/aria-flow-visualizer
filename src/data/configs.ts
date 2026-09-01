@@ -68,7 +68,11 @@ export type FilterGroup = {
   groups: FilterGroup[];
 };
 
-export type SegmentCode = "canales_digitales" | "tarjetas";
+// Segment key - used to come from a fixed 2-value enum, now any id from
+// the channel_library_port.py catalog (see ChannelLibraryManager in
+// biblioteca.tsx). Kept as a type alias (not just inlining `string`) so
+// call sites documenting "this is a segment key" stay readable.
+export type SegmentCode = string;
 
 /* ─── Per-segment Monitoring + Agent config (Phase 2) ───
    Fully independent per segment - no shared global default. Mirrors
@@ -238,12 +242,19 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
    distinct from the pre-existing runtime FraudPlaybookRecord concept - see
    backend's configuration_port.py for the disambiguation note. */
 
-export type ResolutionTag = "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria";
+export type ResolutionTag =
+  | "scale_to_analyst"
+  | "send_to_voicebot"
+  | "handle_by_aria"
+  | "block_soft"
+  | "block_hard";
 
 export const RESOLUTION_TAG_LABELS: Record<ResolutionTag, string> = {
   scale_to_analyst: "Escalar a analista",
   send_to_voicebot: "Enviar a voicebot",
   handle_by_aria: "Resolver con ARIA",
+  block_soft: "Bloqueo soft",
+  block_hard: "Bloqueo hard",
 };
 
 export type AnalystPlaybook = {
@@ -321,11 +332,10 @@ export type SegmentSettings = {
   filter: FilterGroup;
   monitoring: SegmentMonitoringConfig;
   agent: SegmentAgentConfig;
-};
-
-export const SEGMENT_LABELS: Record<SegmentCode, string> = {
-  canales_digitales: "Canales Digitales",
-  tarjetas: "Tarjeta",
+  // Tie-break order when multiple enabled segments match the same alert
+  // (see backend's ResolveAlertSegmentUseCase) - editable via drag-and-drop
+  // on the Segmento tab, per configuration version. Lower sorts first.
+  order: number;
 };
 
 export const TAG_CATEGORY_LABELS: Record<TagCategory, string> = {
@@ -367,28 +377,57 @@ export const defaultSegmentAgent = (): SegmentAgentConfig => ({
   activeFields: [],
 });
 
+// Fallback only (mock/demo data below, and callers before the channel
+// catalog query resolves) - NOT the source of truth for a real draft,
+// which builds its segments from the live channel_library_port.py catalog
+// via buildSegmentsFromChannels once that query loads (see
+// configuracion.tsx). Mirrors the backend's own default_segments()
+// fallback in configuration_port.py.
 export const defaultSegments = (): Record<SegmentCode, SegmentSettings> => ({
   canales_digitales: {
     enabled: false,
     filter: emptyFilterGroup(),
     monitoring: defaultSegmentMonitoring(),
     agent: defaultSegmentAgent(),
+    order: 0,
   },
   tarjetas: {
     enabled: false,
     filter: emptyFilterGroup(),
     monitoring: defaultSegmentMonitoring(),
     agent: defaultSegmentAgent(),
+    order: 1,
   },
 });
+
+// Builds a fresh draft's segments dict from the active channel catalog,
+// in catalog list order - the real "new configuration" path, once
+// channels have loaded (see configuracion.tsx's channelsQuery).
+export const buildSegmentsFromChannels = (
+  channels: { id: string }[],
+): Record<SegmentCode, SegmentSettings> =>
+  Object.fromEntries(
+    channels.map((channel, index) => [
+      channel.id,
+      {
+        enabled: false,
+        filter: emptyFilterGroup(),
+        monitoring: defaultSegmentMonitoring(),
+        agent: defaultSegmentAgent(),
+        order: index,
+      },
+    ]),
+  );
 
 export type DayProfile = { id: string; name: string; description: string; hourly: number[] };
 export type DistributionValue = { id: string; label: string; pct: number };
 export type SamplingCriterion = { id: string; name: string; values: DistributionValue[] };
 export type SamplingIntervalUnit = "minutes" | "hours" | "days";
 export type TestCleanupPolicy = "manual" | "oldest" | "failed-first";
-export type ShortageAction = "block-soft" | "block-hard" | "pass" | "move-to-analyst" | "move-to-voicebot";
-export type ShortageBehavior = { action: ShortageAction };
+// Same catalog as AnalystPlaybook.resolutionMethodId (see
+// ResolutionMethodCatalogManager) - resolutionTag stays denormalized for the
+// same reason as AnalystPlaybook's.
+export type ShortageBehavior = { resolutionTag: ResolutionTag; resolutionMethodId?: string | null };
 export type AnalystCapacity = {
   profiles: DayProfile[];
   defaultProfileId: string;
@@ -535,8 +574,8 @@ export const defaultSettings = (): ConfigSettings => ({
   queueDiscardAmountThreshold: 0,
   queueRuleFilterEnabled: false,
   queueAllowedTriggeredRules: [],
-  voicebotShortageBehavior: { action: "block-soft" },
-  analystShortageBehavior: { action: "block-soft" },
+  voicebotShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
+  analystShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
   maxTestInstances: 4,
   maxConcurrentExperiments: 3,
   experimentTimeoutMinutes: 30,

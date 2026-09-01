@@ -75,6 +75,8 @@ function toHistoricalStages(funnel: typeof DEFAULT_FUNNEL) {
 }
 
 const CHANNEL_WEIGHTS: Record<string, number> = { Tarjeta: 0.35, Web: 0.4, "Mobile App": 0.15, ATM: 0.1 };
+// Solo cubre los 2 segmentos semilla; un segmento nuevo del catálogo (Biblioteca →
+// Canales) cae en el fallback ?? 1 donde se usa, no rompe el gráfico.
 const SEGMENTO_WEIGHTS: Record<string, number> = { Tarjeta: 0.55, "Canales Digitales": 0.45 };
 
 const MONTO_TIERS = ["Todos", "> 3M", "1M - 3M", "< 1M"] as const;
@@ -118,6 +120,7 @@ const DEFAULT_HOURLY_TIME = Array.from({ length: 24 }, (_, hour) => {
 
 const TIME_CHANNEL_ADJUST: Record<string, number> = { Tarjeta: 0.9, Web: 1.1, "Mobile App": 1.15, ATM: 0.85 };
 const TIME_MONTO_ADJUST: Record<string, number> = { "> 3M": 1.35, "1M - 3M": 1.1, "< 1M": 0.9 };
+// Mismo fallback que SEGMENTO_WEIGHTS arriba: canal no listado aquí usa ?? 1.
 const TIME_SEGMENTO_ADJUST: Record<string, number> = { Tarjeta: 0.95, "Canales Digitales": 1.05 };
 
 type DashboardData = {
@@ -272,7 +275,7 @@ type FilterState = { canal: Canal; subcanal: string; segmento: Segmento; monto: 
 
 function computeStageCounts(stages: typeof DEFAULT_FUNNEL, filters: FilterState) {
   const chWeight = filters.canal === "Todos" ? 1 : CHANNEL_WEIGHTS[filters.canal];
-  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento];
+  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento] ?? 1;
   const moWeight = filters.monto === "Todos" ? 1 : MONTO_WEIGHTS[filters.monto];
 
   return stages.map((stage) => {
@@ -314,7 +317,7 @@ function computeStackedSeries<T extends { alertas: number }>(
   filters: FilterState,
 ) {
   const chWeight = filters.canal === "Todos" ? 1 : CHANNEL_WEIGHTS[filters.canal];
-  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento];
+  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento] ?? 1;
   const moWeight = filters.monto === "Todos" ? 1 : MONTO_WEIGHTS[filters.monto];
   const totalFunnel = funnel.reduce((sum, s) => sum + s.count, 0);
 
@@ -335,7 +338,7 @@ function computeStageTimeSeries(
   filters: FilterState,
 ) {
   const chAdjust = filters.canal === "Todos" ? 1 : TIME_CHANNEL_ADJUST[filters.canal];
-  const segAdjust = filters.segmento === "Todos" ? 1 : TIME_SEGMENTO_ADJUST[filters.segmento];
+  const segAdjust = filters.segmento === "Todos" ? 1 : TIME_SEGMENTO_ADJUST[filters.segmento] ?? 1;
   const moAdjust = filters.monto === "Todos" ? 1 : TIME_MONTO_ADJUST[filters.monto];
   const weights = Object.fromEntries(
     STAGE_TIME_IDS.map((id) => [id, funnel.find((s) => s.id === id)?.count ?? 0]),
@@ -360,7 +363,7 @@ function computeStageTimeSeries(
 
 function computeScale(filters: FilterState, funnel: typeof DEFAULT_FUNNEL) {
   const chWeight = filters.canal === "Todos" ? 1 : CHANNEL_WEIGHTS[filters.canal];
-  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento];
+  const segWeight = filters.segmento === "Todos" ? 1 : SEGMENTO_WEIGHTS[filters.segmento] ?? 1;
   const moWeight = filters.monto === "Todos" ? 1 : MONTO_WEIGHTS[filters.monto];
   let estWeight = 1;
   if (filters.estado !== "Todos") {

@@ -1,31 +1,35 @@
 import { useState } from "react";
 
-import { SEGMENT_LABELS, type SegmentCode, type SegmentSettings } from "@/data/configs";
+import { type SegmentCode, type SegmentSettings } from "@/data/configs";
 import { SegmentEvaluationSection } from "./SegmentEvaluationSection";
-
-const SEGMENT_CODES: SegmentCode[] = ["canales_digitales", "tarjetas"];
 
 /* ─── "Evaluación" tab ───────────────────────────────────
    Own independent segment picker (not shared with Agente/Muestreo -
    see SegmentAgentTab.tsx/SegmentSamplingTab.tsx, split out of what
-   used to be one combined "Config. por segmento" tab). */
+   used to be one combined "Config. por segmento" tab). Segment keys come
+   from the channel catalog (see SegmentoTab.tsx), not a fixed enum. */
 
 export function SegmentEvaluationTab({
   value,
   onChange,
+  channelLabels,
   disabled,
 }: {
   value: Record<SegmentCode, SegmentSettings>;
   onChange: (code: SegmentCode, patch: Partial<SegmentSettings>) => void;
+  channelLabels: Record<string, string>;
   disabled?: boolean;
 }) {
-  const [selected, setSelected] = useState<SegmentCode>("canales_digitales");
+  const orderedCodes = Object.keys(value).sort((a, b) => value[a].order - value[b].order);
+  const [selected, setSelected] = useState<SegmentCode>(orderedCodes[0] ?? "");
   const segment = value[selected];
+
+  if (!segment) return null;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-1 bg-card rounded-xl border border-border p-1.5 w-fit">
-        {SEGMENT_CODES.map((code) => (
+        {orderedCodes.map((code) => (
           <button
             key={code}
             type="button"
@@ -34,7 +38,7 @@ export function SegmentEvaluationTab({
               selected === code ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
             }`}
           >
-            {SEGMENT_LABELS[code]}
+            {channelLabels[code] ?? code}
           </button>
         ))}
       </div>

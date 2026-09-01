@@ -16,8 +16,13 @@ export type ApiAnalystCapacity = {
   default_profile_id: string;
   day_overrides: Record<string, string>;
 };
-export type ApiShortageAction = "block-soft" | "block-hard" | "pass" | "move-to-analyst" | "move-to-voicebot";
-export type ApiShortageBehavior = { action: ApiShortageAction };
+// Shared with ApiAnalystPlaybook.resolution_tag below - one catalog, two
+// consumers (see resolution_method_catalog_port.py on the backend).
+export type ApiResolutionTag = "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
+export type ApiShortageBehavior = {
+  resolution_tag: ApiResolutionTag;
+  resolution_method_id: string | null;
+};
 
 export type ApiGeneralSettings = {
   agent_enabled: boolean;
@@ -121,7 +126,7 @@ export type ApiAnalystPlaybook = {
   id: string;
   name: string;
   strategy: string;
-  resolution_tag: "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria";
+  resolution_tag: ApiResolutionTag;
   resolution_method_id?: string | null;
 };
 export type ApiVoicebotCategoryPrompt = { id: string; taxonomy_id: string; prompt: string };
@@ -207,6 +212,7 @@ export type ApiSegmentSettings = {
   filter: ApiFilterGroup;
   monitoring: ApiMonitoringSettings;
   agent: ApiAgentSettings;
+  order: number;
 };
 
 export type CreateConfigurationRequest = {
