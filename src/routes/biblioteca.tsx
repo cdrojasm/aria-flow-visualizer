@@ -43,6 +43,7 @@ import {
   updateChannelLibraryEntry,
   type ChannelLibraryEntry,
 } from "@/lib/api/channelLibrary.functions";
+import { WatchlistManager } from "@/components/biblioteca/WatchlistManager";
 
 export const Route = createFileRoute("/biblioteca")({
   head: () => ({
@@ -82,11 +83,12 @@ const FLAG_TYPE_LABELS: Record<FlagTypeValue, string> = { red: "Roja", yellow: "
 // setting.
 const EVENT_CATALOG_OPTIONS: TagCategory[] = ["integration_point", "triggered_rule", "event_type"];
 
-type BibliotecaTab = "conocimiento" | "eventos" | "canales";
+type BibliotecaTab = "conocimiento" | "eventos" | "canales" | "listas";
 const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
   { key: "conocimiento", label: "Conocimiento de fraude" },
   { key: "eventos", label: "Catálogos de eventos" },
   { key: "canales", label: "Canales" },
+  { key: "listas", label: "Listas negras/blancas" },
 ];
 
 function BibliotecaPage() {
@@ -413,6 +415,8 @@ function BibliotecaPage() {
             </table>
           </section>
         )}
+
+        {activeTab === "listas" && <WatchlistManager />}
 
         {showChannelForm && editingChannel && (
           <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowChannelForm(false)}>
