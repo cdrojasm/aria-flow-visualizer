@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   createVariable,
   deleteVariable,
@@ -41,6 +42,8 @@ export function VariableCatalogManager({
   const [newValue, setNewValue] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<VariableResponse | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const refresh = () => {
     setLoading(true);
@@ -92,12 +95,16 @@ export function VariableCatalogManager({
   };
 
   const handleDelete = async (entry: VariableResponse) => {
+    setDeletePending(true);
     try {
       await deleteVariable({ data: { entryId: entry.id } });
       refresh();
       invalidatePool();
+      setDeleting(null);
     } catch {
       setError("No se pudo eliminar la variable.");
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -175,7 +182,7 @@ export function VariableCatalogManager({
                   <TableCell>
                     <button
                       type="button"
-                      onClick={() => handleDelete(v)}
+                      onClick={() => setDeleting(v)}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -194,6 +201,15 @@ export function VariableCatalogManager({
           </Table>
         </div>
       </DialogContent>
+
+      <ConfirmDeleteDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        itemName={`variable "${deleting?.value ?? ""}"`}
+        consequence="Citada por prompts vía prompt_vars y por taxonomías vía variables; esas referencias apuntan a un id inexistente."
+        pending={deletePending}
+        onConfirm={() => deleting && handleDelete(deleting)}
+      />
     </Dialog>
   );
 }

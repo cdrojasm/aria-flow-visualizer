@@ -1,6 +1,10 @@
+import { useRef } from "react";
+
 import type { DocumentationConfig, DocumentationStrategy } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { Field, VariablePicker } from "./shared/FormControls";
-import { PromptEditor } from "./shared/PromptEditor";
+import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
+import { spliceToken } from "./shared/promptTokens";
 
 const STRATEGY_OPTIONS: { key: DocumentationStrategy; label: string }[] = [
   { key: "template", label: "Plantilla" },
@@ -15,12 +19,19 @@ const STRATEGY_OPTIONS: { key: DocumentationStrategy; label: string }[] = [
 export function SegmentDocumentationSection({
   value,
   onChange,
+  extraVariables,
   disabled,
 }: {
   value: DocumentationConfig;
   onChange: (value: DocumentationConfig) => void;
+  extraVariables: string[];
   disabled?: boolean;
 }) {
+  const templateRef = useRef<PromptEditorHandle>(null);
+  const agentPromptRef = useRef<PromptEditorHandle>(null);
+  const { variables } = useVariableCatalog();
+  const pool = [...variables, ...extraVariables];
+
   return (
     <div className="space-y-6">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -57,6 +68,7 @@ export function SegmentDocumentationSection({
         <div className="p-6 space-y-3">
           <Field label="Plantilla">
             <PromptEditor
+              ref={templateRef}
               value={value.template}
               onChange={(template) => onChange({ ...value, template })}
               rows={5}
@@ -65,7 +77,16 @@ export function SegmentDocumentationSection({
             />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles</p>
-              <VariablePicker value={value.templateVars} onChange={(templateVars) => onChange({ ...value, templateVars })} />
+              <VariablePicker
+                value={value.templateVars}
+                onChange={(templateVars) => onChange({ ...value, templateVars })}
+                pool={pool}
+                onInsert={(v) => {
+                  const { next, cursor } = spliceToken(value.template, templateRef.current?.getSelection() ?? null, `{${v}}`);
+                  onChange({ ...value, template: next, templateVars: [...value.templateVars, v] });
+                  templateRef.current?.focusAt(cursor);
+                }}
+              />
             </div>
           </Field>
         </div>
@@ -79,6 +100,7 @@ export function SegmentDocumentationSection({
         <div className="p-6 space-y-3">
           <Field label="Prompt">
             <PromptEditor
+              ref={agentPromptRef}
               value={value.agentPrompt}
               onChange={(agentPrompt) => onChange({ ...value, agentPrompt })}
               rows={5}
@@ -87,7 +109,16 @@ export function SegmentDocumentationSection({
             />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles</p>
-              <VariablePicker value={value.agentPromptVars} onChange={(agentPromptVars) => onChange({ ...value, agentPromptVars })} />
+              <VariablePicker
+                value={value.agentPromptVars}
+                onChange={(agentPromptVars) => onChange({ ...value, agentPromptVars })}
+                pool={pool}
+                onInsert={(v) => {
+                  const { next, cursor } = spliceToken(value.agentPrompt, agentPromptRef.current?.getSelection() ?? null, `{${v}}`);
+                  onChange({ ...value, agentPrompt: next, agentPromptVars: [...value.agentPromptVars, v] });
+                  agentPromptRef.current?.focusAt(cursor);
+                }}
+              />
             </div>
           </Field>
         </div>

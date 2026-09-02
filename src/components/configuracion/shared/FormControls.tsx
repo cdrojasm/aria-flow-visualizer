@@ -66,12 +66,32 @@ export function TagInput({ value, onChange, placeholder }: { value: string[]; on
   );
 }
 
-export function VariablePicker({ value, onChange, pool }: { value: string[]; onChange: (v: string[]) => void; pool?: string[] }) {
+export function VariablePicker({
+  value,
+  onChange,
+  pool,
+  onInsert,
+}: {
+  value: string[];
+  // Adds/removes from the selected list. When onInsert is given, adding a
+  // variable goes through onInsert instead (it's expected to update this
+  // list itself, alongside splicing `{variable}` into the paired
+  // prompt/template field, in one combined call) - removal (the X button)
+  // always goes through onChange directly.
+  onChange: (v: string[]) => void;
+  pool?: string[];
+  onInsert?: (variable: string) => void;
+}) {
   const [search, setSearch] = useState("");
   const [showManager, setShowManager] = useState(false);
   const { variables } = useVariableCatalog();
   const effectivePool = pool ?? variables;
   const available = effectivePool.filter((v) => !value.includes(v) && v.toLowerCase().includes(search.toLowerCase()));
+
+  const select = (v: string) => {
+    if (onInsert) onInsert(v);
+    else onChange([...value, v]);
+  };
 
   return (
     <div className="space-y-2">
@@ -94,7 +114,7 @@ export function VariablePicker({ value, onChange, pool }: { value: string[]; onC
       <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
         {available.length === 0 && <span className="text-[11px] text-text-secondary">Sin coincidencias.</span>}
         {available.map((v) => (
-          <button key={v} type="button" onClick={() => onChange([...value, v])}
+          <button key={v} type="button" onClick={() => select(v)}
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border text-text-secondary text-[11px] hover:border-primary hover:text-primary transition-colors">
             <Plus className="h-3 w-3" /> {v}
           </button>

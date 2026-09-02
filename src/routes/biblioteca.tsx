@@ -44,6 +44,7 @@ import {
   type ChannelLibraryEntry,
 } from "@/lib/api/channelLibrary.functions";
 import { WatchlistManager } from "@/components/biblioteca/WatchlistManager";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 export const Route = createFileRoute("/biblioteca")({
   head: () => ({
@@ -136,6 +137,7 @@ function BibliotecaPage() {
 
   const [editingChannel, setEditingChannel] = useState<Partial<ChannelLibraryEntry> | null>(null);
   const [showChannelForm, setShowChannelForm] = useState(false);
+  const [deletingChannel, setDeletingChannel] = useState<ChannelLibraryEntry | null>(null);
   const saveChannelMutation = useMutation({
     mutationFn: (draft: Partial<ChannelLibraryEntry>) =>
       draft.id
@@ -153,7 +155,10 @@ function BibliotecaPage() {
   });
   const deleteChannelMutation = useMutation({
     mutationFn: (entryId: string) => deleteChannelLibraryEntry({ data: { entryId } }),
-    onSuccess: invalidateChannels,
+    onSuccess: () => {
+      invalidateChannels();
+      setDeletingChannel(null);
+    },
   });
   const toggleChannelActive = useMutation({
     mutationFn: (entry: ChannelLibraryEntry) =>
@@ -164,6 +169,7 @@ function BibliotecaPage() {
   // --- Taxonomies -----------------------------------------------------------
   const [editingTax, setEditingTax] = useState<Partial<TaxonomyLibraryEntry> | null>(null);
   const [showTaxForm, setShowTaxForm] = useState(false);
+  const [deletingTax, setDeletingTax] = useState<TaxonomyLibraryEntry | null>(null);
   const saveTaxMutation = useMutation({
     mutationFn: (draft: Partial<TaxonomyLibraryEntry>) =>
       draft.id
@@ -194,7 +200,10 @@ function BibliotecaPage() {
   });
   const deleteTaxMutation = useMutation({
     mutationFn: (entryId: string) => deleteTaxonomyLibraryEntry({ data: { entryId } }),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      setDeletingTax(null);
+    },
   });
   const toggleTaxActive = useMutation({
     mutationFn: (entry: TaxonomyLibraryEntry) =>
@@ -205,6 +214,7 @@ function BibliotecaPage() {
   // --- Modus operandi ---------------------------------------------------------
   const [editingMO, setEditingMO] = useState<Partial<ModusOperandiLibraryEntry> | null>(null);
   const [showMOForm, setShowMOForm] = useState(false);
+  const [deletingMO, setDeletingMO] = useState<ModusOperandiLibraryEntry | null>(null);
   const saveMOMutation = useMutation({
     mutationFn: (draft: Partial<ModusOperandiLibraryEntry>) =>
       draft.id
@@ -233,12 +243,16 @@ function BibliotecaPage() {
   });
   const deleteMOMutation = useMutation({
     mutationFn: (entryId: string) => deleteModusOperandiLibraryEntry({ data: { entryId } }),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      setDeletingMO(null);
+    },
   });
 
   // --- Flags ------------------------------------------------------------------
   const [editingFlag, setEditingFlag] = useState<Partial<FlagLibraryEntry> | null>(null);
   const [showFlagForm, setShowFlagForm] = useState(false);
+  const [deletingFlag, setDeletingFlag] = useState<FlagLibraryEntry | null>(null);
   const saveFlagMutation = useMutation({
     mutationFn: (draft: Partial<FlagLibraryEntry>) =>
       draft.id
@@ -269,12 +283,16 @@ function BibliotecaPage() {
   });
   const deleteFlagMutation = useMutation({
     mutationFn: (entryId: string) => deleteFlagLibraryEntry({ data: { entryId } }),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      setDeletingFlag(null);
+    },
   });
 
   // --- Similar cases ------------------------------------------------------------
   const [editingCase, setEditingCase] = useState<Partial<SimilarCaseLibraryEntry> | null>(null);
   const [showCaseForm, setShowCaseForm] = useState(false);
+  const [deletingCase, setDeletingCase] = useState<SimilarCaseLibraryEntry | null>(null);
   const saveCaseMutation = useMutation({
     mutationFn: (draft: Partial<SimilarCaseLibraryEntry>) =>
       draft.id
@@ -301,7 +319,10 @@ function BibliotecaPage() {
   });
   const deleteCaseMutation = useMutation({
     mutationFn: (entryId: string) => deleteSimilarCaseLibraryEntry({ data: { entryId } }),
-    onSuccess: invalidateAll,
+    onSuccess: () => {
+      invalidateAll();
+      setDeletingCase(null);
+    },
   });
 
   const modusOperandiForTaxonomy = (taxonomyLibraryId?: string) =>
@@ -395,7 +416,7 @@ function BibliotecaPage() {
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => deleteChannelMutation.mutate(c.id)}
+                          onClick={() => setDeletingChannel(c)}
                           className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -507,7 +528,7 @@ function BibliotecaPage() {
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <button
-                        onClick={() => deleteTaxMutation.mutate(t.id)}
+                        onClick={() => setDeletingTax(t)}
                         className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -573,7 +594,7 @@ function BibliotecaPage() {
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
-                      onClick={() => deleteMOMutation.mutate(m.id)}
+                      onClick={() => setDeletingMO(m)}
                       className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -640,7 +661,7 @@ function BibliotecaPage() {
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => deleteFlagMutation.mutate(f.id)}
+                    onClick={() => setDeletingFlag(f)}
                     className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -695,7 +716,7 @@ function BibliotecaPage() {
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
-                      onClick={() => deleteCaseMutation.mutate(c.id)}
+                      onClick={() => setDeletingCase(c)}
                       className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -890,6 +911,47 @@ function BibliotecaPage() {
             </div>
           </div>
         )}
+
+        <ConfirmDeleteDialog
+          open={!!deletingChannel}
+          onOpenChange={(open) => !open && setDeletingChannel(null)}
+          itemName={`canal "${deletingChannel?.name ?? ""}"`}
+          consequence={`Su código ("${deletingChannel?.code}") es la llave de segments[code]; las configuraciones que lo usan como segmento quedan huérfanas.`}
+          pending={deleteChannelMutation.isPending}
+          onConfirm={() => deletingChannel && deleteChannelMutation.mutate(deletingChannel.id)}
+        />
+        <ConfirmDeleteDialog
+          open={!!deletingTax}
+          onOpenChange={(open) => !open && setDeletingTax(null)}
+          itemName={`taxonomía "${deletingTax?.name ?? ""}"`}
+          consequence="Los modus operandi que la referencian por taxonomy_id quedan colgando."
+          pending={deleteTaxMutation.isPending}
+          onConfirm={() => deletingTax && deleteTaxMutation.mutate(deletingTax.id)}
+        />
+        <ConfirmDeleteDialog
+          open={!!deletingMO}
+          onOpenChange={(open) => !open && setDeletingMO(null)}
+          itemName={`modus operandi "${deletingMO?.title ?? ""}"`}
+          consequence="Las flags que lo listan en modus_operandi_ids quedan colgando."
+          pending={deleteMOMutation.isPending}
+          onConfirm={() => deletingMO && deleteMOMutation.mutate(deletingMO.id)}
+        />
+        <ConfirmDeleteDialog
+          open={!!deletingFlag}
+          onOpenChange={(open) => !open && setDeletingFlag(null)}
+          itemName={`flag "${deletingFlag?.name ?? ""}"`}
+          consequence="Se eliminará de la biblioteca global de forma permanente."
+          pending={deleteFlagMutation.isPending}
+          onConfirm={() => deletingFlag && deleteFlagMutation.mutate(deletingFlag.id)}
+        />
+        <ConfirmDeleteDialog
+          open={!!deletingCase}
+          onOpenChange={(open) => !open && setDeletingCase(null)}
+          itemName="caso similar"
+          consequence="Se eliminará de la biblioteca global de forma permanente."
+          pending={deleteCaseMutation.isPending}
+          onConfirm={() => deletingCase && deleteCaseMutation.mutate(deletingCase.id)}
+        />
       </div>
     </DashboardLayout>
   );
@@ -911,6 +973,7 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["tags", category] });
 
   const [newValue, setNewValue] = useState("");
+  const [deletingTag, setDeletingTag] = useState<TagEntryResponse | null>(null);
   const createMutation = useMutation({
     mutationFn: (value: string) => createTag({ data: { category, value } }),
     onSuccess: () => {
@@ -924,7 +987,10 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
   });
   const deleteMutation = useMutation({
     mutationFn: (tagId: string) => deleteTag({ data: { category, tagId } }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeletingTag(null);
+    },
   });
 
   return (
@@ -983,7 +1049,7 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
               <td className="px-3 py-3">
                 <button
                   type="button"
-                  onClick={() => deleteMutation.mutate(t.id)}
+                  onClick={() => setDeletingTag(t)}
                   className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1000,6 +1066,14 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
           )}
         </tbody>
       </table>
+      <ConfirmDeleteDialog
+        open={!!deletingTag}
+        onOpenChange={(open) => !open && setDeletingTag(null)}
+        itemName={`valor "${deletingTag?.value ?? ""}"`}
+        consequence="Si está en queue_allowed_triggered_rules o en condiciones de filtro de un segmento, esas referencias apuntan a un id inexistente."
+        pending={deleteMutation.isPending}
+        onConfirm={() => deletingTag && deleteMutation.mutate(deletingTag.id)}
+      />
     </section>
   );
 }

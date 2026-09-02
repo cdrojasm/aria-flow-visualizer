@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { deleteDataset, getDatasetSummary } from "@/lib/api/testing.functions";
 
@@ -60,6 +61,7 @@ export function DatasetDetailModal({
 }) {
   const queryClient = useQueryClient();
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const datasetSummaryQuery = useQuery({
     queryKey: ["datasetSummary", datasetName],
@@ -72,19 +74,11 @@ export function DatasetDetailModal({
     onSuccess: (_res, name) => {
       queryClient.invalidateQueries({ queryKey: ["datasets"] });
       queryClient.removeQueries({ queryKey: ["datasetSummary", name] });
+      setShowDeleteConfirm(false);
       onClose();
       onDeleted?.();
     },
   });
-
-  function handleDeleteDataset() {
-    if (!datasetName) return;
-    const confirmed = window.confirm(
-      `¿Borrar el dataset "${datasetName}" y sus datos de análisis? Esta acción no se puede deshacer.`,
-    );
-    if (!confirmed) return;
-    deleteDatasetMutation.mutate(datasetName);
-  }
 
   const isDatasetProcessing =
     datasetSummaryQuery.data?.status === "PENDING" ||
@@ -127,7 +121,7 @@ export function DatasetDetailModal({
           </div>
           <button
             type="button"
-            onClick={handleDeleteDataset}
+            onClick={() => setShowDeleteConfirm(true)}
             disabled={deleteDatasetMutation.isPending}
             title="Borrar dataset"
             className="inline-flex items-center gap-1 text-[11px] font-medium text-danger hover:underline disabled:opacity-40"
@@ -246,6 +240,15 @@ export function DatasetDetailModal({
           </>
         )}
       </DialogContent>
+
+      <ConfirmDeleteDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        itemName={`dataset "${datasetName}"`}
+        consequence="Se borran también sus datos de análisis. Esta acción no se puede deshacer."
+        pending={deleteDatasetMutation.isPending}
+        onConfirm={() => datasetName && deleteDatasetMutation.mutate(datasetName)}
+      />
     </Dialog>
   );
 }

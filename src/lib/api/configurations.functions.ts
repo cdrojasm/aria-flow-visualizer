@@ -94,14 +94,15 @@ export type ApiFieldCategorization = {
   field: string;
   kind: "cuantizable" | "categorico";
   criteria: ApiFieldCriterion[];
+  output_variable: string;
 };
 export type ApiProfilingStrategy = {
   key: "usuario" | "transaccion" | "transaccional";
   main_prompt: string;
   main_prompt_vars: string[];
+  main_prompt_mode: "fstring" | "llm";
   categorization_prompt: string;
   categorization_prompt_vars: string[];
-  produced_variables: string[];
   use_pandas_history_mcp: boolean;
 };
 export type ApiProfilingConfig = {

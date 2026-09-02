@@ -1,14 +1,20 @@
+import { useRef } from "react";
+
 import {
   BUILT_IN_TOOLS,
+  BUILT_IN_TOOL_DESCRIPTIONS,
   BUILT_IN_TOOL_LABELS,
   VECTOR_STORE_TOOLS,
+  VECTOR_STORE_TOOL_DESCRIPTIONS,
   VECTOR_STORE_TOOL_LABELS,
   type BuiltInTool,
   type ClassificationConfig,
   type VectorStoreTool,
 } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { Field, VariablePicker } from "./shared/FormControls";
-import { PromptEditor } from "./shared/PromptEditor";
+import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
+import { spliceToken } from "./shared/promptTokens";
 
 /* ─── Classification agent (Phase 4) ────────────────────
    Which tools (vector-store retrieval + built-ins) the classification
@@ -18,12 +24,20 @@ import { PromptEditor } from "./shared/PromptEditor";
 export function SegmentClassificationSection({
   value,
   onChange,
+  extraVariables,
   disabled,
 }: {
   value: ClassificationConfig;
   onChange: (value: ClassificationConfig) => void;
+  // Enrichment variables from this segment's field categorizations
+  // (Perfilamiento tab) - citable here too, see SegmentAgentSection.tsx.
+  extraVariables: string[];
   disabled?: boolean;
 }) {
+  const promptRef = useRef<PromptEditorHandle>(null);
+  const { variables } = useVariableCatalog();
+  const pool = [...variables, ...extraVariables];
+
   const toggleVectorStoreTool = (tool: VectorStoreTool) =>
     onChange({
       ...value,
@@ -57,6 +71,7 @@ export function SegmentClassificationSection({
                     key={tool}
                     type="button"
                     disabled={disabled}
+                    title={VECTOR_STORE_TOOL_DESCRIPTIONS[tool]}
                     onClick={() => toggleVectorStoreTool(tool)}
                     className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
                       active ? "bg-primary text-white border-primary" : "border-border text-text-secondary hover:border-primary hover:text-primary"
@@ -77,6 +92,7 @@ export function SegmentClassificationSection({
                     key={tool}
                     type="button"
                     disabled={disabled}
+                    title={BUILT_IN_TOOL_DESCRIPTIONS[tool]}
                     onClick={() => toggleBuiltInTool(tool)}
                     className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
                       active ? "bg-primary text-white border-primary" : "border-border text-text-secondary hover:border-primary hover:text-primary"
@@ -99,6 +115,7 @@ export function SegmentClassificationSection({
         <div className="p-6">
           <Field label="Prompt">
             <PromptEditor
+              ref={promptRef}
               value={value.prompt}
               onChange={(prompt) => onChange({ ...value, prompt })}
               rows={5}
@@ -107,7 +124,16 @@ export function SegmentClassificationSection({
             />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles para este prompt</p>
-              <VariablePicker value={value.promptVars} onChange={(promptVars) => onChange({ ...value, promptVars })} />
+              <VariablePicker
+                value={value.promptVars}
+                onChange={(promptVars) => onChange({ ...value, promptVars })}
+                pool={pool}
+                onInsert={(v) => {
+                  const { next, cursor } = spliceToken(value.prompt, promptRef.current?.getSelection() ?? null, `{${v}}`);
+                  onChange({ ...value, prompt: next, promptVars: [...value.promptVars, v] });
+                  promptRef.current?.focusAt(cursor);
+                }}
+              />
             </div>
           </Field>
         </div>

@@ -1,34 +1,27 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChangeEvent, useRef, useState } from "react";
+import { useState } from "react";
 import {
-  Play,
+  Plus,
   Loader2,
   ChevronRight,
   Database,
-  AlertTriangle,
   ArrowUpDown,
   Trash2,
-  Upload,
-  Eye,
-  Radio,
   RotateCcw,
   Search,
   X,
-  ChevronDown,
-  ChevronUp,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { DatasetDetailModal } from "@/components/testing/DatasetDetailModal";
+import { NewTestRunModal } from "@/components/testing/NewTestRunModal";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   deleteTestRuns,
-  getDatasets,
   listTestRuns,
   startTestRun,
-  uploadDataset,
   type TestRunResponse,
 } from "@/lib/api/testing.functions";
-import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
+import { listConfigurations } from "@/lib/api/configurations.functions";
 
 export const Route = createFileRoute("/testing/")({
   head: () => ({
@@ -69,27 +62,14 @@ function TestingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [runName, setRunName] = useState("");
-  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
-  const [showDatasetDetail, setShowDatasetDetail] = useState(false);
-  const [sampleSize, setSampleSize] = useState("");
-  // User-facing "intentos" = total classification tries (1 initial + N
-  // feedback loops back from adversarial review). Backend's
-  // max_feedback_iterations is intentos - 1; default 2 matches the
-  // backend's own default of 1 (alert_dtos.py, schemas.py, test_run_port.py).
-  const [maxAttempts, setMaxAttempts] = useState("2");
+  const [showNewRunModal, setShowNewRunModal] = useState(false);
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   const [selectedRunIds, setSelectedRunIds] = useState<Set<string>>(new Set());
-  const [selectedConfigurationId, setSelectedConfigurationId] = useState<string | null>(null);
-  // null = latest version of the selected lineage (default). Set when the
-  // user expands a lineage's version history and picks an older one.
-  const [selectedConfigVersion, setSelectedConfigVersion] = useState<number | null>(null);
-  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [nameFilter, setNameFilter] = useState("");
   const [datasetFilter, setDatasetFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<TestRunResponse["status"] | "">("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const configurationsQuery = useQuery({
     queryKey: ["configurations"],
     queryFn: () => listConfigurations(),
@@ -98,35 +78,12 @@ function TestingPage() {
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
   });
-  const configVersionsQuery = useQuery({
-    queryKey: ["configurationVersions", expandedConfigId],
-    queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
-    enabled: !!expandedConfigId,
-  });
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return uploadDataset({ data: formData });
-    },
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["datasets"] });
-      setSelectedDataset(res.name);
-    },
-  });
-
-  function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (file) uploadMutation.mutate(file);
-  }
 
   const deleteMutation = useMutation({
     mutationFn: (testRunIds: string[]) => deleteTestRuns({ data: { test_run_ids: testRunIds } }),
     onSuccess: () => {
       setSelectedRunIds(new Set());
+      setShowDeleteConfirm(false);
       queryClient.invalidateQueries({ queryKey: ["testRuns"] });
     },
   });
@@ -140,51 +97,18 @@ function TestingPage() {
     });
   }
 
-  function handleDeleteSelected() {
-    const ids = Array.from(selectedRunIds);
-    if (ids.length === 0) return;
-    const confirmed = window.confirm(
-      `¿Borrar ${ids.length} prueba${ids.length > 1 ? "s" : ""} y todos sus casos, alertas y operaciones asociadas? Esta acción no se puede deshacer.`,
-    );
-    if (!confirmed) return;
-    deleteMutation.mutate(ids);
+  function toggleSelectAllFiltered() {
+    setSelectedRunIds((prev) => {
+      const allSelected =
+        filteredRuns.length > 0 && filteredRuns.every((r) => prev.has(r.id));
+      return allSelected ? new Set() : new Set(filteredRuns.map((r) => r.id));
+    });
   }
 
-  const parsedSampleSize = sampleSize.trim() ? Number(sampleSize) : undefined;
-  const parsedMaxAttempts = maxAttempts.trim() ? Number(maxAttempts) : 2;
-  const selectedConfigurationLineage = (configurationsQuery.data ?? []).find(
-    (c) => c.configuration_id === selectedConfigurationId,
-  );
-  // Version to actually run against: the one explicitly picked from the
-  // lineage's history, else the lineage's latest (list_latest's row).
-  const selectedConfiguration =
-    selectedConfigurationLineage && selectedConfigVersion != null
-      ? { ...selectedConfigurationLineage, version: selectedConfigVersion }
-      : selectedConfigurationLineage;
-
-  const startMutation = useMutation({
-    mutationFn: () =>
-      startTestRun({
-        data: {
-          name: runName.trim() || `Prueba ${new Date().toLocaleString()}`,
-          dataset_name: selectedDataset!,
-          config: {
-            max_feedback_iterations: Math.max(0, parsedMaxAttempts - 1),
-            configuration_ref: selectedConfiguration
-              ? {
-                  configuration_id: selectedConfiguration.configuration_id,
-                  version: selectedConfiguration.version,
-                }
-              : undefined,
-          },
-          sample_size: parsedSampleSize,
-        },
-      }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["testRuns"] });
-      navigate({ to: "/testing/$runId", params: { runId: res.test_run_id } });
-    },
-  });
+  function handleDeleteSelected() {
+    if (selectedRunIds.size === 0) return;
+    setShowDeleteConfirm(true);
+  }
 
   // Re-dispatches a past run's exact config (prompt/model overrides,
   // max_feedback_iterations, configuration_ref) over its full dataset -
@@ -211,7 +135,6 @@ function TestingPage() {
     },
   });
 
-  const datasets = datasetsQuery.data ?? [];
   const configurations = configurationsQuery.data ?? [];
   const runs = testRunsQuery.data ?? [];
   const runDatasetNames = Array.from(new Set(runs.map((r) => r.dataset_name))).sort();
@@ -226,297 +149,23 @@ function TestingPage() {
   return (
     <DashboardLayout>
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
-        <header>
-          <h1 className="text-[20px] font-semibold text-text-primary">Testing del Agente</h1>
-          <p className="text-[13px] text-text-secondary mt-1">
-            Ejecuta el pipeline de 7 pasos sobre un dataset controlado y revisa el detalle por caso.
-          </p>
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <h1 className="text-[20px] font-semibold text-text-primary">Testing del Agente</h1>
+            <p className="text-[13px] text-text-secondary mt-1">
+              Ejecuta el pipeline de 7 pasos sobre un dataset controlado y revisa el detalle por
+              caso.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowNewRunModal(true)}
+            className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 shrink-0"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nueva prueba
+          </button>
         </header>
 
-        {/* New run form */}
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5 space-y-4">
-          <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
-            Nueva prueba
-          </h2>
-
-          <div className="space-y-4">
-            <div className="max-w-sm">
-              <label className="text-[11px] text-text-secondary block mb-1">
-                Nombre (opcional)
-              </label>
-              <input
-                value={runName}
-                onChange={(e) => setRunName(e.target.value)}
-                placeholder="Ej: Regresión semanal"
-                className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
-              />
-            </div>
-
-            <div className="max-w-xl">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">Dataset</label>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadMutation.isPending}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline disabled:opacity-40"
-                >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Upload className="h-3 w-3" />
-                  )}
-                  Cargar dataset
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileSelected}
-                  className="hidden"
-                />
-              </div>
-              {datasetsQuery.isLoading && (
-                <p className="text-[12px] text-text-secondary py-2">Cargando datasets…</p>
-              )}
-              {datasetsQuery.isError && (
-                <p className="text-[12px] text-danger py-2">No se pudieron cargar los datasets.</p>
-              )}
-              {datasetsQuery.isSuccess && (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={selectedDataset ?? ""}
-                    onChange={(e) => setSelectedDataset(e.target.value || null)}
-                    className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] bg-background"
-                  >
-                    <option value="">Selecciona un dataset…</option>
-                    {datasets.map((ds) => (
-                      <option key={ds.name} value={ds.name}>
-                        {ds.name} ({ds.row_count} filas)
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowDatasetDetail(true)}
-                    disabled={!selectedDataset}
-                    title="Ver detalle del dataset"
-                    className="inline-flex items-center gap-1 text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                  >
-                    <Eye className="h-3.5 w-3.5" /> Ver detalle
-                  </button>
-                </div>
-              )}
-              {uploadMutation.isError && (
-                <p className="text-[11px] text-danger mt-1">
-                  {(uploadMutation.error as Error).message}
-                </p>
-              )}
-            </div>
-
-            <div className="max-w-sm">
-              <label className="text-[11px] text-text-secondary block mb-1">
-                Cantidad de muestras (opcional)
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={sampleSize}
-                onChange={(e) => setSampleSize(e.target.value)}
-                placeholder="Todas las filas del dataset"
-                className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
-              />
-              <p className="text-[10px] text-text-secondary mt-1">
-                Estratificado por no-risk / risk-suspected / risk según la distribución real del
-                dataset.
-              </p>
-            </div>
-
-            <div className="max-w-sm">
-              <label className="text-[11px] text-text-secondary block mb-1">
-                Intentos máx. del clasificador
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={maxAttempts}
-                onChange={(e) => setMaxAttempts(e.target.value)}
-                className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
-              />
-              <p className="text-[10px] text-text-secondary mt-1">
-                Veces que clasificación puede reintentar tras ser rechazada por adversarial antes de
-                escalar a un analista.
-              </p>
-            </div>
-          </div>
-
-          {/* Configuration selector - which stored ConfigurationRecord
-              (by lineage, pinned to its latest version) this run resolves
-              segments against. Empty selection = whatever is active at
-              dispatch time, same as before this existed. */}
-          <div>
-            <label className="text-[11px] text-text-secondary block mb-1">
-              Configuración a probar (opcional)
-            </label>
-            <div className="border border-border rounded-lg overflow-hidden">
-              <div className="max-h-48 overflow-y-auto divide-y divide-border">
-                {configurationsQuery.isLoading && (
-                  <p className="px-3 py-3 text-[12px] text-text-secondary">
-                    Cargando configuraciones…
-                  </p>
-                )}
-                {configurationsQuery.isError && (
-                  <p className="px-3 py-3 text-[12px] text-danger">
-                    No se pudieron cargar las configuraciones.
-                  </p>
-                )}
-                {configurationsQuery.isSuccess && configurations.length === 0 && (
-                  <p className="px-3 py-3 text-[12px] text-text-secondary">
-                    Aún no hay configuraciones creadas.
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedConfigurationId(null);
-                    setSelectedConfigVersion(null);
-                    setExpandedConfigId(null);
-                  }}
-                  className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
-                    selectedConfigurationId === null ? "bg-primary/5" : "hover:bg-surface"
-                  }`}
-                >
-                  <span className="text-[13px] font-medium text-text-primary">
-                    La configuración activa al momento
-                  </span>
-                </button>
-                {configurations.map((c) => {
-                  const selected = c.configuration_id === selectedConfigurationId;
-                  const expanded = c.configuration_id === expandedConfigId;
-                  const pickedVersion =
-                    selected && selectedConfigVersion != null ? selectedConfigVersion : c.version;
-                  return (
-                    <div key={c.configuration_id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedConfigurationId(c.configuration_id);
-                          setSelectedConfigVersion(null);
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${selected ? "bg-primary/5" : "hover:bg-surface"}`}
-                      >
-                        <div className="min-w-0">
-                          <span className="text-[13px] font-medium text-text-primary truncate">
-                            {c.name}:{pickedVersion}
-                          </span>
-                          <p className="text-[11px] text-text-secondary truncate mt-0.5">
-                            {c.description}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {c.active && pickedVersion === c.version && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success">
-                              <Radio className="h-3.5 w-3.5" /> Producción
-                            </span>
-                          )}
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            title="Ver otras versiones"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedConfigId(expanded ? null : c.configuration_id);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key !== "Enter") return;
-                              e.stopPropagation();
-                              setExpandedConfigId(expanded ? null : c.configuration_id);
-                            }}
-                            className="p-0.5 text-text-secondary hover:text-text-primary"
-                          >
-                            {expanded ? (
-                              <ChevronUp className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            )}
-                          </span>
-                        </div>
-                      </button>
-                      {expanded && (
-                        <div className="bg-surface/60 divide-y divide-border border-t border-border">
-                          {configVersionsQuery.isLoading && (
-                            <p className="px-3 py-2 pl-6 text-[11px] text-text-secondary">
-                              Cargando versiones…
-                            </p>
-                          )}
-                          {configVersionsQuery.isError && (
-                            <p className="px-3 py-2 pl-6 text-[11px] text-danger">
-                              No se pudieron cargar las versiones.
-                            </p>
-                          )}
-                          {configVersionsQuery.isSuccess &&
-                            [...configVersionsQuery.data]
-                              .sort((a, b) => b.version - a.version)
-                              .map((v) => {
-                                const versionSelected = selected && pickedVersion === v.version;
-                                return (
-                                  <button
-                                    key={v.version}
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedConfigurationId(c.configuration_id);
-                                      setSelectedConfigVersion(v.version);
-                                    }}
-                                    className={`w-full flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 text-left transition-colors ${versionSelected ? "bg-primary/10" : "hover:bg-surface"}`}
-                                  >
-                                    <span className="text-[12px] text-text-primary">
-                                      v{v.version}
-                                    </span>
-                                    {v.active && (
-                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
-                                        <Radio className="h-3.5 w-3.5" /> Producción
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => startMutation.mutate()}
-              disabled={!selectedDataset || startMutation.isPending}
-              className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {startMutation.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-              Iniciar prueba
-            </button>
-            {startMutation.isError && (
-              <span className="inline-flex items-center gap-1.5 text-[12px] text-danger">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {(startMutation.error as Error).message}
-              </span>
-            )}
-          </div>
-        </section>
-
-        <DatasetDetailModal
-          datasetName={selectedDataset}
-          open={showDatasetDetail}
-          onClose={() => setShowDatasetDetail(false)}
-          onDeleted={() => setSelectedDataset(null)}
-        />
+        <NewTestRunModal open={showNewRunModal} onClose={() => setShowNewRunModal(false)} />
 
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -631,6 +280,26 @@ function TestingPage() {
             </p>
           )}
 
+          {testRunsQuery.isSuccess && filteredRuns.length > 0 && (
+            <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-surface/30 text-[11px] font-semibold text-text-secondary uppercase tracking-wide">
+              <input
+                type="checkbox"
+                checked={filteredRuns.every((r) => selectedRunIds.has(r.id))}
+                onChange={toggleSelectAllFiltered}
+                className="shrink-0"
+                aria-label="Seleccionar todas"
+              />
+              <span className="w-20 shrink-0">Fecha</span>
+              <span className="flex-1">Nombre</span>
+              <span className="w-40 shrink-0">Dataset</span>
+              <span className="w-44 shrink-0">Configuración</span>
+              <span className="w-20 text-right shrink-0">Casos</span>
+              <span className="shrink-0">Estado</span>
+              <span className="w-3.5 shrink-0" />
+              <span className="w-3.5 shrink-0" />
+            </div>
+          )}
+
           <div className="divide-y divide-border">
             {filteredRuns.map((run) => {
               const isRetrying = retryMutation.isPending && retryMutation.variables?.id === run.id;
@@ -703,6 +372,15 @@ function TestingPage() {
             })}
           </div>
         </section>
+
+        <ConfirmDeleteDialog
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          itemName={`${selectedRunIds.size} prueba${selectedRunIds.size > 1 ? "s" : ""}`}
+          consequence="Se borran también todos sus casos, alertas y operaciones asociadas. Esta acción no se puede deshacer."
+          pending={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(Array.from(selectedRunIds))}
+        />
       </div>
     </DashboardLayout>
   );

@@ -12,6 +12,7 @@ import {
   type WatchlistType,
 } from "@/lib/api/watchlist.functions";
 import { WatchlistElementsModal } from "./WatchlistElementsModal";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 /* ─── Blacklist / whitelist admin ────────────────────────
    Same "global catalog" footing as Canales above (channelLibrary), but
@@ -59,6 +60,7 @@ export function WatchlistManager() {
   const [editing, setEditing] = useState<Draft | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [managingId, setManagingId] = useState<string | null>(null);
+  const [deletingWatchlist, setDeletingWatchlist] = useState<WatchlistEntry | null>(null);
 
   const saveMutation = useMutation({
     mutationFn: (draft: Draft) =>
@@ -85,7 +87,10 @@ export function WatchlistManager() {
   });
   const deleteMutation = useMutation({
     mutationFn: (watchlistId: string) => deleteWatchlist({ data: { watchlistId } }),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      setDeletingWatchlist(null);
+    },
   });
   const toggleActive = useMutation({
     mutationFn: (entry: WatchlistEntry) =>
@@ -176,7 +181,7 @@ export function WatchlistManager() {
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(w.id)}
+                    onClick={() => setDeletingWatchlist(w)}
                     className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -291,6 +296,15 @@ export function WatchlistManager() {
       {managingWatchlist && (
         <WatchlistElementsModal watchlist={managingWatchlist} onClose={() => setManagingId(null)} />
       )}
+
+      <ConfirmDeleteDialog
+        open={!!deletingWatchlist}
+        onOpenChange={(open) => !open && setDeletingWatchlist(null)}
+        itemName={`${LIST_TYPE_LABELS[deletingWatchlist?.list_type ?? "blacklist"].toLowerCase()} "${deletingWatchlist?.name ?? ""}"`}
+        consequence={`Arrastra todos sus elementos (${(deletingWatchlist?.element_count ?? 0).toLocaleString("es-CO")}).`}
+        pending={deleteMutation.isPending}
+        onConfirm={() => deletingWatchlist && deleteMutation.mutate(deletingWatchlist.id)}
+      />
     </section>
   );
 }

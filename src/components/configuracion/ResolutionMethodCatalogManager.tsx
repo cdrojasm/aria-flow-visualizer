@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { RESOLUTION_TAG_LABELS, type ResolutionTag } from "@/data/configs";
 import {
   createResolutionMethod,
@@ -47,6 +48,8 @@ export function ResolutionMethodCatalogManager({
   const [newValue, setNewValue] = useState("");
   const [newTag, setNewTag] = useState<ResolutionTag>("scale_to_analyst");
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<ResolutionMethodResponse | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const refresh = () => {
     setLoading(true);
@@ -97,12 +100,16 @@ export function ResolutionMethodCatalogManager({
   };
 
   const handleDelete = async (entry: ResolutionMethodResponse) => {
+    setDeletePending(true);
     try {
       await deleteResolutionMethod({ data: { entryId: entry.id } });
       refresh();
       invalidatePool();
+      setDeleting(null);
     } catch {
       setError("No se pudo eliminar el método.");
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -188,7 +195,7 @@ export function ResolutionMethodCatalogManager({
                   <TableCell>
                     <button
                       type="button"
-                      onClick={() => handleDelete(m)}
+                      onClick={() => setDeleting(m)}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -207,6 +214,15 @@ export function ResolutionMethodCatalogManager({
           </Table>
         </div>
       </DialogContent>
+
+      <ConfirmDeleteDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        itemName={`método de resolución "${deleting?.value ?? ""}"`}
+        consequence="Referenciado por voicebot_shortage_behavior, analyst_shortage_behavior y playbooks; esas referencias apuntan a un id inexistente."
+        pending={deletePending}
+        onConfirm={() => deleting && handleDelete(deleting)}
+      />
     </Dialog>
   );
 }

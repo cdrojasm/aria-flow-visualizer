@@ -1,5 +1,5 @@
 import { Pencil, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import {
@@ -10,11 +10,13 @@ import {
   type Taxonomy,
   type VoicebotCategoryPrompt,
 } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { listResolutionMethods } from "@/lib/api/resolutionMethod.functions";
 import { MarcacionCatalogManager } from "./MarcacionCatalogManager";
 import { ResolutionMethodCatalogManager } from "./ResolutionMethodCatalogManager";
 import { Field, VariablePicker } from "./shared/FormControls";
-import { PromptEditor } from "./shared/PromptEditor";
+import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
+import { spliceToken } from "./shared/promptTokens";
 
 /* ─── Analista + Voicebot (Phase 5) ─────────────────────
    Playbooks map a semantic strategy to one resolution method (catalog,
@@ -31,17 +33,22 @@ export function SegmentAnalystSection({
   value,
   taxonomies,
   onChange,
+  extraVariables,
   disabled,
 }: {
   value: AnalystConfig;
   taxonomies: Taxonomy[];
   onChange: (value: AnalystConfig) => void;
+  extraVariables: string[];
   disabled?: boolean;
 }) {
   const [editing, setEditing] = useState<AnalystPlaybook | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [showResolutionCatalog, setShowResolutionCatalog] = useState(false);
+  const voicebotPromptRef = useRef<PromptEditorHandle>(null);
+  const { variables } = useVariableCatalog();
+  const pool = [...variables, ...extraVariables];
 
   const resolutionMethodsQuery = useQuery({
     queryKey: ["resolutionMethods"],
@@ -165,6 +172,7 @@ export function SegmentAnalystSection({
         <div className="p-6 space-y-5">
           <Field label="Prompt base">
             <PromptEditor
+              ref={voicebotPromptRef}
               value={value.voicebot.basePrompt}
               onChange={(basePrompt) => onChange({ ...value, voicebot: { ...value.voicebot, basePrompt } })}
               rows={4}
@@ -176,6 +184,12 @@ export function SegmentAnalystSection({
               <VariablePicker
                 value={value.voicebot.basePromptVars}
                 onChange={(basePromptVars) => onChange({ ...value, voicebot: { ...value.voicebot, basePromptVars } })}
+                pool={pool}
+                onInsert={(v) => {
+                  const { next, cursor } = spliceToken(value.voicebot.basePrompt, voicebotPromptRef.current?.getSelection() ?? null, `{${v}}`);
+                  onChange({ ...value, voicebot: { ...value.voicebot, basePrompt: next, basePromptVars: [...value.voicebot.basePromptVars, v] } });
+                  voicebotPromptRef.current?.focusAt(cursor);
+                }}
               />
             </div>
           </Field>

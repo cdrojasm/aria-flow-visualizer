@@ -1,4 +1,4 @@
-import { useRef, type UIEvent } from "react";
+import { forwardRef, useImperativeHandle, useRef, type UIEvent } from "react";
 
 /* ─── Highlighted f-string prompt editor (Phase 4) ──────
    Dependency-free: a transparent-text <textarea> layered exactly over a
@@ -10,6 +10,19 @@ import { useRef, type UIEvent } from "react";
    into every other prompt in the app. */
 
 const TOKEN_PATTERN = /(\{[^{}]+\})/g;
+
+// getSelection/focusAt only (no self-contained insertToken): the variable
+// picker below a prompt needs to patch `prompt` and the sibling
+// `promptVars` list in ONE onChange call on the parent - two separate
+// onChange calls in the same tick each close over the same pre-update
+// `value` and the second clobbers the first (classic stale-closure double
+// setState). So the caller computes the splice itself (see spliceToken in
+// promptTokens.ts), commits both fields together, then just asks the
+// textarea to move its caret via focusAt.
+export type PromptEditorHandle = {
+  getSelection: () => { start: number; end: number } | null;
+  focusAt: (cursor: number) => void;
+};
 
 function renderHighlighted(value: string) {
   const parts = value.split(TOKEN_PATTERN);
@@ -24,20 +37,37 @@ function renderHighlighted(value: string) {
   );
 }
 
-export function PromptEditor({
-  value,
-  onChange,
-  rows = 4,
-  placeholder,
-  disabled,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  rows?: number;
-  placeholder?: string;
-  disabled?: boolean;
-}) {
+export const PromptEditor = forwardRef<
+  PromptEditorHandle,
+  {
+    value: string;
+    onChange: (v: string) => void;
+    rows?: number;
+    placeholder?: string;
+    disabled?: boolean;
+  }
+>(function PromptEditor({ value, onChange, rows = 4, placeholder, disabled }, ref) {
   const preRef = useRef<HTMLPreElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Selection persists across blur (native textarea behavior) - clicking a
+  // variable chip elsewhere doesn't lose "where the cursor was".
+  const selectionRef = useRef<{ start: number; end: number } | null>(null);
+
+  const captureSelection = () => {
+    const el = textareaRef.current;
+    if (el) selectionRef.current = { start: el.selectionStart, end: el.selectionEnd };
+  };
+
+  useImperativeHandle(ref, () => ({
+    getSelection: () => selectionRef.current,
+    focusAt(cursor: number) {
+      selectionRef.current = { start: cursor, end: cursor };
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        textareaRef.current?.setSelectionRange(cursor, cursor);
+      });
+    },
+  }));
 
   const syncScroll = (e: UIEvent<HTMLTextAreaElement>) => {
     if (preRef.current) {
@@ -59,9 +89,12 @@ export function PromptEditor({
         {value.length === 0 ? "" : renderHighlighted(value)}
       </pre>
       <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onScroll={syncScroll}
+        onSelect={captureSelection}
+        onFocus={captureSelection}
         rows={rows}
         placeholder={placeholder}
         disabled={disabled}
@@ -70,4 +103,4 @@ export function PromptEditor({
       />
     </div>
   );
-}
+});

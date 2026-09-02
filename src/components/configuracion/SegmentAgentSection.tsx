@@ -17,8 +17,8 @@ type AgentSubTab =
   | "documentation";
 
 const SUBTAB_META: { key: AgentSubTab; label: string }[] = [
-  { key: "profiling", label: "Perfilamiento" },
   { key: "knowledge", label: "Base de conocimiento" },
+  { key: "profiling", label: "Perfilamiento" },
   { key: "classification", label: "Clasificación" },
   { key: "adversarial", label: "Adversarial" },
   { key: "analyst", label: "Analista" },
@@ -41,7 +41,12 @@ export function SegmentAgentSection({
   onChange: (patch: Partial<SegmentAgentConfig>) => void;
   disabled?: boolean;
 }) {
-  const [subtab, setSubtab] = useState<AgentSubTab>("profiling");
+  const [subtab, setSubtab] = useState<AgentSubTab>("knowledge");
+  // Enrichment variables (field categorizations' outputVariable) - citable
+  // from every agent prompt in this segment, not just profiling's own.
+  const enrichmentVariables = value.profiling.fieldCategorizations
+    .map((fc) => fc.outputVariable)
+    .filter((v) => v.trim().length > 0);
 
   return (
     <div className="space-y-4">
@@ -64,6 +69,7 @@ export function SegmentAgentSection({
         <SegmentProfilingSection
           value={value.profiling}
           onChange={(profiling) => onChange({ profiling })}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}
@@ -74,6 +80,7 @@ export function SegmentAgentSection({
         <SegmentClassificationSection
           value={value.classification}
           onChange={(classification) => onChange({ classification })}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}
@@ -82,6 +89,7 @@ export function SegmentAgentSection({
           value={value.adversarial}
           classification={value.classification}
           onChange={(adversarial) => onChange({ adversarial })}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}
@@ -90,6 +98,7 @@ export function SegmentAgentSection({
           value={value.analyst}
           taxonomies={value.taxonomies}
           onChange={(analyst) => onChange({ analyst })}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}
@@ -97,6 +106,7 @@ export function SegmentAgentSection({
         <SegmentDocumentationSection
           value={value.documentation}
           onChange={(documentation) => onChange({ documentation })}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}

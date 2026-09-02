@@ -106,7 +106,7 @@ function ConfiguracionPage() {
     queryFn: () => listChannelLibraryEntries({ data: { activeOnly: true } }),
   });
   const channels = channelsQuery.data ?? [];
-  const channelLabels = Object.fromEntries(channels.map((c) => [c.id, c.name]));
+  const channelLabels = Object.fromEntries(channels.map((c) => [c.code, c.name]));
 
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | "draft">("draft");
@@ -288,7 +288,10 @@ function ConfiguracionPage() {
   // live is a separate, explicit step via openDeploy/confirmDeploy below
   // (the same "Desplegar" flow every other saved version already uses),
   // which is where the real-test-run gate (hasSucceededTestRun) applies.
-  const saveVersion = async () => {
+  // forceNewVersion skips based_on_version so the backend always mints
+  // latest+1 instead of overwriting in place, even when the latest version
+  // was never activated (see create_configuration.py's `overwrite` rule).
+  const saveVersion = async (forceNewVersion = false) => {
     if (!isDraftView || !selectedConfigId || locked) return;
     const draftResult = selectedDraft?.lastTestResult;
     const wasTemp = isTempId(selectedConfigId);
@@ -300,7 +303,7 @@ function ConfiguracionPage() {
         name: selectedConfig.name,
         description: selectedConfig.description,
         configurationId: wasTemp ? null : selectedConfigId,
-        basedOnVersion: wasTemp ? null : selectedDraft?.basedOnVersion,
+        basedOnVersion: wasTemp || forceNewVersion ? null : selectedDraft?.basedOnVersion,
       });
     } catch (err) {
       if (err instanceof Error && err.message.includes("409")) { setVersionConflict(true); return; }
@@ -643,10 +646,16 @@ function ConfiguracionPage() {
                   {locked ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                   {locked ? "Corriendo ciclo…" : "Correr ciclo"}
                 </button>
-                <button onClick={saveVersion} disabled={locked}
+                <button onClick={() => saveVersion(false)} disabled={locked}
                   className="inline-flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
                   <Save className="h-4 w-4" /> {willOverwrite ? `Guardar cambios en v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión"}
                 </button>
+                {willOverwrite && (
+                  <button onClick={() => saveVersion(true)} disabled={locked}
+                    className="inline-flex items-center gap-2 text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <Plus className="h-4 w-4" /> Guardar como nueva versión
+                  </button>
+                )}
               </div>
 
               {unsaved && (
@@ -654,7 +663,7 @@ function ConfiguracionPage() {
               )}
               {willOverwrite && (
                 <p className="text-[11px] text-text-secondary">
-                  Esta versión nunca se ha desplegado a producción — guardar sobrescribe v{selectedDraft?.basedOnVersion} en vez de crear una versión nueva.
+                  Esta versión nunca se ha desplegado a producción — "Guardar cambios" sobrescribe v{selectedDraft?.basedOnVersion} en vez de crear una versión nueva. Usa "Guardar como nueva versión" para conservar v{selectedDraft?.basedOnVersion} y crear v{(selectedDraft?.basedOnVersion ?? 0) + 1} aparte.
                 </p>
               )}
 

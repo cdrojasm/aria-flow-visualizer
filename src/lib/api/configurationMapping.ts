@@ -120,10 +120,10 @@ function fieldCriterionFromApi(c: ApiFieldCriterion): FieldCriterion {
   };
 }
 function fieldCategorizationToApi(fc: FieldCategorization): ApiFieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionToApi) };
+  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionToApi), output_variable: fc.outputVariable };
 }
 function fieldCategorizationFromApi(fc: ApiFieldCategorization): FieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionFromApi) };
+  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionFromApi), outputVariable: fc.output_variable };
 }
 
 function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
@@ -133,9 +133,9 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       key: s.key,
       main_prompt: s.mainPrompt,
       main_prompt_vars: s.mainPromptVars,
+      main_prompt_mode: s.mainPromptMode,
       categorization_prompt: s.categorizationPrompt,
       categorization_prompt_vars: s.categorizationPromptVars,
-      produced_variables: s.producedVariables,
       use_pandas_history_mcp: s.usePandasHistoryMcp,
     })),
   };
@@ -221,9 +221,9 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         key: s.key,
         mainPrompt: s.main_prompt,
         mainPromptVars: s.main_prompt_vars,
+        mainPromptMode: s.main_prompt_mode,
         categorizationPrompt: s.categorization_prompt,
         categorizationPromptVars: s.categorization_prompt_vars,
-        producedVariables: s.produced_variables,
         usePandasHistoryMcp: s.use_pandas_history_mcp,
       })),
     },

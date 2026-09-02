@@ -1,8 +1,9 @@
-import { GripVertical, Plus } from "lucide-react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { Switch } from "@/components/ui/switch";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   defaultSegmentAgent,
   defaultSegmentMonitoring,
@@ -31,13 +32,14 @@ export function SegmentoTab({
 }: {
   value: Record<SegmentCode, SegmentSettings>;
   onChange: (segments: Record<SegmentCode, SegmentSettings>) => void;
-  channels: { id: string; name: string }[];
+  channels: { code: string; name: string }[];
   disabled?: boolean;
 }) {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
+  const [removingCode, setRemovingCode] = useState<string | null>(null);
   const orderedCodes = Object.keys(value).sort((a, b) => value[a].order - value[b].order);
-  const channelLabels = Object.fromEntries(channels.map((c) => [c.id, c.name]));
-  const availableToAdd = channels.filter((c) => !(c.id in value));
+  const channelLabels = Object.fromEntries(channels.map((c) => [c.code, c.name]));
+  const availableToAdd = channels.filter((c) => !(c.code in value));
 
   const updateSegment = (code: SegmentCode, patch: Partial<SegmentSettings>) =>
     onChange({ ...value, [code]: { ...value[code], ...patch } });
@@ -53,6 +55,14 @@ export function SegmentoTab({
         order: orderedCodes.length,
       },
     });
+  };
+
+  const confirmRemoveChannel = () => {
+    if (!removingCode) return;
+    const next = { ...value };
+    delete next[removingCode];
+    onChange(next);
+    setRemovingCode(null);
   };
 
   const reorder = (targetCode: string) => {
@@ -85,9 +95,9 @@ export function SegmentoTab({
           <span className="text-[11px] font-medium text-text-secondary">Agregar canal a esta configuración:</span>
           {availableToAdd.map((channel) => (
             <button
-              key={channel.id}
+              key={channel.code}
               type="button"
-              onClick={() => addChannel(channel.id)}
+              onClick={() => addChannel(channel.code)}
               className="inline-flex items-center gap-1 text-[11px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/10"
             >
               <Plus className="h-3 w-3" /> {channel.name}
@@ -116,11 +126,23 @@ export function SegmentoTab({
                 </p>
               </div>
             </div>
-            <Switch
-              checked={value[code].enabled}
-              onCheckedChange={(enabled) => updateSegment(code, { enabled })}
-              disabled={disabled}
-            />
+            <div className="flex items-center gap-3 shrink-0">
+              <Switch
+                checked={value[code].enabled}
+                onCheckedChange={(enabled) => updateSegment(code, { enabled })}
+                disabled={disabled}
+              />
+              {!disabled && (
+                <button
+                  type="button"
+                  title="Quitar canal de esta configuración"
+                  onClick={() => setRemovingCode(code)}
+                  className="text-text-secondary hover:text-danger"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
           <div className="p-6">
             <FilterGroupBuilder
@@ -136,6 +158,14 @@ export function SegmentoTab({
           Sin canales activos en Biblioteca — agrega uno para configurar segmentos.
         </p>
       )}
+
+      <ConfirmDeleteDialog
+        open={!!removingCode}
+        onOpenChange={(open) => !open && setRemovingCode(null)}
+        itemName={`canal "${removingCode ? (channelLabels[removingCode] ?? removingCode) : ""}" de esta configuración`}
+        consequence="Se pierden su filtro y ajustes de este segmento."
+        onConfirm={confirmRemoveChannel}
+      />
     </div>
   );
 }

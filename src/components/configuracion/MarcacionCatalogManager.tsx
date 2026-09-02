@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   createMarcacionCategory,
   deleteMarcacionCategory,
@@ -44,6 +45,8 @@ export function MarcacionCatalogManager({
   const [newValue, setNewValue] = useState("");
   const [newRiskLabel, setNewRiskLabel] = useState<RiskLabel>("risk-suspected");
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<MarcacionCategoryResponse | null>(null);
+  const [deletePending, setDeletePending] = useState(false);
 
   const refresh = () => {
     setLoading(true);
@@ -89,11 +92,15 @@ export function MarcacionCatalogManager({
   };
 
   const handleDelete = async (entry: MarcacionCategoryResponse) => {
+    setDeletePending(true);
     try {
       await deleteMarcacionCategory({ data: { entryId: entry.id } });
       refresh();
+      setDeleting(null);
     } catch {
       setError("No se pudo eliminar la categoría.");
+    } finally {
+      setDeletePending(false);
     }
   };
 
@@ -179,7 +186,7 @@ export function MarcacionCatalogManager({
                   <TableCell>
                     <button
                       type="button"
-                      onClick={() => handleDelete(c)}
+                      onClick={() => setDeleting(c)}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -198,6 +205,15 @@ export function MarcacionCatalogManager({
           </Table>
         </div>
       </DialogContent>
+
+      <ConfirmDeleteDialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        itemName={`categoría de marcación "${deleting?.value ?? ""}"`}
+        consequence="Referenciada por los playbooks 'Resolver con ARIA'; esas referencias apuntan a un id inexistente."
+        pending={deletePending}
+        onConfirm={() => deleting && handleDelete(deleting)}
+      />
     </Dialog>
   );
 }

@@ -1,3 +1,5 @@
+import { useRef } from "react";
+
 import { Switch } from "@/components/ui/switch";
 import {
   BUILT_IN_TOOL_LABELS,
@@ -5,8 +7,10 @@ import {
   type AdversarialConfig,
   type ClassificationConfig,
 } from "@/data/configs";
+import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { Field, VariablePicker } from "./shared/FormControls";
-import { PromptEditor } from "./shared/PromptEditor";
+import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
+import { spliceToken } from "./shared/promptTokens";
 
 /* ─── Adversarial agent (Phase 4) ────────────────────────
    No tool picker of its own - it can use whatever tools Classification
@@ -18,13 +22,18 @@ export function SegmentAdversarialSection({
   value,
   classification,
   onChange,
+  extraVariables,
   disabled,
 }: {
   value: AdversarialConfig;
   classification: ClassificationConfig;
   onChange: (value: AdversarialConfig) => void;
+  extraVariables: string[];
   disabled?: boolean;
 }) {
+  const promptRef = useRef<PromptEditorHandle>(null);
+  const { variables } = useVariableCatalog();
+  const pool = [...variables, ...extraVariables];
   const hasTools = classification.vectorStoreTools.length > 0 || classification.builtInTools.length > 0;
 
   return (
@@ -59,6 +68,7 @@ export function SegmentAdversarialSection({
         <div className="p-6 space-y-5">
           <Field label="Prompt">
             <PromptEditor
+              ref={promptRef}
               value={value.prompt}
               onChange={(prompt) => onChange({ ...value, prompt })}
               rows={5}
@@ -67,7 +77,16 @@ export function SegmentAdversarialSection({
             />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles para este prompt</p>
-              <VariablePicker value={value.promptVars} onChange={(promptVars) => onChange({ ...value, promptVars })} />
+              <VariablePicker
+                value={value.promptVars}
+                onChange={(promptVars) => onChange({ ...value, promptVars })}
+                pool={pool}
+                onInsert={(v) => {
+                  const { next, cursor } = spliceToken(value.prompt, promptRef.current?.getSelection() ?? null, `{${v}}`);
+                  onChange({ ...value, prompt: next, promptVars: [...value.promptVars, v] });
+                  promptRef.current?.focusAt(cursor);
+                }}
+              />
             </div>
           </Field>
 

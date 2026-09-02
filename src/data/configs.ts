@@ -93,9 +93,11 @@ export type SegmentMonitoringConfig = {
 };
 
 /* ─── Profiling chain (Phase 3) ──────────────────────────
-   Fixed 3-step chain (usuario -> transaccion -> transaccional). Each
-   strategy's producedVariables feed the variable pool of every strategy
-   after it - mirrors backend's ProfilingConfig/ProfilingStrategy. */
+   Fixed 3-step chain (usuario -> transaccion -> transaccional), run in
+   this order. Field categorizations (below) are "data enrichment" - each
+   one's outputVariable is citable from every agent prompt in the segment
+   (not just later profiling strategies) - mirrors backend's
+   ProfilingConfig/ProfilingStrategy/FieldCategorization. */
 
 export type FieldKind = "cuantizable" | "categorico";
 
@@ -117,7 +119,14 @@ export type FieldCriterion = {
   textValue?: string;
   values: string[];
 };
-export type FieldCategorization = { field: string; kind: FieldKind; criteria: FieldCriterion[] };
+// outputVariable: name of the enrichment variable this categorization
+// produces (the transformed/derived value - e.g. field "saldo" ->
+// outputVariable "saldo_riesgo"). Distinct from `field` so both the
+// original and the transformed value can be referenced, and citable from
+// every agent prompt in this segment (classification/adversarial/analyst/
+// documentation/profiling) - see SegmentAgentSection.tsx's
+// enrichmentVariables.
+export type FieldCategorization = { field: string; kind: FieldKind; criteria: FieldCriterion[]; outputVariable: string };
 
 export const CRITERIA_MODES_BY_KIND: Record<FieldKind, CriteriaMode[]> = {
   cuantizable: ["intervalo", "comparativa"],
@@ -143,13 +152,17 @@ export const COMPARISON_OPERATOR_LABELS: Record<ComparisonOperator, string> = {
 export const COMPARISON_OPERATORS: ComparisonOperator[] = [">", ">=", "<", "<="];
 
 export type ProfilingStrategyKey = "usuario" | "transaccion" | "transaccional";
+// Whether mainPrompt is used as a literal f-string (placeholders
+// substituted directly, no LLM call) or as an actual prompt sent to an
+// LLM. categorizationPrompt has no such switch - it is always LLM-executed.
+export type ProfilingPromptMode = "fstring" | "llm";
 export type ProfilingStrategy = {
   key: ProfilingStrategyKey;
   mainPrompt: string;
   mainPromptVars: string[];
+  mainPromptMode: ProfilingPromptMode;
   categorizationPrompt: string;
   categorizationPromptVars: string[];
-  producedVariables: string[];
   usePandasHistoryMcp: boolean;
 };
 export type ProfilingConfig = {
@@ -173,9 +186,9 @@ export const defaultProfilingStrategy = (key: ProfilingStrategyKey): ProfilingSt
   key,
   mainPrompt: "",
   mainPromptVars: [],
+  mainPromptMode: "fstring",
   categorizationPrompt: "",
   categorizationPromptVars: [],
-  producedVariables: [],
   usePandasHistoryMcp: false,
 });
 
@@ -204,6 +217,20 @@ export const BUILT_IN_TOOL_LABELS: Record<BuiltInTool, string> = {
   blacklist: "Lista negra",
   whitelist: "Lista blanca",
   calculator: "Calculadora",
+};
+
+export const VECTOR_STORE_TOOL_DESCRIPTIONS: Record<VectorStoreTool, string> = {
+  taxonomia: "Busca semánticamente entre las categorías de fraude definidas en Biblioteca → Taxonomías.",
+  modus_operandi: "Busca casos concretos de modus operandi similares al de la alerta actual.",
+  similar_case: "Busca alertas pasadas con características parecidas, ya resueltas.",
+  red_flag: "Busca señales de alto riesgo (red flags) que apliquen al comportamiento observado.",
+  yellow_flag: "Busca señales de riesgo moderado (yellow flags) que apliquen al comportamiento observado.",
+};
+
+export const BUILT_IN_TOOL_DESCRIPTIONS: Record<BuiltInTool, string> = {
+  blacklist: "Consulta si el cliente, cuenta o documento está en la lista negra.",
+  whitelist: "Consulta si el cliente, cuenta o documento está en la lista blanca (confiable).",
+  calculator: "Permite al agente hacer cálculos numéricos exactos en vez de estimarlos.",
 };
 
 export const VECTOR_STORE_TOOLS: VectorStoreTool[] = ["taxonomia", "modus_operandi", "similar_case", "red_flag", "yellow_flag"];
@@ -404,11 +431,11 @@ export const defaultSegments = (): Record<SegmentCode, SegmentSettings> => ({
 // in catalog list order - the real "new configuration" path, once
 // channels have loaded (see configuracion.tsx's channelsQuery).
 export const buildSegmentsFromChannels = (
-  channels: { id: string }[],
+  channels: { code: string }[],
 ): Record<SegmentCode, SegmentSettings> =>
   Object.fromEntries(
     channels.map((channel, index) => [
-      channel.id,
+      channel.code,
       {
         enabled: false,
         filter: emptyFilterGroup(),
@@ -600,6 +627,7 @@ export const defaultSettings = (): ConfigSettings => ({
             {
               field: "Saldo",
               kind: "cuantizable",
+              outputVariable: "saldo_riesgo",
               criteria: [
                 { id: "crit-saldo-1", mode: "intervalo", output: "bajo", minValue: 1, maxValue: 1_000_000, values: [] },
                 { id: "crit-saldo-2", mode: "intervalo", output: "medio", minValue: 1_000_001, maxValue: 3_000_000, values: [] },
@@ -610,6 +638,7 @@ export const defaultSettings = (): ConfigSettings => ({
             {
               field: "Canal de ingreso",
               kind: "categorico",
+              outputVariable: "canal_ingreso_riesgo",
               criteria: [
                 { id: "crit-canal-1", mode: "pertenencia", output: "bajo", values: ["app", "web"] },
                 { id: "crit-canal-2", mode: "igualdad", output: "alto", textValue: "sucursal", values: [] },
