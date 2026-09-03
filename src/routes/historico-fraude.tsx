@@ -12,6 +12,8 @@ import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { AlertFiltersBar, matchesAlertFilters, type AlertFiltersValue } from "@/components/AlertFiltersBar";
 import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { usePagination } from "@/hooks/usePagination";
 import { subcanalesFor, segmentoBadgeClass, type Canal, type Segmento } from "@/data/channels";
 import { REGLAS_GATILLADAS } from "@/data/rules";
 import { Button } from "@/components/ui/button";
@@ -415,6 +417,8 @@ function HistoricoFraudePage() {
     return copy;
   }, [filteredActivity, sortKey, sortDir]);
 
+  const { page, pageCount, pageItems, setPage, total, pageSize } = usePagination(sortedActivity, 10);
+
   return (
     <DashboardLayout>
       <div className="px-8 py-6">
@@ -619,13 +623,13 @@ function HistoricoFraudePage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedActivity.length === 0 ? (
+                {pageItems.length === 0 ? (
                   <tr>
                     <td colSpan={visibleColumns.length + 2} className="px-5 py-8 text-center text-[13px] text-text-secondary">
                       No se encontraron alertas con ese código.
                     </td>
                   </tr>
-                ) : sortedActivity.map((row, i) => (
+                ) : pageItems.map((row, i) => (
                   <tr key={row.id} className={`border-t border-border ${i % 2 === 1 ? "bg-surface" : "bg-card"}`}>
                     <td className="px-5 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
@@ -711,14 +715,14 @@ function HistoricoFraudePage() {
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-3 border-t border-border flex justify-between items-center">
-            <span className="text-[11px] text-text-secondary">
-              {sortedActivity.length} resultado{sortedActivity.length !== 1 ? "s" : ""}
-            </span>
-            {!histSearch && (
-              <button className="text-[12px] font-medium text-primary hover:underline">Cargar más</button>
-            )}
-          </div>
+          <PaginationFooter
+            page={page}
+            pageCount={pageCount}
+            total={total}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            itemLabel="alerta"
+          />
         </section>
       </div>
 

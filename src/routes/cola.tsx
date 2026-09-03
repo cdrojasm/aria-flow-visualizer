@@ -6,6 +6,8 @@ import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { AlertFiltersBar, matchesAlertFilters, type AlertFiltersValue } from "@/components/AlertFiltersBar";
 import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { usePagination } from "@/hooks/usePagination";
 import { segmentoBadgeClass, type Canal, type Segmento } from "@/data/channels";
 
 export const Route = createFileRoute("/cola")({
@@ -255,6 +257,9 @@ function ColaPage() {
   const sortedProceso = useSortedRows(filteredProceso, sortKey, sortDir);
   const sortedPending = useSortedRows(filteredPending, sortKey, sortDir);
 
+  const proceso = usePagination(sortedProceso, 10);
+  const pending = usePagination(sortedPending, 10);
+
   const toggle = (id: string) => {
     const next = new Set(selected);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -327,7 +332,7 @@ function ColaPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedProceso.map((row, i) => (
+                {proceso.pageItems.map((row, i) => (
                   <tr key={row.id} className={`border-t border-border transition-colors ${i % 2 === 1 ? "bg-surface" : "bg-card"} hover:bg-primary-light/60`}>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} className="h-4 w-4 rounded border-border accent-[rgb(0,17,148)]" />
@@ -350,6 +355,14 @@ function ColaPage() {
                 ))}
               </tbody>
             </table>
+            <PaginationFooter
+              page={proceso.page}
+              pageCount={proceso.pageCount}
+              total={proceso.total}
+              pageSize={proceso.pageSize}
+              onPageChange={proceso.setPage}
+              itemLabel="alerta"
+            />
           </section>
         ) : (
           <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] overflow-hidden">
@@ -379,7 +392,7 @@ function ColaPage() {
                 </tr>
               </thead>
               <tbody>
-                {sortedPending.map((row, i) => (
+                {pending.pageItems.map((row, i) => (
                   <tr key={row.id} className={`border-t border-border transition-colors ${i % 2 === 1 ? "bg-surface" : "bg-card"} hover:bg-primary-light/60`}>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(row.id)} onChange={() => toggle(row.id)} className="h-4 w-4 rounded border-border accent-[rgb(0,17,148)]" />
@@ -419,6 +432,14 @@ function ColaPage() {
                 ))}
               </tbody>
             </table>
+            <PaginationFooter
+              page={pending.page}
+              pageCount={pending.pageCount}
+              total={pending.total}
+              pageSize={pending.pageSize}
+              onPageChange={pending.setPage}
+              itemLabel="alerta"
+            />
           </section>
         )}
       </div>

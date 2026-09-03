@@ -9,6 +9,8 @@ import { ClassificationMetricsSection } from "@/components/ClassificationMetrics
 import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { usePagination } from "@/hooks/usePagination";
 import {
   getTestRun,
   getTestCase,
@@ -107,6 +109,8 @@ function TestRunDetailPage() {
     queryFn: () => getTestCase({ data: { runId, workflowExecutionId: selectedCaseId! } }),
     enabled: !!selectedCaseId,
   });
+
+  const casesPage = usePagination(runQuery.data?.cases ?? [], 20);
 
   if (runQuery.isLoading) {
     return (
@@ -217,7 +221,7 @@ function TestRunDetailPage() {
               {run.cases.length === 0 && (
                 <p className="px-4 py-4 text-[12px] text-text-secondary">Sin casos todavía.</p>
               )}
-              {run.cases.map((c) => {
+              {casesPage.pageItems.map((c) => {
                 const active = c.workflow_execution_id === selectedCaseId;
                 return (
                   <button
@@ -245,6 +249,14 @@ function TestRunDetailPage() {
                 );
               })}
             </div>
+            <PaginationFooter
+              page={casesPage.page}
+              pageCount={casesPage.pageCount}
+              total={casesPage.total}
+              pageSize={casesPage.pageSize}
+              onPageChange={casesPage.setPage}
+              itemLabel="caso"
+            />
           </section>
 
           {/* Case detail — pipeline steps */}
