@@ -52,9 +52,14 @@ type HistRow = {
   verdict: Veredicto;
   agent: string;
   estado: EstadoFraude;
+  ariaEstado: EstadoFraude; // decisión original de ARIA — no se sobrescribe al remarcar
   resolutionMethod: MetodoResolucion;
   nota?: string;
 };
+
+function opposite(e: EstadoFraude): EstadoFraude {
+  return e === "Fraude" ? "No Fraude" : "Fraude";
+}
 
 // mapea el canal de despliegue (texto libre en la tabla) al canal del filtro compartido con el Dashboard
 const CANAL_FILTER_MAP: Record<string, Canal> = {
@@ -118,6 +123,7 @@ const initialActivity: HistRow[] = Array.from({ length: 14 }).map((_, i) => {
   const s = samples[i % samples.length];
   const minutesAgo = i * 3 + 2;
   const canalFiltro = CANAL_FILTER_MAP[s.canal] ?? "Tarjeta";
+  const estado = (i % 3 === 0 ? "No Fraude" : "Fraude") as EstadoFraude;
   return {
     id: `ALR-${48210 - i}`,
     time: `Hace ${minutesAgo} min`,
@@ -125,7 +131,8 @@ const initialActivity: HistRow[] = Array.from({ length: 14 }).map((_, i) => {
     usuario: `ALT-${(482910 - i * 137).toString().padStart(6, "0")}`,
     monto: montos[i % montos.length],
     analista: analistas[i % analistas.length],
-    estado: (i % 3 === 0 ? "No Fraude" : "Fraude") as EstadoFraude,
+    estado,
+    ariaEstado: i % 4 === 2 ? opposite(estado) : estado, // seed: algunas quedan como remarcadas por el usuario
     resolutionMethod: pickResolutionMethod(i),
     canalFiltro,
     subcanalFiltro: pickSubcanal(canalFiltro, i),
@@ -141,6 +148,7 @@ function randomHistRows(count: number): HistRow[] {
     const s = samples[Math.floor(Math.random() * samples.length)];
     const minutesAgo = Math.floor(Math.random() * 60 * 24 * 7);
     const canalFiltro = CANAL_FILTER_MAP[s.canal] ?? "Tarjeta";
+    const estado = (Math.random() < 0.3 ? "No Fraude" : "Fraude") as EstadoFraude;
     return {
       id: `ALR-${48000 + Math.floor(Math.random() * 900)}`,
       time: minutesAgo < 60 ? `Hace ${minutesAgo} min` : `Hace ${Math.floor(minutesAgo / 60)} h`,
@@ -148,7 +156,8 @@ function randomHistRows(count: number): HistRow[] {
       usuario: `ALT-${Math.floor(400000 + Math.random() * 99999)}`,
       monto: montos[Math.floor(Math.random() * montos.length)],
       analista: analistas[Math.floor(Math.random() * analistas.length)],
-      estado: (Math.random() < 0.3 ? "No Fraude" : "Fraude") as EstadoFraude,
+      estado,
+      ariaEstado: Math.random() < 0.2 ? opposite(estado) : estado,
       resolutionMethod: pickResolutionMethod(i),
       canalFiltro,
       subcanalFiltro: pickSubcanal(canalFiltro, i),
@@ -641,9 +650,23 @@ function HistoricoFraudePage() {
                     </td>
                     {!hiddenCols.has("estado") && (
                       <td className="px-5 py-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${estadoBadges[row.estado]}`}>
-                          {row.estado}
-                        </span>
+                        {row.ariaEstado !== row.estado ? (
+                          <div
+                            className="relative inline-flex items-start"
+                            title={`ARIA marcó: ${row.ariaEstado} · Usuario remarcó: ${row.estado}`}
+                          >
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium line-through opacity-60 ${estadoBadges[row.ariaEstado]}`}>
+                              {row.ariaEstado}
+                            </span>
+                            <span className={`-ml-3 mt-2.5 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ring-2 ring-card ${estadoBadges[row.estado]}`}>
+                              {row.estado}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${estadoBadges[row.estado]}`}>
+                            {row.estado}
+                          </span>
+                        )}
                       </td>
                     )}
                     {!hiddenCols.has("time") && (
