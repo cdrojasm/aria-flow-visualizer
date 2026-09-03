@@ -44,7 +44,9 @@ export type ApiOpsSettings = {
   queue_max_lifetime_unit: "minutes" | "hours" | "days";
   queue_discard_amount_threshold: number;
   queue_rule_filter_enabled: boolean;
+  queue_rule_filter_mode: "belongs" | "not_belongs";
   queue_allowed_triggered_rules: string[];
+  queue_discard_behavior: ApiShortageBehavior;
   voicebot_shortage_behavior: ApiShortageBehavior;
   analyst_shortage_behavior: ApiShortageBehavior;
 };

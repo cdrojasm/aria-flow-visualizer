@@ -421,6 +421,7 @@ function ConfiguracionPage() {
     }
     const clonedSettings: ConfigSettings = {
       ...baseSettings,
+      queueDiscardBehavior: { ...baseSettings.queueDiscardBehavior },
       voicebotShortageBehavior: { ...baseSettings.voicebotShortageBehavior },
       analystShortageBehavior: { ...baseSettings.analystShortageBehavior },
       // ponytail: JSON round-trip clone, fine while SegmentSettings holds only JSON-safe data.
@@ -541,7 +542,6 @@ function ConfiguracionPage() {
                   <span className={`text-[13px] font-medium ${isDraftView ? "text-warning" : "text-text-primary"}`}>
                     {isDraftView ? "Cambios sin guardar" : `v${selectedVersion}`}
                   </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-text-secondary shrink-0" />
                 </button>
               ) : (
               <div className="max-h-72 overflow-y-auto divide-y divide-border">
@@ -909,7 +909,11 @@ function ConfiguracionPage() {
                   <div className="md:col-span-2 flex items-center justify-between">
                     <div>
                       <label className="text-[13px] font-medium text-text-primary">Restringir por regla disparada</label>
-                      <p className="text-[12px] text-text-secondary mt-0.5">Si está activo, solo se encolan alertas cuya regla disparada pertenezca a la lista permitida; el resto se descarta.</p>
+                      <p className="text-[12px] text-text-secondary mt-0.5">
+                        {settings.queueRuleFilterMode === "not_belongs"
+                          ? "Si está activo, se descartan las alertas cuya regla disparada pertenezca a la lista; el resto se encola."
+                          : "Si está activo, solo se encolan alertas cuya regla disparada pertenezca a la lista; el resto se descarta."}
+                      </p>
                     </div>
                     <button onClick={() => patchSettings("ops", { queueRuleFilterEnabled: !settings.queueRuleFilterEnabled })}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${settings.queueRuleFilterEnabled ? "bg-primary" : "bg-border"}`}>
@@ -917,10 +921,34 @@ function ConfiguracionPage() {
                     </button>
                   </div>
                   {settings.queueRuleFilterEnabled && (
-                    <Field label="Reglas disparadas permitidas en cola" hint="Alertas cuya regla disparada no esté en esta lista se descartan en vez de encolarse.">
-                      <TagMultiSelect category="triggered_rule" value={settings.queueAllowedTriggeredRules} onChange={(v) => patchSettings("ops", { queueAllowedTriggeredRules: v })} />
-                    </Field>
+                    <div className="md:col-span-2 space-y-4">
+                      <Field label="Condición de la lista" hint="Define si la lista de abajo es de reglas permitidas (pertenencia) o de reglas excluidas (no pertenencia).">
+                        <div className="inline-flex rounded-md border border-border p-0.5 bg-background">
+                          <button type="button" onClick={() => patchSettings("ops", { queueRuleFilterMode: "belongs" })}
+                            className={`h-8 px-3 rounded text-[13px] font-medium transition-colors ${settings.queueRuleFilterMode === "belongs" ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"}`}>
+                            Pertenece a la lista
+                          </button>
+                          <button type="button" onClick={() => patchSettings("ops", { queueRuleFilterMode: "not_belongs" })}
+                            className={`h-8 px-3 rounded text-[13px] font-medium transition-colors ${settings.queueRuleFilterMode === "not_belongs" ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"}`}>
+                            No pertenece a la lista
+                          </button>
+                        </div>
+                      </Field>
+                      <Field
+                        label={settings.queueRuleFilterMode === "not_belongs" ? "Reglas disparadas excluidas de cola" : "Reglas disparadas permitidas en cola"}
+                        hint={settings.queueRuleFilterMode === "not_belongs"
+                          ? "Alertas cuya regla disparada esté en esta lista se descartan en vez de encolarse."
+                          : "Alertas cuya regla disparada no esté en esta lista se descartan en vez de encolarse."}
+                      >
+                        <TagMultiSelect category="triggered_rule" value={settings.queueAllowedTriggeredRules} onChange={(v) => patchSettings("ops", { queueAllowedTriggeredRules: v })} />
+                      </Field>
+                    </div>
                   )}
+                  <div className="md:col-span-2">
+                    <Field label="Descarte de cola" hint="Qué debe hacer ARIA con una alerta en vez de encolarla normalmente, ya sea por tiempo de vida, monto mínimo o filtro de regla disparada.">
+                      <ShortageBehaviorEditor name="queue-discard" resolutionMethods={resolutionMethods} onManage={() => setShowShortageResolutionCatalog(true)} value={settings.queueDiscardBehavior} onChange={(v) => patchSettings("ops", { queueDiscardBehavior: v })} />
+                    </Field>
+                  </div>
                 </div>
               </section>
             </div>

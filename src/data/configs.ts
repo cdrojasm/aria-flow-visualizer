@@ -451,6 +451,7 @@ export type DistributionValue = { id: string; label: string; pct: number };
 export type SamplingCriterion = { id: string; name: string; values: DistributionValue[] };
 export type SamplingIntervalUnit = "minutes" | "hours" | "days";
 export type TestCleanupPolicy = "manual" | "oldest" | "failed-first";
+export type ListMembershipMode = "belongs" | "not_belongs";
 // Same catalog as AnalystPlaybook.resolutionMethodId (see
 // ResolutionMethodCatalogManager) - resolutionTag stays denormalized for the
 // same reason as AnalystPlaybook's.
@@ -502,7 +503,9 @@ export type ConfigSettings = {
   queueMaxLifetimeUnit: SamplingIntervalUnit;
   queueDiscardAmountThreshold: number;
   queueRuleFilterEnabled: boolean;
+  queueRuleFilterMode: ListMembershipMode;
   queueAllowedTriggeredRules: string[];
+  queueDiscardBehavior: ShortageBehavior;
   voicebotShortageBehavior: ShortageBehavior;
   analystShortageBehavior: ShortageBehavior;
   maxTestInstances: number;
@@ -600,7 +603,9 @@ export const defaultSettings = (): ConfigSettings => ({
   queueMaxLifetimeUnit: "minutes",
   queueDiscardAmountThreshold: 0,
   queueRuleFilterEnabled: false,
+  queueRuleFilterMode: "belongs",
   queueAllowedTriggeredRules: [],
+  queueDiscardBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
   voicebotShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
   analystShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
   maxTestInstances: 4,

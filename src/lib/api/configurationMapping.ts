@@ -355,7 +355,12 @@ export function toCreateConfigurationRequest(
       queue_max_lifetime_unit: settings.queueMaxLifetimeUnit,
       queue_discard_amount_threshold: settings.queueDiscardAmountThreshold,
       queue_rule_filter_enabled: settings.queueRuleFilterEnabled,
+      queue_rule_filter_mode: settings.queueRuleFilterMode,
       queue_allowed_triggered_rules: settings.queueAllowedTriggeredRules,
+      queue_discard_behavior: {
+        resolution_tag: settings.queueDiscardBehavior.resolutionTag,
+        resolution_method_id: settings.queueDiscardBehavior.resolutionMethodId ?? null,
+      },
       voicebot_shortage_behavior: {
         resolution_tag: settings.voicebotShortageBehavior.resolutionTag,
         resolution_method_id: settings.voicebotShortageBehavior.resolutionMethodId ?? null,
@@ -404,7 +409,12 @@ export function settingsFromConfigurationDetail(
     queueMaxLifetimeUnit: detail.ops.queue_max_lifetime_unit,
     queueDiscardAmountThreshold: detail.ops.queue_discard_amount_threshold,
     queueRuleFilterEnabled: detail.ops.queue_rule_filter_enabled,
+    queueRuleFilterMode: detail.ops.queue_rule_filter_mode,
     queueAllowedTriggeredRules: detail.ops.queue_allowed_triggered_rules,
+    queueDiscardBehavior: {
+      resolutionTag: detail.ops.queue_discard_behavior.resolution_tag,
+      resolutionMethodId: detail.ops.queue_discard_behavior.resolution_method_id,
+    },
     voicebotShortageBehavior: {
       resolutionTag: detail.ops.voicebot_shortage_behavior.resolution_tag,
       resolutionMethodId: detail.ops.voicebot_shortage_behavior.resolution_method_id,
