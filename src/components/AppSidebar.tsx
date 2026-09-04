@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck, History, Library } from "lucide-react";
+import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck, History, Library, BrainCircuit } from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
 
 const nav = [
@@ -9,6 +9,7 @@ const nav = [
   { to: "/monitor", label: "Monitor del Agente", icon: GaugeCircle },
   { to: "/testing", label: "Testing", icon: FlaskConical },
   { to: "/biblioteca", label: "Biblioteca", icon: Library },
+  { to: "/modelos", label: "Modelos", icon: BrainCircuit },
   { to: "/configuracion", label: "Configuración", icon: Settings },
 ];
 

@@ -11,9 +11,9 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  admin: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/testing", "/biblioteca", "/configuracion"],
+  admin: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/testing", "/biblioteca", "/configuracion", "/modelos"],
   analyst: ["/cola", "/dashboard"],
-  datascience: ["/historico-fraude", "/monitor", "/dashboard"],
+  datascience: ["/historico-fraude", "/monitor", "/dashboard", "/modelos"],
 };
 
 function isRole(v: string | null): v is Role {

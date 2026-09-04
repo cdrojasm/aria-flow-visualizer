@@ -352,6 +352,10 @@ export type SegmentAgentConfig = {
   flags: Flag[];
   similarCases: SimilarCase[];
   activeFields: string[];
+  // Trained model (models.functions.ts ModelResponse.id) this segment's
+  // agent scores alerts with - set from the "Modelo" subtab, see
+  // SegmentModelSection.tsx.
+  activeModelId: string | null;
 };
 
 export type SegmentSettings = {
@@ -402,6 +406,7 @@ export const defaultSegmentAgent = (): SegmentAgentConfig => ({
   flags: [],
   similarCases: [],
   activeFields: [],
+  activeModelId: null,
 });
 
 // Fallback only (mock/demo data below, and callers before the channel
@@ -716,6 +721,7 @@ export const defaultSettings = (): ConfigSettings => ({
         flags: initialFlags.map((f) => ({ ...f, evolvedVariables: [...f.evolvedVariables], modusOperandiIds: [...f.modusOperandiIds] })),
         similarCases: initialSimilarCases.map((s) => ({ ...s })),
         activeFields: ["Altamira", "Documento", "Celular", "Nombre del cliente", "Saldo"],
+        activeModelId: null,
       },
     },
   },

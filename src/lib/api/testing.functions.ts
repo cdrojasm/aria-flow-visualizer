@@ -18,6 +18,7 @@ export type DatasetSummaryResponse = {
   status: DatasetStatus;
   total_rows: number;
   field_distributions: Record<string, FieldDistribution[]>;
+  available_fields: string[];
   uploaded_at: string | null;
   updated_at: string | null;
   error: string | null;

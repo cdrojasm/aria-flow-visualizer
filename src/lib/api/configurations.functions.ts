@@ -195,6 +195,7 @@ export type ApiAgentSettings = {
   flags: ApiFlag[];
   example_cases: ApiExampleCase[];
   active_fields: string[];
+  active_model_id: string | null;
 };
 
 export type ApiFilterCondition = {

@@ -6,6 +6,7 @@ import { SegmentAnalystSection } from "./SegmentAnalystSection";
 import { SegmentClassificationSection } from "./SegmentClassificationSection";
 import { SegmentDocumentationSection } from "./SegmentDocumentationSection";
 import { SegmentKnowledgeBaseSection } from "./SegmentKnowledgeBaseSection";
+import { SegmentModelSection } from "./SegmentModelSection";
 import { SegmentProfilingSection } from "./SegmentProfilingSection";
 
 type AgentSubTab =
@@ -14,7 +15,8 @@ type AgentSubTab =
   | "classification"
   | "adversarial"
   | "analyst"
-  | "documentation";
+  | "documentation"
+  | "modelo";
 
 const SUBTAB_META: { key: AgentSubTab; label: string }[] = [
   { key: "knowledge", label: "Base de conocimiento" },
@@ -23,6 +25,7 @@ const SUBTAB_META: { key: AgentSubTab; label: string }[] = [
   { key: "adversarial", label: "Adversarial" },
   { key: "analyst", label: "Analista" },
   { key: "documentation", label: "Documentación" },
+  { key: "modelo", label: "Modelo" },
 ];
 
 /* ─── Agent config for one segment (Phase 4) ────────────
@@ -107,6 +110,13 @@ export function SegmentAgentSection({
           value={value.documentation}
           onChange={(documentation) => onChange({ documentation })}
           extraVariables={enrichmentVariables}
+          disabled={disabled}
+        />
+      )}
+      {subtab === "modelo" && (
+        <SegmentModelSection
+          value={value.activeModelId}
+          onChange={(activeModelId) => onChange({ activeModelId })}
           disabled={disabled}
         />
       )}

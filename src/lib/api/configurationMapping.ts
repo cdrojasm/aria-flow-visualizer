@@ -210,6 +210,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       segmento: "",
     })),
     active_fields: a.activeFields,
+    active_model_id: a.activeModelId,
   };
 }
 
@@ -290,6 +291,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
       taxonomyId: c.taxonomy_id,
     })),
     activeFields: a.active_fields,
+    activeModelId: a.active_model_id,
   };
 }
 
