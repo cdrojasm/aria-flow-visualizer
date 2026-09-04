@@ -257,6 +257,18 @@ export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
   created_by: string | null;
 };
 
+export type ConfigurationChangeResponse = {
+  path: string;
+  previous: unknown;
+  proposed: unknown;
+};
+
+export type TestConfigurationResponse = {
+  valid: boolean;
+  changes: ConfigurationChangeResponse[];
+  warnings: string[];
+};
+
 // --- Client functions -------------------------------------------------------
 
 export function listConfigurations(): Promise<ConfigurationSummaryResponse[]> {
@@ -300,6 +312,20 @@ export function createConfiguration({
   data: CreateConfigurationRequest;
 }): Promise<ConfigurationDetailResponse> {
   return apiFetch("/api/v0/configurations", { method: "POST", body: JSON.stringify(data) });
+}
+
+export function testConfiguration({
+  data,
+  signal,
+}: {
+  data: CreateConfigurationRequest;
+  signal?: AbortSignal;
+}): Promise<TestConfigurationResponse> {
+  return apiFetch("/api/v0/configuration/test", {
+    method: "POST",
+    body: JSON.stringify(data),
+    signal,
+  });
 }
 
 export function activateConfiguration({

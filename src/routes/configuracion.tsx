@@ -26,7 +26,8 @@ import {
 } from "@/data/configs";
 import {
   listConfigurations, getActiveConfiguration, listConfigurationVersions,
-  getConfigurationVersion, createConfiguration, activateConfiguration,
+  getConfigurationVersion, createConfiguration, activateConfiguration, testConfiguration,
+  type CreateConfigurationRequest, type TestConfigurationResponse,
 } from "@/lib/api/configurations.functions";
 import { toCreateConfigurationRequest, settingsFromConfigurationDetail } from "@/lib/api/configurationMapping";
 import { uploadAnalystCapacityImport, getAnalystCapacityImport } from "@/lib/api/analystCapacity.functions";
@@ -58,6 +59,29 @@ const TAB_META: { key: TabKey; label: string }[] = [
   { key: "segmentoEvaluacion", label: "Evaluación" },
 ];
 
+const CHANGE_SECTION_LABELS: Record<string, string> = {
+  general: "General",
+  infra: "Infraestructura",
+  ops: "Operación",
+  test: "Test",
+  segments: "Segmentos",
+};
+
+const formatChangePath = (path: string) => path
+  .split(".")
+  .map((part, index) => index === 0
+    ? (CHANGE_SECTION_LABELS[part] ?? part)
+    : part.replaceAll("_", " "))
+  .join(" › ");
+
+const formatChangeValue = (value: unknown) => {
+  if (value === null || value === undefined) return "No definido";
+  if (value === true) return "Activado";
+  if (value === false) return "Desactivado";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  return JSON.stringify(value);
+};
+
 /* ─── Page ───────────────────────────────────────────── */
 
 type DraftState = {
@@ -69,6 +93,12 @@ type DraftState = {
   // the backend can reject the save (409) if the lineage moved on since.
   // undefined for a brand-new lineage (nothing to conflict with).
   basedOnVersion?: number;
+};
+
+type PendingSave = {
+  forceNewVersion: boolean;
+  request: CreateConfigurationRequest;
+  preview: TestConfigurationResponse;
 };
 
 function ConfiguracionPage() {
@@ -127,6 +157,9 @@ function ConfiguracionPage() {
   // Set when saveVersion's POST comes back 409 — the lineage moved on since
   // this draft was seeded. Cleared by reloadLatestVersion or a new save attempt.
   const [versionConflict, setVersionConflict] = useState(false);
+  const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
+  const [savePreviewLoading, setSavePreviewLoading] = useState(false);
+  const [savePreviewError, setSavePreviewError] = useState<string | null>(null);
 
   const backendConfigs = configsQuery.data ?? [];
   const isTempId = (id: string | null) => !!id && localConfigs.some((c) => c.id === id);
@@ -217,7 +250,7 @@ function ConfiguracionPage() {
   const settingsLoading = !isDraftView && !viewingVersion?.settings;
   const settings = isDraftView ? selectedConfig.workingCopy : (viewingVersion?.settings ?? defaultSettings());
   const readOnlyHistorical = !isDraftView;
-  const locked = readOnlyHistorical || selectedConfig.testState === "testing" || settingsLoading || apiDown;
+  const locked = readOnlyHistorical || selectedConfig.testState === "testing" || settingsLoading || apiDown || savePreviewLoading;
   const unsaved = isTempId(selectedConfigId);
   // Mirrors CreateConfigurationUseCase's overwrite condition: a save only
   // mints a new version if the draft's base was never activated - and only
@@ -273,12 +306,7 @@ function ConfiguracionPage() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (payload: { settings: ConfigSettings; name: string; description: string; configurationId: string | null; basedOnVersion?: number | null }) =>
-      createConfiguration({
-        data: toCreateConfigurationRequest(payload.settings, {
-          name: payload.name, description: payload.description, configurationId: payload.configurationId, basedOnVersion: payload.basedOnVersion,
-        }),
-      }),
+    mutationFn: (request: CreateConfigurationRequest) => createConfiguration({ data: request }),
   });
   const activateMutation = useMutation({
     mutationFn: (payload: { configurationId: string; version: number }) => activateConfiguration({ data: payload }),
@@ -291,20 +319,50 @@ function ConfiguracionPage() {
   // forceNewVersion skips based_on_version so the backend always mints
   // latest+1 instead of overwriting in place, even when the latest version
   // was never activated (see create_configuration.py's `overwrite` rule).
-  const saveVersion = async (forceNewVersion = false) => {
+  const buildSaveRequest = (forceNewVersion: boolean): CreateConfigurationRequest => {
+    const wasTemp = isTempId(selectedConfigId);
+    return toCreateConfigurationRequest(selectedDraft?.workingCopy ?? settings, {
+      name: selectedConfig.name,
+      description: selectedConfig.description,
+      configurationId: wasTemp ? null : selectedConfigId,
+      basedOnVersion: wasTemp || forceNewVersion ? null : selectedDraft?.basedOnVersion,
+    });
+  };
+
+  const requestSave = async (forceNewVersion = false) => {
+    if (!isDraftView || !selectedConfigId || locked) return;
+    setSavePreviewError(null);
+    setVersionConflict(false);
+    setSavePreviewLoading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    const request = buildSaveRequest(forceNewVersion);
+    try {
+      const preview = await testConfiguration({ data: request, signal: controller.signal });
+      if (!preview.valid) throw new Error("La configuración propuesta no superó la validación.");
+      setPendingSave({ forceNewVersion, request, preview });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("409")) {
+        setVersionConflict(true);
+      } else if (err instanceof DOMException && err.name === "AbortError") {
+        setSavePreviewError("La validación tardó más de 5 segundos. Intenta guardar nuevamente.");
+      } else {
+        setSavePreviewError(err instanceof Error ? err.message : "No se pudo validar la configuración.");
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      setSavePreviewLoading(false);
+    }
+  };
+
+  const saveVersion = async (request: CreateConfigurationRequest) => {
     if (!isDraftView || !selectedConfigId || locked) return;
     const draftResult = selectedDraft?.lastTestResult;
     const wasTemp = isTempId(selectedConfigId);
     setVersionConflict(false);
     let created;
     try {
-      created = await createMutation.mutateAsync({
-        settings: selectedDraft?.workingCopy ?? settings,
-        name: selectedConfig.name,
-        description: selectedConfig.description,
-        configurationId: wasTemp ? null : selectedConfigId,
-        basedOnVersion: wasTemp || forceNewVersion ? null : selectedDraft?.basedOnVersion,
-      });
+      created = await createMutation.mutateAsync(request);
     } catch (err) {
       if (err instanceof Error && err.message.includes("409")) { setVersionConflict(true); return; }
       throw err;
@@ -350,6 +408,12 @@ function ConfiguracionPage() {
     ]);
     setSelectedConfigId(created.configuration_id);
     setSelectedVersion(created.version);
+  };
+
+  const confirmSave = async () => {
+    if (!pendingSave) return;
+    await saveVersion(pendingSave.request);
+    setPendingSave(null);
   };
 
   // ponytail: drops the local draft rather than rebasing it onto the new
@@ -626,6 +690,16 @@ function ConfiguracionPage() {
           </div>
         )}
 
+        {savePreviewError && (
+          <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
+            <p className="text-[12px] text-text-primary">{savePreviewError}</p>
+            <button onClick={() => setSavePreviewError(null)} className="ml-auto text-text-secondary hover:text-text-primary">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {isDraftView && (selectedConfig.dirtyTabs.length > 0 || selectedConfig.lastTestResult) && (
           <section className="bg-card rounded-xl border border-warning/30 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
             <div className="px-6 py-4 border-b border-warning/30 bg-warning/5 rounded-t-xl">
@@ -643,15 +717,16 @@ function ConfiguracionPage() {
               <div className="flex items-center gap-3">
                 <button onClick={runCycle} disabled={locked || unsaved} title={unsaved ? "Guarda esta configuración como versión antes de correr el ciclo" : undefined}
                   className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {locked ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-                  {locked ? "Corriendo ciclo…" : "Correr ciclo"}
+                  {selectedConfig.testState === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+                  {selectedConfig.testState === "testing" ? "Corriendo ciclo…" : "Correr ciclo"}
                 </button>
-                <button onClick={() => saveVersion(false)} disabled={locked}
+                <button onClick={() => requestSave(false)} disabled={locked}
                   className="inline-flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <Save className="h-4 w-4" /> {willOverwrite ? `Guardar cambios en v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión"}
+                  {savePreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savePreviewLoading ? "Validando cambios…" : willOverwrite ? `Guardar cambios en v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión"}
                 </button>
                 {willOverwrite && (
-                  <button onClick={() => saveVersion(true)} disabled={locked}
+                  <button onClick={() => requestSave(true)} disabled={locked}
                     className="inline-flex items-center gap-2 text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
                     <Plus className="h-4 w-4" /> Guardar como nueva versión
                   </button>
@@ -1032,6 +1107,71 @@ function ConfiguracionPage() {
       </div>
 
 
+      {/* Save confirmation modal — populated by POST /configuration/test. */}
+      {pendingSave && (
+        <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-card rounded-xl border border-border w-full max-w-2xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Save className="h-4 w-4 text-primary" />
+                <h3 className="text-[14px] font-semibold text-text-primary">Confirmar cambios de configuración</h3>
+              </div>
+              <button onClick={() => setPendingSave(null)} disabled={createMutation.isPending} className="text-text-secondary hover:text-text-primary disabled:opacity-50">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-[12px] text-text-secondary">
+                Revisa los cambios antes de {pendingSave.forceNewVersion ? "crear la nueva versión" : willOverwrite ? `sobrescribir v${selectedDraft?.basedOnVersion}` : "guardar la nueva versión"}.
+              </p>
+
+              {pendingSave.preview.warnings.map((warning) => (
+                <div key={warning} className="flex items-start gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                  <p className="text-[12px] font-medium text-text-primary">{warning}</p>
+                </div>
+              ))}
+
+              <div>
+                <h4 className="text-[12px] font-semibold text-text-primary mb-2">
+                  Cambios que se guardarán ({pendingSave.preview.changes.length})
+                </h4>
+                {pendingSave.preview.changes.length === 0 ? (
+                  <div className="rounded-lg border border-border bg-surface px-4 py-3 text-[12px] text-text-secondary">
+                    No se detectaron cambios de valores. Se conservará la configuración propuesta tal como está.
+                  </div>
+                ) : (
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {pendingSave.preview.changes.map((change) => (
+                      <div key={change.path} className="px-4 py-3">
+                        <p className="text-[12px] font-medium text-text-primary capitalize">{formatChangePath(change.path)}</p>
+                        <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-start gap-2 text-[11px]">
+                          <span className="text-text-secondary break-all">{formatChangeValue(change.previous)}</span>
+                          <span className="text-text-secondary">→</span>
+                          <span className="text-primary font-medium break-all">{formatChangeValue(change.proposed)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+              <button onClick={() => setPendingSave(null)} disabled={createMutation.isPending}
+                className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface disabled:opacity-50">
+                Cancelar
+              </button>
+              <button onClick={confirmSave} disabled={createMutation.isPending}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {createMutation.isPending ? "Guardando…" : "Confirmar y guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {/* New config modal */}
       {newConfigForm && (
         <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setNewConfigForm(null)}>
@@ -1370,4 +1510,3 @@ function ShortageBehaviorEditor({
     </div>
   );
 }
-
