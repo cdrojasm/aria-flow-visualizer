@@ -5,6 +5,7 @@ import {
   Play,
   Loader2,
   Upload,
+  Download,
   Eye,
   Radio,
   ChevronDown,
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { getDatasets, startTestRun, uploadDataset } from "@/lib/api/testing.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
+import { downloadSampleDatasetCsv } from "@/lib/sampleDataset";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
 /* ─── New test run, extracted from testing/index.tsx (Phase B) ──────────
@@ -151,16 +153,11 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                 <label className="text-[11px] text-text-secondary">Dataset</label>
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadMutation.isPending}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline disabled:opacity-40"
+                  onClick={() => downloadSampleDatasetCsv()}
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
                 >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Upload className="h-3 w-3" />
-                  )}
-                  Cargar dataset
+                  <Download className="h-3 w-3" />
+                  Descargar dataset
                 </button>
                 <input
                   ref={fileInputRef}
@@ -190,6 +187,19 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                       </option>
                     ))}
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadMutation.isPending}
+                    title="Cargar dataset"
+                    className="inline-flex items-center justify-center text-primary border border-primary/30 rounded-md p-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {uploadMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setShowDatasetDetail(true)}

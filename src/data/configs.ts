@@ -3,6 +3,7 @@
 /* read the same configs/versions without a real backend.                */
 
 import { TEST_RUNS, type TestRunIndicators } from "./testRuns";
+import { createId } from "@/lib/createId";
 
 /* ─── Types ──────────────────────────────────────────── */
 
@@ -376,7 +377,7 @@ export const TAG_CATEGORY_LABELS: Record<TagCategory, string> = {
 };
 
 export const emptyFilterGroup = (): FilterGroup => ({
-  id: crypto.randomUUID(),
+  id: createId(),
   operator: "and",
   conditions: [],
   groups: [],

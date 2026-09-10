@@ -15,6 +15,8 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { NewTestRunModal } from "@/components/testing/NewTestRunModal";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { usePagination } from "@/hooks/usePagination";
 import {
   deleteTestRuns,
   listTestRuns,
@@ -144,6 +146,8 @@ function TestingPage() {
       (!datasetFilter || run.dataset_name === datasetFilter) &&
       (!statusFilter || run.status === statusFilter),
   );
+  // Filters run over the full API result; only the visible rows are paginated.
+  const runsPage = usePagination(filteredRuns, 10);
   const hasActiveFilters = !!(nameFilter || datasetFilter || statusFilter);
 
   return (
@@ -301,7 +305,7 @@ function TestingPage() {
           )}
 
           <div className="divide-y divide-border">
-            {filteredRuns.map((run) => {
+            {runsPage.pageItems.map((run) => {
               const isRetrying = retryMutation.isPending && retryMutation.variables?.id === run.id;
               return (
                 <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface">
@@ -371,6 +375,14 @@ function TestingPage() {
               );
             })}
           </div>
+          <PaginationFooter
+            page={runsPage.page}
+            pageCount={runsPage.pageCount}
+            total={runsPage.total}
+            pageSize={runsPage.pageSize}
+            onPageChange={runsPage.setPage}
+            itemLabel="prueba"
+          />
         </section>
 
         <ConfirmDeleteDialog

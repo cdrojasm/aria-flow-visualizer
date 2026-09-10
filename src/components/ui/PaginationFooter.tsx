@@ -17,11 +17,13 @@ export function PaginationFooter({
 }: PaginationFooterProps) {
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
+  const summary = total === 0
+    ? `0 ${itemLabel}${itemLabel.endsWith("s") ? "" : "s"}`
+    : `${start}–${end} de ${total} ${itemLabel}${total !== 1 && !itemLabel.endsWith("s") ? "s" : ""}`;
   return (
     <div className="px-5 py-3 border-t border-border flex flex-wrap justify-between items-center gap-2">
       <span className="text-[11px] text-text-secondary">
-        {total === 0 ? "0" : `${start}–${end} de`} {total} {itemLabel}
-        {total !== 1 ? "s" : ""}
+        {summary}
       </span>
       {pageCount > 1 && (
         <div className="flex items-center gap-2">
