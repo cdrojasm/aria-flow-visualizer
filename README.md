@@ -34,22 +34,48 @@ Para obtener una copia local y ponerla en funcionamiento, sigue estos sencillos 
 
 ### Requisitos previos 📋
 
-Enumera cualquier software o dependencia necesaria para ejecutar el proyecto.
+Para el despliegue local se necesita Podman Desktop con una máquina Podman
+iniciada, `podman-compose` y el backend ARIA conectado a la red `aria-net`.
 
-Este es un ejemplo de cómo listar las cosas que necesitas para usar el software y cómo instalarlas.
-* npm
+### Ejecución local con Podman 🔧
+1. Inicia la máquina Podman y el backend. Desde el repositorio del backend:
   ```sh
-  npm install npm@latest -g
+  podman machine start
+  podman-compose -f deploy/local/docker/docker-compose.yml up -d
   ```
-### Instalación 🔧
-1. Clona el repositorio
-   ```sh
-   git clone https://github.com/github_username/repo_name.git
-   ```
-2. Instala los paquetes de NPM
-   ```sh
-   npm install
-   ```
+2. Desde este repositorio, construye y levanta nginx:
+  ```sh
+  podman network exists aria-net
+  if ($LASTEXITCODE -ne 0) { podman network create aria-net }
+  podman-compose build
+  $env:FRONTEND_PORT = "8080"
+  podman-compose up -d
+  ```
+3. Abre `http://localhost:8080`. El proxy nginx enruta `/api/*` y `/health`
+  al servicio backend `api:8000` dentro de `aria-net`.
+
+Para detener el frontend: `podman-compose down`. Para ver sus logs:
+`podman-compose logs -f web`.
+
+### Ejecución local del frontend sin contenedor
+
+El archivo `.env.local` configura el frontend para llamar directamente a la
+API en `http://localhost:8000`. Primero inicia solamente el backend:
+
+```powershell
+Set-Location "C:\Users\c808802\Documents\proyecto ARIA\aira"
+podman-compose -f deploy/local/docker/docker-compose.yml up -d
+```
+
+Después instala dependencias y ejecuta Vite desde este repositorio:
+
+```powershell
+Set-Location "C:\Users\c808802\Documents\proyecto ARIA\aria-flow-visualizer"
+bun install --frozen-lockfile
+bun run dev -- --host 0.0.0.0
+```
+
+Abre `http://localhost:3000`. Para detener Vite presiona `Ctrl+C`.
 
 ## Ejecución de pruebas ⚙️
 

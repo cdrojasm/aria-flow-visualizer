@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { NewTestRunModal } from "@/components/testing/NewTestRunModal";
+import { NewTestRunPanel } from "@/components/testing/NewTestRunModal";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { usePagination } from "@/hooks/usePagination";
@@ -101,8 +101,7 @@ function TestingPage() {
 
   function toggleSelectAllFiltered() {
     setSelectedRunIds((prev) => {
-      const allSelected =
-        filteredRuns.length > 0 && filteredRuns.every((r) => prev.has(r.id));
+      const allSelected = filteredRuns.length > 0 && filteredRuns.every((r) => prev.has(r.id));
       return allSelected ? new Set() : new Set(filteredRuns.map((r) => r.id));
     });
   }
@@ -152,7 +151,9 @@ function TestingPage() {
 
   return (
     <DashboardLayout>
-      <div className="px-8 py-6 max-w-[1280px] space-y-6">
+      <div
+        className={`px-8 py-6 space-y-6 ${showNewRunModal ? "max-w-[1600px]" : "max-w-[1280px]"}`}
+      >
         <header className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[20px] font-semibold text-text-primary">Testing del Agente</h1>
@@ -163,227 +164,238 @@ function TestingPage() {
           </div>
           <button
             onClick={() => setShowNewRunModal(true)}
-            className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 shrink-0"
+            disabled={showNewRunModal}
+            className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             <Plus className="h-3.5 w-3.5" /> Nueva prueba
           </button>
         </header>
 
-        <NewTestRunModal open={showNewRunModal} onClose={() => setShowNewRunModal(false)} />
-
-        {/* Last runs */}
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-[14px] font-semibold text-text-primary">Últimas pruebas</h2>
-              <p className="text-[12px] text-text-secondary mt-0.5">Historial de ejecuciones.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {selectedRunIds.size > 0 && (
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={deleteMutation.isPending}
-                  className="inline-flex items-center gap-1.5 bg-danger/10 text-danger px-3 py-1.5 rounded-md text-[12px] font-medium hover:bg-danger/20 disabled:opacity-40"
-                >
-                  {deleteMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="h-3.5 w-3.5" />
-                  )}
-                  Borrar seleccionadas ({selectedRunIds.size})
-                </button>
-              )}
-              <button
-                onClick={() => setOrder((o) => (o === "desc" ? "asc" : "desc"))}
-                className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-[12px] text-text-secondary hover:bg-surface"
-              >
-                <ArrowUpDown className="h-3.5 w-3.5" />
-                Fecha: {order === "desc" ? "más reciente primero" : "más antigua primero"}
-              </button>
-            </div>
-          </div>
-
-          {/* Organization controls: client-side filters over the already
-              fetched page of runs (no dedicated filter query params on the
-              backend today). */}
-          <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap bg-surface/50">
-            <div className="relative">
-              <Search className="h-3.5 w-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                value={nameFilter}
-                onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Buscar por nombre…"
-                className="pl-8 pr-3 py-1.5 rounded-md border border-border text-[12px] bg-background w-52"
-              />
-            </div>
-            <select
-              value={datasetFilter}
-              onChange={(e) => setDatasetFilter(e.target.value)}
-              className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
-            >
-              <option value="">Todos los datasets</option>
-              {runDatasetNames.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as TestRunResponse["status"] | "")}
-              className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
-            >
-              <option value="">Todos los estados</option>
-              {(Object.keys(STATUS_STYLE) as TestRunResponse["status"][]).map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setNameFilter("");
-                  setDatasetFilter("");
-                  setStatusFilter("");
-                }}
-                className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary"
-              >
-                <X className="h-3.5 w-3.5" /> Limpiar filtros
-              </button>
-            )}
-            <span className="text-[11px] text-text-secondary ml-auto">
-              {filteredRuns.length} de {runs.length}
-            </span>
-          </div>
-
-          {testRunsQuery.isLoading && (
-            <p className="px-5 py-6 text-[13px] text-text-secondary">Cargando…</p>
-          )}
-          {testRunsQuery.isError && (
-            <p className="px-5 py-6 text-[13px] text-danger">No se pudo cargar el historial.</p>
-          )}
-          {testRunsQuery.isSuccess && runs.length === 0 && (
-            <p className="px-5 py-6 text-[13px] text-text-secondary">
-              Aún no hay pruebas ejecutadas.
-            </p>
-          )}
-          {testRunsQuery.isSuccess && runs.length > 0 && filteredRuns.length === 0 && (
-            <p className="px-5 py-6 text-[13px] text-text-secondary">
-              Ningún resultado coincide con los filtros.
-            </p>
-          )}
-          {deleteMutation.isError && (
-            <p className="px-5 py-2 text-[12px] text-danger">
-              No se pudieron borrar las pruebas seleccionadas.
-            </p>
-          )}
-          {retryMutation.isError && (
-            <p className="px-5 py-2 text-[12px] text-danger">
-              {(retryMutation.error as Error).message}
-            </p>
-          )}
-
-          {testRunsQuery.isSuccess && filteredRuns.length > 0 && (
-            <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-surface/30 text-[11px] font-semibold text-text-secondary uppercase tracking-wide">
-              <input
-                type="checkbox"
-                checked={filteredRuns.every((r) => selectedRunIds.has(r.id))}
-                onChange={toggleSelectAllFiltered}
-                className="shrink-0"
-                aria-label="Seleccionar todas"
-              />
-              <span className="w-20 shrink-0">Fecha</span>
-              <span className="flex-1">Nombre</span>
-              <span className="w-40 shrink-0">Dataset</span>
-              <span className="w-44 shrink-0">Configuración</span>
-              <span className="w-20 text-right shrink-0">Casos</span>
-              <span className="shrink-0">Estado</span>
-              <span className="w-3.5 shrink-0" />
-              <span className="w-3.5 shrink-0" />
-            </div>
-          )}
-
-          <div className="divide-y divide-border">
-            {runsPage.pageItems.map((run) => {
-              const isRetrying = retryMutation.isPending && retryMutation.variables?.id === run.id;
-              return (
-                <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface">
-                  <input
-                    type="checkbox"
-                    checked={selectedRunIds.has(run.id)}
-                    onChange={() => toggleRunSelected(run.id)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="shrink-0"
-                    aria-label={`Seleccionar prueba ${run.name}`}
-                  />
-                  <Link
-                    to="/testing/$runId"
-                    params={{ runId: run.id }}
-                    className="flex items-center gap-4 flex-1 min-w-0"
-                  >
-                    <span
-                      title={new Date(run.created_at).toLocaleString()}
-                      className="text-[12px] tabular-nums text-text-secondary w-20 shrink-0"
-                    >
-                      {new Date(run.created_at).toLocaleDateString()}
-                    </span>
-                    <span
-                      title={run.name}
-                      className="text-[13px] font-medium text-text-primary flex-1 truncate"
-                    >
-                      {truncateText(run.name)}
-                    </span>
-                    <span
-                      title={run.dataset_name}
-                      className="text-[11px] text-text-secondary flex items-center gap-1 w-40 shrink-0"
-                    >
-                      <Database className="h-3 w-3 shrink-0" /> {truncateText(run.dataset_name)}
-                    </span>
-                    <span
-                      title={configurationLabel(run.config.configuration_ref, configurations)}
-                      className="text-[11px] text-text-secondary truncate w-44 shrink-0"
-                    >
-                      {truncateText(
-                        configurationLabel(run.config.configuration_ref, configurations),
-                      )}
-                    </span>
-                    <span className="text-[11px] text-text-secondary w-20 text-right shrink-0">
-                      {run.total} casos
-                    </span>
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${STATUS_STYLE[run.status]}`}
-                    >
-                      {run.status}
-                    </span>
-                    <ChevronRight className="h-3.5 w-3.5 text-text-secondary shrink-0" />
-                  </Link>
+        {/* Grid shrinks "Últimas pruebas" to make room for the new-run panel
+            beside it (instead of a modal on top) when it's open. */}
+        <div
+          className={`grid gap-6 items-start ${showNewRunModal ? "grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1"}`}
+        >
+          {/* Last runs */}
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] min-w-0">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-[14px] font-semibold text-text-primary">Últimas pruebas</h2>
+                <p className="text-[12px] text-text-secondary mt-0.5">Historial de ejecuciones.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedRunIds.size > 0 && (
                   <button
-                    type="button"
-                    title="Nuevo intento con la misma configuración"
-                    onClick={() => retryMutation.mutate(run)}
-                    disabled={retryMutation.isPending}
-                    className="inline-flex items-center text-primary hover:text-primary/70 disabled:opacity-40 shrink-0"
+                    onClick={handleDeleteSelected}
+                    disabled={deleteMutation.isPending}
+                    className="inline-flex items-center gap-1.5 bg-danger/10 text-danger px-3 py-1.5 rounded-md text-[12px] font-medium hover:bg-danger/20 disabled:opacity-40"
                   >
-                    {isRetrying ? (
+                    {deleteMutation.isPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <RotateCcw className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     )}
+                    Borrar seleccionadas ({selectedRunIds.size})
                   </button>
-                </div>
-              );
-            })}
-          </div>
-          <PaginationFooter
-            page={runsPage.page}
-            pageCount={runsPage.pageCount}
-            total={runsPage.total}
-            pageSize={runsPage.pageSize}
-            onPageChange={runsPage.setPage}
-            itemLabel="prueba"
-          />
-        </section>
+                )}
+                <button
+                  onClick={() => setOrder((o) => (o === "desc" ? "asc" : "desc"))}
+                  className="inline-flex items-center gap-1.5 border border-border px-3 py-1.5 rounded-md text-[12px] text-text-secondary hover:bg-surface"
+                >
+                  <ArrowUpDown className="h-3.5 w-3.5" />
+                  Fecha: {order === "desc" ? "más reciente primero" : "más antigua primero"}
+                </button>
+              </div>
+            </div>
+
+            {/* Organization controls: client-side filters over the already
+              fetched page of runs (no dedicated filter query params on the
+              backend today). */}
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap bg-surface/50">
+              <div className="relative">
+                <Search className="h-3.5 w-3.5 text-text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Buscar por nombre…"
+                  className="pl-8 pr-3 py-1.5 rounded-md border border-border text-[12px] bg-background w-52"
+                />
+              </div>
+              <select
+                value={datasetFilter}
+                onChange={(e) => setDatasetFilter(e.target.value)}
+                className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
+              >
+                <option value="">Todos los datasets</option>
+                {runDatasetNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as TestRunResponse["status"] | "")}
+                className="rounded-md border border-border px-2 py-1.5 text-[12px] bg-background"
+              >
+                <option value="">Todos los estados</option>
+                {(Object.keys(STATUS_STYLE) as TestRunResponse["status"][]).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    setNameFilter("");
+                    setDatasetFilter("");
+                    setStatusFilter("");
+                  }}
+                  className="inline-flex items-center gap-1 text-[12px] text-text-secondary hover:text-text-primary"
+                >
+                  <X className="h-3.5 w-3.5" /> Limpiar filtros
+                </button>
+              )}
+              <span className="text-[11px] text-text-secondary ml-auto">
+                {filteredRuns.length} de {runs.length}
+              </span>
+            </div>
+
+            {testRunsQuery.isLoading && (
+              <p className="px-5 py-6 text-[13px] text-text-secondary">Cargando…</p>
+            )}
+            {testRunsQuery.isError && (
+              <p className="px-5 py-6 text-[13px] text-danger">No se pudo cargar el historial.</p>
+            )}
+            {testRunsQuery.isSuccess && runs.length === 0 && (
+              <p className="px-5 py-6 text-[13px] text-text-secondary">
+                Aún no hay pruebas ejecutadas.
+              </p>
+            )}
+            {testRunsQuery.isSuccess && runs.length > 0 && filteredRuns.length === 0 && (
+              <p className="px-5 py-6 text-[13px] text-text-secondary">
+                Ningún resultado coincide con los filtros.
+              </p>
+            )}
+            {deleteMutation.isError && (
+              <p className="px-5 py-2 text-[12px] text-danger">
+                No se pudieron borrar las pruebas seleccionadas.
+              </p>
+            )}
+            {retryMutation.isError && (
+              <p className="px-5 py-2 text-[12px] text-danger">
+                {(retryMutation.error as Error).message}
+              </p>
+            )}
+
+            {testRunsQuery.isSuccess && filteredRuns.length > 0 && (
+              <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-surface/30 text-[11px] font-semibold text-text-secondary uppercase tracking-wide">
+                <input
+                  type="checkbox"
+                  checked={filteredRuns.every((r) => selectedRunIds.has(r.id))}
+                  onChange={toggleSelectAllFiltered}
+                  className="shrink-0"
+                  aria-label="Seleccionar todas"
+                />
+                <span className="w-20 shrink-0">Fecha</span>
+                <span className="flex-1">Nombre</span>
+                <span className="w-40 shrink-0">Dataset</span>
+                <span className="w-44 shrink-0">Configuración</span>
+                <span className="w-20 text-right shrink-0">Casos</span>
+                <span className="shrink-0">Estado</span>
+                <span className="w-3.5 shrink-0" />
+                <span className="w-3.5 shrink-0" />
+              </div>
+            )}
+
+            <div className="divide-y divide-border">
+              {runsPage.pageItems.map((run) => {
+                const isRetrying =
+                  retryMutation.isPending && retryMutation.variables?.id === run.id;
+                return (
+                  <div
+                    key={run.id}
+                    className="flex items-center gap-4 px-5 py-3.5 hover:bg-surface"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRunIds.has(run.id)}
+                      onChange={() => toggleRunSelected(run.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="shrink-0"
+                      aria-label={`Seleccionar prueba ${run.name}`}
+                    />
+                    <Link
+                      to="/testing/$runId"
+                      params={{ runId: run.id }}
+                      className="flex items-center gap-4 flex-1 min-w-0"
+                    >
+                      <span
+                        title={new Date(run.created_at).toLocaleString()}
+                        className="text-[12px] tabular-nums text-text-secondary w-20 shrink-0"
+                      >
+                        {new Date(run.created_at).toLocaleDateString()}
+                      </span>
+                      <span
+                        title={run.name}
+                        className="text-[13px] font-medium text-text-primary flex-1 truncate"
+                      >
+                        {truncateText(run.name)}
+                      </span>
+                      <span
+                        title={run.dataset_name}
+                        className="text-[11px] text-text-secondary flex items-center gap-1 w-40 shrink-0"
+                      >
+                        <Database className="h-3 w-3 shrink-0" /> {truncateText(run.dataset_name)}
+                      </span>
+                      <span
+                        title={configurationLabel(run.config.configuration_ref, configurations)}
+                        className="text-[11px] text-text-secondary truncate w-44 shrink-0"
+                      >
+                        {truncateText(
+                          configurationLabel(run.config.configuration_ref, configurations),
+                        )}
+                      </span>
+                      <span className="text-[11px] text-text-secondary w-20 text-right shrink-0">
+                        {run.total} casos
+                      </span>
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${STATUS_STYLE[run.status]}`}
+                      >
+                        {run.status}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 text-text-secondary shrink-0" />
+                    </Link>
+                    <button
+                      type="button"
+                      title="Nuevo intento con la misma configuración"
+                      onClick={() => retryMutation.mutate(run)}
+                      disabled={retryMutation.isPending}
+                      className="inline-flex items-center text-primary hover:text-primary/70 disabled:opacity-40 shrink-0"
+                    >
+                      {isRetrying ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <PaginationFooter
+              page={runsPage.page}
+              pageCount={runsPage.pageCount}
+              total={runsPage.total}
+              pageSize={runsPage.pageSize}
+              onPageChange={runsPage.setPage}
+              itemLabel="prueba"
+            />
+          </section>
+
+          {showNewRunModal && <NewTestRunPanel onClose={() => setShowNewRunModal(false)} />}
+        </div>
 
         <ConfirmDeleteDialog
           open={showDeleteConfirm}

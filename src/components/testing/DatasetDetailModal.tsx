@@ -103,7 +103,11 @@ export function DatasetDetailModal({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Dataset: {datasetName}</DialogTitle>
+          <DialogTitle className="min-w-0 pr-6">
+            <span className="block truncate" title={datasetName ?? undefined}>
+              Dataset: {datasetName}
+            </span>
+          </DialogTitle>
           <DialogDescription>Totales y distribución de campos del dataset seleccionado.</DialogDescription>
         </DialogHeader>
 

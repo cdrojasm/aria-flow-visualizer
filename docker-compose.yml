@@ -1,9 +1,12 @@
 services:
   web:
-    build: .
+    build:
+      context: .
+      args:
+        BUN_INSECURE_TLS: "${BUN_INSECURE_TLS:-0}"
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-8080}:80"
     networks:
       - aria-net
 
