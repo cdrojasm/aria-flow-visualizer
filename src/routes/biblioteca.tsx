@@ -44,9 +44,30 @@ import {
   type ChannelLibraryEntry,
 } from "@/lib/api/channelLibrary.functions";
 import { WatchlistManager } from "@/components/biblioteca/WatchlistManager";
+import { DatasetLibraryManager } from "@/components/biblioteca/DatasetLibraryManager";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
+type BibliotecaTab = "conocimiento" | "eventos" | "canales" | "listas" | "datasets";
+const BIBLIOTECA_TAB_KEYS: readonly BibliotecaTab[] = [
+  "conocimiento",
+  "eventos",
+  "canales",
+  "listas",
+  "datasets",
+];
+
 export const Route = createFileRoute("/biblioteca")({
+  // ?tab=datasets lets other screens (Modelos/Testing's "Gestionar en
+  // Biblioteca" links) open straight into a specific tab instead of always
+  // landing on the default - opened in a new browser tab there, so this
+  // never has to coordinate with an in-progress form elsewhere.
+  validateSearch: (search: Record<string, unknown>): { tab?: BibliotecaTab } => {
+    const tab =
+      typeof search.tab === "string" && BIBLIOTECA_TAB_KEYS.includes(search.tab as BibliotecaTab)
+        ? (search.tab as BibliotecaTab)
+        : undefined;
+    return { tab };
+  },
   head: () => ({
     meta: [
       { title: "ARIA - Agente prevención de Fraude" },
@@ -84,17 +105,18 @@ const FLAG_TYPE_LABELS: Record<FlagTypeValue, string> = { red: "Roja", yellow: "
 // setting.
 const EVENT_CATALOG_OPTIONS: TagCategory[] = ["integration_point", "triggered_rule", "event_type"];
 
-type BibliotecaTab = "conocimiento" | "eventos" | "canales" | "listas";
 const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
   { key: "conocimiento", label: "Conocimiento de fraude" },
   { key: "eventos", label: "Catálogos de eventos" },
   { key: "canales", label: "Canales" },
   { key: "listas", label: "Listas negras/blancas" },
+  { key: "datasets", label: "Datasets" },
 ];
 
 function BibliotecaPage() {
+  const search = Route.useSearch();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<BibliotecaTab>("conocimiento");
+  const [activeTab, setActiveTab] = useState<BibliotecaTab>(search.tab ?? "conocimiento");
 
   const taxonomiesQuery = useQuery({
     queryKey: ["libraryTaxonomies"],
@@ -438,6 +460,8 @@ function BibliotecaPage() {
         )}
 
         {activeTab === "listas" && <WatchlistManager />}
+
+        {activeTab === "datasets" && <DatasetLibraryManager />}
 
         {showChannelForm && editingChannel && (
           <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setShowChannelForm(false)}>

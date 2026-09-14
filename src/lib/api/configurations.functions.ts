@@ -27,7 +27,7 @@ export type ApiShortageBehavior = {
 export type ApiGeneralSettings = {
   agent_enabled: boolean;
   migration_window_enabled: boolean;
-  migration_window_hour: number;
+  migration_window_datetime: string;
   analyst_escalation_enabled: boolean;
   voicebot_escalation_enabled: boolean;
 };

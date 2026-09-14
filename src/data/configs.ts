@@ -466,13 +466,11 @@ export type AnalystCapacity = {
   defaultProfileId: string;
   dayOverrides: Record<number, string>;
 };
-export type DraftResult = { accuracy: number; samples: number; passed: boolean };
-
 export type VersionEntry = {
   version: number;
   // Optional: real backend-sourced versions (see /configuracion) don't
-  // carry a testRun (that's a local-only validation-cycle simulation), and
-  // settings are lazy-fetched per version rather than eagerly attached.
+  // carry a testRun (only /monitor's mock data does), and settings are
+  // lazy-fetched per version rather than eagerly attached.
   settings?: ConfigSettings;
   testRun?: TestRunIndicators;
   // Sticky - true once this version has ever gone to production. A save
@@ -488,14 +486,12 @@ export type AgentConfig = {
   versions: VersionEntry[];
   workingCopy: ConfigSettings;
   dirtyTabs: TabKey[];
-  testState: "idle" | "testing";
-  lastTestResult?: DraftResult;
 };
 
 export type ConfigSettings = {
   agentEnabled: boolean;
   migrationWindowEnabled: boolean;
-  migrationWindowHour: string;
+  migrationWindowDatetime: string;
   analystEscalationEnabled: boolean;
   voicebotEscalationEnabled: boolean;
   maxInstances: number;
@@ -547,12 +543,6 @@ export const initialSimilarCases: SimilarCase[] = [
   { id: "sc-1", text: "Cliente reporta llamada de 'soporte' pidiendo el código OTP recibido por SMS; minutos después se registra una transferencia a un tercero nuevo.", modusOperandiId: "mo-1", taxonomyId: "tx-2" },
 ];
 
-export const EVALUATION_VARIABLES = [
-  "CoT (cadena de razonamiento)", "Variables de entrada", "Score de confianza",
-  "Taxonomía asignada", "Red flag detectada", "Prompt utilizado",
-  "Latencia de respuesta", "Resultado final",
-];
-
 export const defaultSamplingCriteria = (): SamplingCriterion[] => [
   { id: "crit-canal", name: "Canal", values: [
     { id: "v-web", label: "Web", pct: 30 },
@@ -595,7 +585,7 @@ export const defaultAnalystCapacity = (): AnalystCapacity => ({
 export const defaultSettings = (): ConfigSettings => ({
   agentEnabled: true,
   migrationWindowEnabled: false,
-  migrationWindowHour: "02:00",
+  migrationWindowDatetime: "2000-01-01T02:00",
   analystEscalationEnabled: true,
   voicebotEscalationEnabled: true,
   maxInstances: 8,
@@ -737,14 +727,14 @@ export const RUNNING_DEFAULT = { configId: "cfg-prod", version: 3 };
 export const INITIAL_CONFIGS: AgentConfig[] = [
   (() => {
     const versions = versionsFor("cfg-prod");
-    return { id: "cfg-prod", name: "Producción", description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.", versions, workingCopy: { ...versions[versions.length - 1].settings! }, dirtyTabs: [], testState: "idle" as const };
+    return { id: "cfg-prod", name: "Producción", description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.", versions, workingCopy: { ...versions[versions.length - 1].settings! }, dirtyTabs: [] };
   })(),
   (() => {
     const versions = versionsFor("cfg-staging");
     const draft = { ...versions[versions.length - 1].settings!, maxInstances: 12 };
-    return { id: "cfg-staging", name: "Staging", description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.", versions, workingCopy: draft, dirtyTabs: ["infra", "ops"] as TabKey[], testState: "idle" as const };
+    return { id: "cfg-staging", name: "Staging", description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.", versions, workingCopy: draft, dirtyTabs: ["infra", "ops"] as TabKey[] };
   })(),
-  { id: "cfg-canary", name: "Canario 2%", description: "Despliegue progresivo al 2% del tráfico real para validación.", versions: [], workingCopy: defaultSettings(), dirtyTabs: [], testState: "idle" as const },
+  { id: "cfg-canary", name: "Canario 2%", description: "Despliegue progresivo al 2% del tráfico real para validación.", versions: [], workingCopy: defaultSettings(), dirtyTabs: [] },
 ];
 
 /** A config has edits pending validation — the only ones ready to run through Testing. */

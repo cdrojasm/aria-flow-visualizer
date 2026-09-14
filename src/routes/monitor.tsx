@@ -333,7 +333,7 @@ function MonitorPage() {
                       onKeyDown={(e) => { if (e.key === "Enter") setSelectedVersion(v.version); }}
                       className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left cursor-pointer transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-surface"}`}>
                       <div>
-                        <span className="text-[13px] font-medium text-text-primary">v{v.version}</span>
+                        <span className="text-[13px] font-medium text-text-primary">{selectedConfig.name}:v{v.version}</span>
                         <p className="text-[11px] text-text-secondary">{v.testRun!.date} · {v.testRun!.accuracy.toFixed(1)}% precisión</p>
                       </div>
                       {isRunningVersion && (

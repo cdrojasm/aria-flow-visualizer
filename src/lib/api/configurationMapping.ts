@@ -34,9 +34,6 @@ import {
 // operandi/flags/example cases) has no frontend field yet; it round-trips
 // as "" since nothing in the UI sets it.
 
-const hourToClock = (hour: number): string => `${String(hour).padStart(2, "0")}:00`;
-const clockToHour = (clock: string): number => Number(clock.split(":")[0]) || 0;
-
 function filterGroupToApi(g: FilterGroup): ApiFilterGroup {
   return {
     id: g.id,
@@ -336,7 +333,7 @@ export function toCreateConfigurationRequest(
     general: {
       agent_enabled: settings.agentEnabled,
       migration_window_enabled: settings.migrationWindowEnabled,
-      migration_window_hour: clockToHour(settings.migrationWindowHour),
+      migration_window_datetime: settings.migrationWindowDatetime,
       analyst_escalation_enabled: settings.analystEscalationEnabled,
       voicebot_escalation_enabled: settings.voicebotEscalationEnabled,
     },
@@ -394,7 +391,7 @@ export function settingsFromConfigurationDetail(
   return {
     agentEnabled: detail.general.agent_enabled,
     migrationWindowEnabled: detail.general.migration_window_enabled,
-    migrationWindowHour: hourToClock(detail.general.migration_window_hour),
+    migrationWindowDatetime: detail.general.migration_window_datetime,
     analystEscalationEnabled: detail.general.analyst_escalation_enabled,
     voicebotEscalationEnabled: detail.general.voicebot_escalation_enabled,
     maxInstances: detail.infra.max_instances,

@@ -19,7 +19,7 @@ import {
   type ProfilingStrategyKey,
 } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { Field, TagInput, VariablePicker } from "./shared/FormControls";
+import { Field, TagInput, VariableContentSizeWarning, VariablePicker } from "./shared/FormControls";
 import { spliceToken } from "./shared/promptTokens";
 
 const FIELD_KIND_LABELS: Record<FieldKind, string> = {
@@ -342,6 +342,9 @@ function FieldCategorizationTable({
                 onChange={(e) => setOutputVariable(fc.field, e.target.value)}
                 className="flex-1 min-w-0 h-7 rounded border border-border px-2 text-[12px] font-mono focus:outline-none focus:border-primary disabled:opacity-50"
               />
+            </div>
+            <div className="mt-2">
+              <VariableContentSizeWarning variables={[fc.field]} />
             </div>
             <FieldCriteriaEditor
               kind={fc.kind}

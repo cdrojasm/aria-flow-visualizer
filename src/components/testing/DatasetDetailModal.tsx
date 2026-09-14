@@ -1,6 +1,6 @@
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import {
   Dialog,
@@ -9,18 +9,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
-import { deleteDataset, getDatasetSummary } from "@/lib/api/testing.functions";
+import { getDatasetSummary } from "@/lib/api/datasets.functions";
 
 /* ─── Dataset detail, extracted from testing/index.tsx (Phase A) ────────
    Was an inline <section> competing with "Iniciar prueba" for visual
    protagonism on the page - now a modal. `open` is its own state, separate
    from the parent's selectedDataset (which the "Iniciar prueba" flow also
    needs) - closing this modal must not clear that selection, only a "Ver
-   detalle" button (shown once a dataset is picked) opens it. Self-
-   contained: owns its own query, delete mutation, and polling - nothing
-   here is read by the parent except via onDeleted. */
+   detalle" button (shown once a dataset is picked) opens it. Read-only:
+   upload/delete now live only in Biblioteca's DatasetLibraryManager - this
+   stays so an analyst can see distributions without leaving the test-run
+   flow, sourced from the same GetDatasetSummaryUseCase that tab uses. */
 
 const DATASET_STATUS_STYLE: Record<string, string> = {
   PENDING: "bg-warning/10 text-warning",
@@ -52,32 +52,17 @@ export function DatasetDetailModal({
   datasetName,
   open,
   onClose,
-  onDeleted,
 }: {
   datasetName: string | null;
   open: boolean;
   onClose: () => void;
-  onDeleted?: () => void;
 }) {
-  const queryClient = useQueryClient();
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const datasetSummaryQuery = useQuery({
     queryKey: ["datasetSummary", datasetName],
     queryFn: () => getDatasetSummary({ data: { name: datasetName! } }),
     enabled: !!datasetName,
-  });
-
-  const deleteDatasetMutation = useMutation({
-    mutationFn: (name: string) => deleteDataset({ data: { name } }),
-    onSuccess: (_res, name) => {
-      queryClient.invalidateQueries({ queryKey: ["datasets"] });
-      queryClient.removeQueries({ queryKey: ["datasetSummary", name] });
-      setShowDeleteConfirm(false);
-      onClose();
-      onDeleted?.();
-    },
   });
 
   const isDatasetProcessing =
@@ -107,39 +92,17 @@ export function DatasetDetailModal({
           <DialogDescription>Totales y distribución de campos del dataset seleccionado.</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            {datasetSummaryQuery.data && (
-              <span
-                className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
-                  DATASET_STATUS_STYLE[datasetSummaryQuery.data.status]
-                }`}
-              >
-                {datasetSummaryQuery.data.status}
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowDeleteConfirm(true)}
-            disabled={deleteDatasetMutation.isPending}
-            title="Borrar dataset"
-            className="inline-flex items-center gap-1 text-[11px] font-medium text-danger hover:underline disabled:opacity-40"
-          >
-            {deleteDatasetMutation.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Trash2 className="h-3.5 w-3.5" />
-            )}
-            Borrar dataset
-          </button>
+        <div className="flex items-center gap-2">
+          {datasetSummaryQuery.data && (
+            <span
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                DATASET_STATUS_STYLE[datasetSummaryQuery.data.status]
+              }`}
+            >
+              {datasetSummaryQuery.data.status}
+            </span>
+          )}
         </div>
-
-        {deleteDatasetMutation.isError && (
-          <p className="text-[12px] text-danger">
-            {(deleteDatasetMutation.error as Error).message}
-          </p>
-        )}
 
         {datasetSummaryQuery.isLoading && (
           <p className="text-[13px] text-text-secondary">Cargando resumen…</p>
@@ -240,15 +203,6 @@ export function DatasetDetailModal({
           </>
         )}
       </DialogContent>
-
-      <ConfirmDeleteDialog
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        itemName={`dataset "${datasetName}"`}
-        consequence="Se borran también sus datos de análisis. Esta acción no se puede deshacer."
-        pending={deleteDatasetMutation.isPending}
-        onConfirm={() => datasetName && deleteDatasetMutation.mutate(datasetName)}
-      />
     </Dialog>
   );
 }

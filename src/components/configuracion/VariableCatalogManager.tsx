@@ -21,13 +21,13 @@ import {
   type VariableResponse,
 } from "@/lib/api/variable.functions";
 
-/* ─── Admin CRUD for the variable catalog ────────────────
+/* ─── Admin CRUD for the source-variable catalog ─────────
    Opened from VariablePicker itself (shared/FormControls.tsx) via a gear
    icon next to its search input - VariablePicker is reused across 5+
    sections, so a single entry point there beats duplicating a "manage"
    link per section. Same flat-list pattern as MarcacionCatalogManager,
-   minus the risk-label dimension, plus an optional description (variable
-   names alone, e.g. "Altamira", aren't self-explanatory). */
+   minus the risk-label dimension, plus an optional description. Derived
+   variables are configured separately by profiling field categorizations. */
 
 export function VariableCatalogManager({
   open,
@@ -112,9 +112,9 @@ export function VariableCatalogManager({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Gestionar variables</DialogTitle>
+          <DialogTitle>Gestionar variables de origen</DialogTitle>
           <DialogDescription>
-            Pool de variables disponible al construir taxonomías, modus operandi, flags y prompts.
+            Campos recibidos en la alerta. Las variables derivadas se crean en Enriquecimiento de la data.
           </DialogDescription>
         </DialogHeader>
 
@@ -122,7 +122,7 @@ export function VariableCatalogManager({
           <Input
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            placeholder="Nueva variable…"
+            placeholder="Nuevo campo de origen…"
             className="flex-1"
           />
           <Input

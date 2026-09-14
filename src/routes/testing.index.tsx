@@ -49,7 +49,7 @@ function configurationLabel(
 ): string {
   if (!ref) return "Configuración activa al momento";
   const match = configurations.find((c) => c.configuration_id === ref.configuration_id);
-  return `${match?.name ?? ref.configuration_id}:${ref.version}`;
+  return `${match?.name ?? ref.configuration_id}:v${ref.version}`;
 }
 
 const TRUNCATE_MAX_CHARS = 23;

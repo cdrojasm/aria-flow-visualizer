@@ -1,4 +1,5 @@
-import { EVALUATION_VARIABLES, type SegmentMonitoringConfig } from "@/data/configs";
+import type { SegmentMonitoringConfig } from "@/data/configs";
+import { mergeVariablePools, useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { Field, VariablePicker } from "./shared/FormControls";
 
 /* ─── Evaluation prompts for one segment ────────────────
@@ -10,12 +11,17 @@ import { Field, VariablePicker } from "./shared/FormControls";
 export function SegmentEvaluationSection({
   value,
   onChange,
+  extraVariables,
   disabled,
 }: {
   value: SegmentMonitoringConfig;
   onChange: (patch: Partial<SegmentMonitoringConfig>) => void;
+  extraVariables: string[];
   disabled?: boolean;
 }) {
+  const { variables } = useVariableCatalog();
+  const pool = mergeVariablePools(variables, extraVariables);
+
   return (
     <fieldset disabled={disabled} className="contents">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -28,21 +34,21 @@ export function SegmentEvaluationSection({
             <textarea value={value.promptClasificacion} onChange={(e) => onChange({ promptClasificacion: e.target.value })} rows={4} placeholder="Ej: Evalúa si la taxonomía asignada es coherente con los indicadores de la alerta." className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none" />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles para este prompt</p>
-              <VariablePicker value={value.promptClasificacionVars} onChange={(v) => onChange({ promptClasificacionVars: v })} pool={EVALUATION_VARIABLES} />
+              <VariablePicker value={value.promptClasificacionVars} onChange={(v) => onChange({ promptClasificacionVars: v })} pool={pool} />
             </div>
           </Field>
           <Field label="Prompt de evaluación — Agente analista" hint="Instrucción usada para evaluar la calidad del agente analista.">
             <textarea value={value.promptAnalista} onChange={(e) => onChange({ promptAnalista: e.target.value })} rows={4} placeholder="Ej: Verifica que el análisis narrativo sea consistente con los datos disponibles y la taxonomía." className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none" />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles para este prompt</p>
-              <VariablePicker value={value.promptAnalistaVars} onChange={(v) => onChange({ promptAnalistaVars: v })} pool={EVALUATION_VARIABLES} />
+              <VariablePicker value={value.promptAnalistaVars} onChange={(v) => onChange({ promptAnalistaVars: v })} pool={pool} />
             </div>
           </Field>
           <Field label="Prompt de evaluación — Agente monitoreo" hint="Instrucción usada para evaluar la calidad del agente de monitoreo.">
             <textarea value={value.promptMonitoreo} onChange={(e) => onChange({ promptMonitoreo: e.target.value })} rows={4} placeholder="Ej: Comprueba que las alertas de baja prioridad descartadas realmente no representen riesgo." className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none" />
             <div className="mt-2">
               <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles para este prompt</p>
-              <VariablePicker value={value.promptMonitoreoVars} onChange={(v) => onChange({ promptMonitoreoVars: v })} pool={EVALUATION_VARIABLES} />
+              <VariablePicker value={value.promptMonitoreoVars} onChange={(v) => onChange({ promptMonitoreoVars: v })} pool={pool} />
             </div>
           </Field>
         </div>

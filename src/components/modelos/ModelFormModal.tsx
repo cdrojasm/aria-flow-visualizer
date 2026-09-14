@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Library, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field } from "@/components/configuracion/shared/FormControls";
-import { getDatasets, getDatasetSummary } from "@/lib/api/testing.functions";
+import { getDatasets, getDatasetSummary } from "@/lib/api/datasets.functions";
 import {
   createModel,
   type FieldTransform,
@@ -146,6 +146,26 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
           </Field>
 
           <Field label="Dataset">
+            <div className="flex items-center justify-end gap-3 mb-1">
+              <button
+                type="button"
+                onClick={() => datasetsQuery.refetch()}
+                title="Refrescar datasets"
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Refrescar
+              </button>
+              <a
+                href="/biblioteca?tab=datasets"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+              >
+                <Library className="h-3 w-3" />
+                Gestionar en Biblioteca
+              </a>
+            </div>
             <select
               value={datasetName}
               onChange={(e) => {

@@ -2,12 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from "react";
 import {
-  Plus, Pencil, Trash2, ChevronDown, ChevronUp, Save, X,
-  PlayCircle, Loader2, AlertTriangle, ShieldCheck, ShieldAlert,
+  Plus, Pencil, Trash2, ChevronDown, ChevronUp, Save, X, RotateCcw,
+  Loader2, AlertTriangle,
   Power, Clock, Radio, Eye, ExternalLink, FileSpreadsheet,
   Rocket, Zap, CalendarClock, Download, DollarSign,
 } from "lucide-react";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { ConfigurationVersionGuide } from "@/components/configuracion/ConfigurationVersionGuide";
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
 import { SegmentSamplingTab } from "@/components/configuracion/SegmentSamplingTab";
@@ -15,12 +17,11 @@ import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
 import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
-import { registerTestRun, type TestRunIndicators } from "@/data/testRuns";
 import {
   PROFILE_COLORS, defaultSettings, buildSegmentsFromChannels, RESOLUTION_TAG_LABELS,
   type TabKey, type DayProfile,
   type SamplingIntervalUnit,
-  type ShortageBehavior, type ResolutionTag, type AnalystCapacity, type DraftResult, type TestCleanupPolicy,
+  type ShortageBehavior, type ResolutionTag, type AnalystCapacity, type TestCleanupPolicy,
   type VersionEntry, type AgentConfig, type ConfigSettings,
   type SegmentCode, type SegmentSettings,
 } from "@/data/configs";
@@ -67,6 +68,36 @@ const CHANGE_SECTION_LABELS: Record<string, string> = {
   segments: "Segmentos",
 };
 
+const MIN_MIGRATION_LEAD_TIME_MS = 30 * 60 * 1000;
+
+// Persists the in-progress editing state (drafts + which config/version/tab
+// was open) so a refresh doesn't wipe unsaved work — mirrors the
+// try/catch-guarded localStorage convention in useRole.ts / ColumnVisibilityMenu.tsx.
+const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState";
+
+const formatDatetimeLocal = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const minimumMigrationDatetime = (now = new Date()) => {
+  const minimum = new Date(now.getTime() + MIN_MIGRATION_LEAD_TIME_MS);
+  minimum.setSeconds(0, 0);
+  if (minimum.getTime() < now.getTime() + MIN_MIGRATION_LEAD_TIME_MS) minimum.setMinutes(minimum.getMinutes() + 1);
+  return formatDatetimeLocal(minimum);
+};
+
+const isMigrationDatetimeValid = (value: string, now = new Date()) => {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) && timestamp >= now.getTime() + MIN_MIGRATION_LEAD_TIME_MS;
+};
+
+const formatMigrationDatetime = (value: string) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+};
+
 const formatChangePath = (path: string) => path
   .split(".")
   .map((part, index) => index === 0
@@ -86,9 +117,8 @@ const formatChangeValue = (value: unknown) => {
 
 type DraftState = {
   workingCopy: ConfigSettings;
+  baseline?: ConfigSettings;
   dirtyTabs: TabKey[];
-  testState: "idle" | "testing";
-  lastTestResult?: DraftResult;
   // Version this draft was seeded from — sent back as based_on_version so
   // the backend can reject the save (409) if the lineage moved on since.
   // undefined for a brand-new lineage (nothing to conflict with).
@@ -99,6 +129,16 @@ type PendingSave = {
   forceNewVersion: boolean;
   request: CreateConfigurationRequest;
   preview: TestConfigurationResponse;
+};
+
+// Shape written to/read from CONFIGURACION_STORAGE_KEY. Everything here is
+// plain JSON-safe state (ConfigSettings, TabKey, etc all are already).
+type PersistedConfiguracionState = {
+  selectedConfigId: string | null;
+  selectedVersion: number | "draft";
+  activeTab: TabKey;
+  drafts: Record<string, DraftState>;
+  localConfigs: { id: string; name: string; description: string }[];
 };
 
 function ConfiguracionPage() {
@@ -144,7 +184,6 @@ function ConfiguracionPage() {
 
   const [localConfigs, setLocalConfigs] = useState<{ id: string; name: string; description: string }[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
-  const [versionTestRuns, setVersionTestRuns] = useState<Record<string, TestRunIndicators>>({});
 
   const [newConfigForm, setNewConfigForm] = useState<{ name: string; baseId: string } | null>(null);
   const [configPickerCollapsed, setConfigPickerCollapsed] = useState(true);
@@ -157,9 +196,29 @@ function ConfiguracionPage() {
   // Set when saveVersion's POST comes back 409 — the lineage moved on since
   // this draft was seeded. Cleared by reloadLatestVersion or a new save attempt.
   const [versionConflict, setVersionConflict] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"restore" | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
   const [savePreviewLoading, setSavePreviewLoading] = useState(false);
   const [savePreviewError, setSavePreviewError] = useState<string | null>(null);
+  // Confirm-before-discard for startNewVersionFrom below — a native
+  // window.confirm() would look out of place next to every other
+  // confirmation in this page being a custom modal.
+  const [pendingVersionSwitch, setPendingVersionSwitch] = useState<{ fromVersion?: number; toVersion: number } | null>(null);
+
+  // Guards the persistence effects below. Starts false so the very first
+  // render (server-rendered — this route is SSR'd — and the pre-hydration
+  // client render) matches, then flips once the restore effect has read
+  // localStorage, per the useRole.ts/ColumnVisibilityMenu.tsx convention.
+  const [editorStateHydrated, setEditorStateHydrated] = useState(false);
+  // Set synchronously (a ref, not state) by the restore effect below when it
+  // finds a persisted selection, so the "pick default selection" effect that
+  // runs right after it in the same commit knows not to clobber it — both
+  // effects would otherwise still see the pre-restore `selectedConfigId`
+  // (state updates from the earlier effect haven't re-rendered yet).
+  const hydratedSelectionRef = useRef(false);
 
   const backendConfigs = configsQuery.data ?? [];
   const isTempId = (id: string | null) => !!id && localConfigs.some((c) => c.id === id);
@@ -172,10 +231,53 @@ function ConfiguracionPage() {
     ? { configId: activeQuery.data.configuration_id, version: activeQuery.data.version }
     : { configId: "", version: -1 };
 
+  // Restore the editing object + which config/version/tab was open, so a
+  // refresh doesn't lose unsaved work. Must run (and, if it finds anything,
+  // flag hydratedSelectionRef) before the "pick default selection" effect
+  // right below it — declaration order is execution order for effects in
+  // the same commit.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CONFIGURACION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedConfiguracionState>;
+        if (parsed.drafts && typeof parsed.drafts === "object") setDrafts(parsed.drafts);
+        if (Array.isArray(parsed.localConfigs)) setLocalConfigs(parsed.localConfigs);
+        if (parsed.activeTab && TAB_META.some((t) => t.key === parsed.activeTab)) setActiveTab(parsed.activeTab);
+        if (parsed.selectedConfigId) {
+          setSelectedConfigId(parsed.selectedConfigId);
+          setSelectedVersion(
+            parsed.selectedVersion === "draft" || typeof parsed.selectedVersion === "number" ? parsed.selectedVersion : "draft",
+          );
+          hydratedSelectionRef.current = true;
+        }
+      }
+    } catch {
+      // localStorage no disponible o corrupto — se queda en los valores por defecto.
+    } finally {
+      setEditorStateHydrated(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persists the editing object + current tab/selection on every change,
+  // once past the restore above (otherwise this would fire first, on the
+  // blank initial state, and overwrite what's in storage before the restore
+  // effect's setState calls above ever take effect).
+  useEffect(() => {
+    if (!editorStateHydrated) return;
+    try {
+      const toPersist: PersistedConfiguracionState = { selectedConfigId, selectedVersion, activeTab, drafts, localConfigs };
+      localStorage.setItem(CONFIGURACION_STORAGE_KEY, JSON.stringify(toPersist));
+    } catch {
+      // localStorage no disponible — la preferencia solo dura la sesión actual.
+    }
+  }, [editorStateHydrated, selectedConfigId, selectedVersion, activeTab, drafts, localConfigs]);
+
   // Pick a default selection once configs have loaded: whatever is active
   // in production, else the first config in the list.
   useEffect(() => {
-    if (selectedConfigId) return;
+    if (selectedConfigId || hydratedSelectionRef.current) return;
     if (activeQuery.data) { setSelectedConfigId(activeQuery.data.configuration_id); setSelectedVersion(activeQuery.data.version); return; }
     if (configListItems.length > 0) { setSelectedConfigId(configListItems[0].id); setSelectedVersion("draft"); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -193,7 +295,7 @@ function ConfiguracionPage() {
       queryFn: () => getConfigurationVersion({ data: { configurationId: selectedConfigId, version: summary.version } }),
     }).then((detail) => {
       if (cancelled) return;
-      setDrafts((prev) => (prev[selectedConfigId] ? prev : { ...prev, [selectedConfigId]: { workingCopy: settingsFromConfigurationDetail(detail), dirtyTabs: [], testState: "idle", basedOnVersion: summary.version } }));
+      setDrafts((prev) => (prev[selectedConfigId] ? prev : { ...prev, [selectedConfigId]: { workingCopy: settingsFromConfigurationDetail(detail), baseline: settingsFromConfigurationDetail(detail), dirtyTabs: [], basedOnVersion: summary.version } }));
     });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -219,7 +321,6 @@ function ConfiguracionPage() {
     .map((v) => ({
       version: v.version,
       settings: v.version === selectedVersion && historicalDetailQuery.data ? settingsFromConfigurationDetail(historicalDetailQuery.data) : undefined,
-      testRun: versionTestRuns[`${selectedConfigId}:${v.version}`],
       everActivated: v.ever_activated,
     }));
 
@@ -230,8 +331,6 @@ function ConfiguracionPage() {
     versions,
     workingCopy: selectedDraft?.workingCopy ?? defaultSettings(),
     dirtyTabs: selectedDraft?.dirtyTabs ?? [],
-    testState: selectedDraft?.testState ?? "idle",
-    lastTestResult: selectedDraft?.lastTestResult,
   };
 
   const configs: AgentConfig[] = configListItems.map((item) => ({
@@ -241,16 +340,21 @@ function ConfiguracionPage() {
     versions: [],
     workingCopy: defaultSettings(),
     dirtyTabs: drafts[item.id]?.dirtyTabs ?? [],
-    testState: drafts[item.id]?.testState ?? "idle",
-    lastTestResult: drafts[item.id]?.lastTestResult,
   }));
 
   const isDraftView = selectedVersion === "draft";
   const viewingVersion = isDraftView ? undefined : versions.find((v) => v.version === selectedVersion);
   const settingsLoading = !isDraftView && !viewingVersion?.settings;
   const settings = isDraftView ? selectedConfig.workingCopy : (viewingVersion?.settings ?? defaultSettings());
+  const migrationDatetimeMin = minimumMigrationDatetime();
+  const migrationDatetimeInvalid = settings.migrationWindowEnabled && !isMigrationDatetimeValid(settings.migrationWindowDatetime);
   const readOnlyHistorical = !isDraftView;
-  const locked = readOnlyHistorical || selectedConfig.testState === "testing" || settingsLoading || apiDown || savePreviewLoading;
+  // Task 2 fix: the historical banner used to call every non-draft version
+  // "histórica" — including the one actually running in production, right
+  // next to its green "Producción" badge in the version list. Distinguish
+  // the live version from a genuinely superseded one.
+  const viewingIsLive = readOnlyHistorical && running.configId === selectedConfig.id && running.version === selectedVersion;
+  const locked = saving || restoring || !selectedDraft || readOnlyHistorical || settingsLoading || apiDown || savePreviewLoading;
   const unsaved = isTempId(selectedConfigId);
   // Mirrors CreateConfigurationUseCase's overwrite condition: a save only
   // mints a new version if the draft's base was never activated - and only
@@ -259,8 +363,23 @@ function ConfiguracionPage() {
   const basedOnVersionEntry = selectedDraft?.basedOnVersion != null
     ? versions.find((v) => v.version === selectedDraft.basedOnVersion)
     : undefined;
-  const willOverwrite = !unsaved && !!basedOnVersionEntry && basedOnVersionEntry.everActivated === false;
-  const showDraftRow = selectedConfig.dirtyTabs.length > 0 || (selectedListItem?.latestVersion == null);
+  const canEditVersion = (version: number) => {
+    const entry = backendVersions.find((v) => v.version === version);
+    return !!entry && versionsQuery.isSuccess && testRunsQuery.isSuccess && activeQuery.isSuccess
+      && version === Math.max(...backendVersions.map((v) => v.version))
+      && !entry.active && !entry.ever_activated && !(entry as typeof entry & { ever_tested?: boolean }).ever_tested
+      && !(running.configId === selectedConfigId && running.version === version)
+      && !(testRunsQuery.data ?? []).some((run) =>
+        run.config.configuration_ref?.configuration_id === selectedConfigId
+        && run.config.configuration_ref.version === version);
+  };
+  const willOverwrite = !unsaved && selectedDraft?.basedOnVersion != null && canEditVersion(selectedDraft.basedOnVersion);
+  // Task 5 fix: only show the pseudo "Cambios sin guardar" row inside the
+  // version dropdown for a config that has no real versions yet (brand-new,
+  // never saved) — there's nothing else to list. Once real versions exist,
+  // the dirty draft gets its own persistent banner instead of a fake row
+  // mixed in with real version identities (see below).
+  const showDraftRow = versions.length === 0;
 
   const defaultVersionFor = (c: AgentConfig): number | "draft" => {
     if (drafts[c.id]?.dirtyTabs.length) return "draft";
@@ -271,38 +390,82 @@ function ConfiguracionPage() {
 
   const selectConfigRow = (c: AgentConfig) => { setSelectedConfigId(c.id); setSelectedVersion(defaultVersionFor(c)); };
 
+  // Task 1 fix: previously the "Iniciar nueva versión basada en vN" button
+  // just flipped to draft view (setSelectedVersion("draft")) without ever
+  // seeding the draft from vN — since only one draft slot exists per
+  // configuration (seeded once from the latest version, see the effect
+  // above), clicking it from ANY historical version silently reopened
+  // whatever draft already existed, regardless of which vN was requested.
+  // This seeds the draft from the actual requested version every time.
+  const applyStartNewVersionFrom = async (version: number) => {
+    if (!selectedConfigId) return;
+    const detail = selectedVersion === version && historicalDetailQuery.data
+      ? historicalDetailQuery.data
+      : await queryClient.fetchQuery({
+          queryKey: ["configurationVersion", selectedConfigId, version],
+          queryFn: () => getConfigurationVersion({ data: { configurationId: selectedConfigId, version } }),
+        });
+    setDrafts((prev) => ({ ...prev, [selectedConfigId]: { workingCopy: settingsFromConfigurationDetail(detail), baseline: settingsFromConfigurationDetail(detail), dirtyTabs: [], basedOnVersion: version } }));
+    setSelectedVersion("draft");
+  };
+
+  // Warns before clobbering a dirty draft based on a different version —
+  // via the app's own modal (see pendingVersionSwitch render below), not a
+  // native window.confirm().
+  const startNewVersionFrom = (version: number) => {
+    if (!selectedConfigId) return;
+    const currentDraft = drafts[selectedConfigId];
+    if (currentDraft?.basedOnVersion === version) { setSelectedVersion("draft"); return; }
+    if (currentDraft && currentDraft.dirtyTabs.length > 0) {
+      setPendingVersionSwitch({ fromVersion: currentDraft.basedOnVersion, toVersion: version });
+      return;
+    }
+    void applyStartNewVersionFrom(version);
+  };
+
+  const restoreChanges = async () => {
+    if (!selectedConfigId || !selectedDraft) return;
+    const configId = selectedConfigId;
+    setRestoring(true);
+    setActionError(null);
+    try {
+      let baseline = selectedDraft.baseline;
+      if (!baseline && selectedDraft.basedOnVersion != null) {
+        const detail = await queryClient.fetchQuery({
+          queryKey: ["configurationVersion", configId, selectedDraft.basedOnVersion],
+          queryFn: () => getConfigurationVersion({ data: { configurationId: configId, version: selectedDraft.basedOnVersion! } }),
+        });
+        baseline = settingsFromConfigurationDetail(detail);
+      }
+      const restoredSettings = baseline ?? { ...defaultSettings(), segments: buildSegmentsFromChannels(channels) };
+      setDrafts((prev) => ({ ...prev, [configId]: { workingCopy: structuredClone(restoredSettings), baseline: restoredSettings, basedOnVersion: selectedDraft.basedOnVersion, dirtyTabs: [] } }));
+      setVersionConflict(false);
+      setSavePreviewError(null);
+      setPendingAction(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudieron restaurar los cambios.");
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const patchSettings = (tab: TabKey, patch: Partial<ConfigSettings>) => {
-    if (!isDraftView || !selectedConfigId) return;
+    if (locked || !isDraftView || !selectedConfigId) return;
     setDrafts((prev) => {
-      const current = prev[selectedConfigId] ?? { workingCopy: settings, dirtyTabs: [], testState: "idle" as const };
+      const current = prev[selectedConfigId] ?? { workingCopy: settings, dirtyTabs: [] };
       const dirtyTabs = current.dirtyTabs.includes(tab) ? current.dirtyTabs : [...current.dirtyTabs, tab];
-      return { ...prev, [selectedConfigId]: { ...current, workingCopy: { ...current.workingCopy, ...patch }, dirtyTabs, lastTestResult: undefined } };
+      return { ...prev, [selectedConfigId]: { ...current, workingCopy: { ...current.workingCopy, ...patch }, dirtyTabs } };
     });
   };
 
   const patchSegment = (tab: TabKey, code: SegmentCode, patch: Partial<SegmentSettings>) => {
-    if (!isDraftView || !selectedConfigId) return;
+    if (locked || !isDraftView || !selectedConfigId) return;
     setDrafts((prev) => {
-      const current = prev[selectedConfigId] ?? { workingCopy: settings, dirtyTabs: [], testState: "idle" as const };
+      const current = prev[selectedConfigId] ?? { workingCopy: settings, dirtyTabs: [] };
       const dirtyTabs = current.dirtyTabs.includes(tab) ? current.dirtyTabs : [...current.dirtyTabs, tab];
       const segments = { ...current.workingCopy.segments, [code]: { ...current.workingCopy.segments[code], ...patch } };
-      return { ...prev, [selectedConfigId]: { ...current, workingCopy: { ...current.workingCopy, segments }, dirtyTabs, lastTestResult: undefined } };
+      return { ...prev, [selectedConfigId]: { ...current, workingCopy: { ...current.workingCopy, segments }, dirtyTabs } };
     });
-  };
-
-  // ponytail: still a local simulation — the backend has no endpoint for
-  // "quickly validate a draft config" (only the full dataset-driven
-  // /testing test-run exists, a heavier, separate feature). Wire this to
-  // startTestRun (src/lib/api/testing.functions.ts) if that's meant to gate
-  // activation for real.
-  const runCycle = () => {
-    if (!isDraftView || !selectedConfigId || isTempId(selectedConfigId)) return;
-    setDrafts((prev) => ({ ...prev, [selectedConfigId]: { ...prev[selectedConfigId], testState: "testing" } }));
-    setTimeout(() => {
-      const accuracy = 92 + Math.random() * 7;
-      const result: DraftResult = { accuracy, samples: 1240, passed: accuracy >= 95 };
-      setDrafts((prev) => ({ ...prev, [selectedConfigId]: { ...prev[selectedConfigId], testState: "idle", dirtyTabs: [], lastTestResult: result } }));
-    }, 1600);
   };
 
   const createMutation = useMutation({
@@ -325,13 +488,17 @@ function ConfiguracionPage() {
       name: selectedConfig.name,
       description: selectedConfig.description,
       configurationId: wasTemp ? null : selectedConfigId,
-      basedOnVersion: wasTemp || forceNewVersion ? null : selectedDraft?.basedOnVersion,
+      basedOnVersion: wasTemp || forceNewVersion || !willOverwrite ? null : selectedDraft?.basedOnVersion,
     });
   };
 
   const requestSave = async (forceNewVersion = false) => {
     if (!isDraftView || !selectedConfigId || locked) return;
     setSavePreviewError(null);
+    if (settings.migrationWindowEnabled && !isMigrationDatetimeValid(settings.migrationWindowDatetime)) {
+      setSavePreviewError("La fecha y hora de migración debe ser al menos 30 minutos posterior a la hora actual.");
+      return;
+    }
     setVersionConflict(false);
     setSavePreviewLoading(true);
     const controller = new AbortController();
@@ -357,7 +524,6 @@ function ConfiguracionPage() {
 
   const saveVersion = async (request: CreateConfigurationRequest) => {
     if (!isDraftView || !selectedConfigId || locked) return;
-    const draftResult = selectedDraft?.lastTestResult;
     const wasTemp = isTempId(selectedConfigId);
     setVersionConflict(false);
     let created;
@@ -368,36 +534,10 @@ function ConfiguracionPage() {
       throw err;
     }
 
-    // The validation cycle is optional at save time (it can take a while,
-    // per user request) — only attach a testRun stat if one was actually
-    // run against this draft.
-    if (draftResult) {
-      const testRun: TestRunIndicators = {
-        id: `run-${created.configuration_id}-v${created.version}-${Date.now()}`,
-        configId: created.configuration_id,
-        configName: created.name,
-        version: created.version,
-        date: new Date().toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-        dataset: "Dataset de validación",
-        duration: "—",
-        processed: draftResult.samples,
-        total: draftResult.samples,
-        failed: 0,
-        fraudeNoDetectado: `${(100 - draftResult.accuracy).toFixed(1)}%`,
-        falsosPositivos: `${(Math.random() * 10).toFixed(1)}%`,
-        tiempoAhorrado: `${(Math.random() * 8 + 2).toFixed(1)} h`,
-        latencia: `${Math.round(800 + Math.random() * 400)} ms`,
-        accuracy: draftResult.accuracy,
-        passed: draftResult.passed,
-      };
-      registerTestRun(testRun);
-      setVersionTestRuns((prev) => ({ ...prev, [`${created.configuration_id}:${created.version}`]: testRun }));
-    }
-
     setDrafts((prev) => {
       const next = { ...prev };
       delete next[selectedConfigId];
-      next[created.configuration_id] = { workingCopy: settingsFromConfigurationDetail(created), dirtyTabs: [], testState: "idle", basedOnVersion: created.version };
+      next[created.configuration_id] = { workingCopy: settingsFromConfigurationDetail(created), baseline: settingsFromConfigurationDetail(created), dirtyTabs: [], basedOnVersion: created.version };
       return next;
     });
     if (wasTemp) setLocalConfigs((prev) => prev.filter((c) => c.id !== selectedConfigId));
@@ -405,15 +545,30 @@ function ConfiguracionPage() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["configurations"] }),
       queryClient.invalidateQueries({ queryKey: ["configurationVersions", created.configuration_id] }),
+      queryClient.invalidateQueries({ queryKey: ["configurationVersion", created.configuration_id] }),
     ]);
     setSelectedConfigId(created.configuration_id);
     setSelectedVersion(created.version);
   };
 
   const confirmSave = async () => {
-    if (!pendingSave) return;
-    await saveVersion(pendingSave.request);
-    setPendingSave(null);
+    if (!pendingSave || saving) return;
+    if (pendingSave.request.general.migration_window_enabled
+      && !isMigrationDatetimeValid(pendingSave.request.general.migration_window_datetime)) {
+      setPendingSave(null);
+      setSavePreviewError("La fecha y hora de migración debe ser al menos 30 minutos posterior a la hora actual.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveVersion(pendingSave.request);
+      setPendingSave(null);
+    } catch (error) {
+      setSavePreviewError(error instanceof Error ? error.message : "No se pudieron guardar los cambios.");
+      setPendingSave(null);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ponytail: drops the local draft rather than rebasing it onto the new
@@ -439,12 +594,15 @@ function ConfiguracionPage() {
     enabled: !!deployTarget,
   });
   const deployWindowEnabled = deployDetailQuery.data?.general.migration_window_enabled ?? false;
-  const deployWindowHour = deployDetailQuery.data ? `${String(deployDetailQuery.data.general.migration_window_hour).padStart(2, "0")}:00` : "02:00";
+  const deployWindowDatetime = deployDetailQuery.data?.general.migration_window_datetime ?? "2000-01-01T02:00";
+  const deployWindowDatetimeValid = isMigrationDatetimeValid(deployWindowDatetime);
   const deployConfirmed = deployConfirmText.trim().toUpperCase() === "CONFIRMAR";
-  const canConfirmDeploy = deployConfirmed && hasSucceededTestRun && (deployMode === "immediate" || deployWindowEnabled);
+  const canConfirmDeploy = deployConfirmed && hasSucceededTestRun
+    && (deployMode === "immediate" || (deployWindowEnabled && deployWindowDatetimeValid));
 
   const confirmDeploy = async () => {
-    if (!deployTarget || !canConfirmDeploy) return;
+    if (!deployTarget || !deployConfirmed || !hasSucceededTestRun) return;
+    if (deployMode === "window" && (!deployWindowEnabled || !isMigrationDatetimeValid(deployWindowDatetime))) return;
     const { configId, version } = deployTarget;
     if (deployMode === "immediate") {
       await activateMutation.mutateAsync({ configurationId: configId, version });
@@ -456,7 +614,7 @@ function ConfiguracionPage() {
     } else {
       // ponytail: no backend concept of a scheduled/windowed activation yet
       // (activate is immediate-only) — stays client-local until one exists.
-      setScheduledDeploys((prev) => ({ ...prev, [configId]: { version, hour: deployWindowHour } }));
+      setScheduledDeploys((prev) => ({ ...prev, [configId]: { version, hour: deployWindowDatetime } }));
     }
     closeDeploy();
   };
@@ -493,7 +651,7 @@ function ConfiguracionPage() {
     };
     const id = `cfg-temp-${Date.now()}`;
     setLocalConfigs((prev) => [...prev, { id, name: newConfigForm.name.trim(), description: baseItem ? `Basada en ${baseItem.name}.` : "" }]);
-    setDrafts((prev) => ({ ...prev, [id]: { workingCopy: clonedSettings, dirtyTabs: [], testState: "idle" } }));
+    setDrafts((prev) => ({ ...prev, [id]: { workingCopy: clonedSettings, baseline: structuredClone(clonedSettings), dirtyTabs: [] } }));
     setSelectedConfigId(id);
     setSelectedVersion("draft");
     setActiveTab("general");
@@ -502,8 +660,56 @@ function ConfiguracionPage() {
 
   const dirtyTabLabels = selectedConfig.dirtyTabs.map((k) => TAB_META.find((t) => t.key === k)?.label).filter(Boolean).join(", ");
 
+  // Single consolidated message shown in the save-confirmation modal, folding
+  // together what dirty tabs exist, which version the draft is based on,
+  // and the overwrite-vs-new-version consequence — previously three
+  // separate stacked banners repeating the same version name, then a
+  // persistent "Ciclo de validación" card (retired: see UX_FIXES_ARIA.md R1).
+  const showBasedOnVersion = !unsaved && !!basedOnVersionEntry;
+  const versionLabel = showBasedOnVersion ? `${selectedConfig.name}:v${selectedDraft?.basedOnVersion}` : null;
+  const nextVersionLabel = `${selectedConfig.name}:v${Math.max(0, ...backendVersions.map((v) => v.version)) + 1}`;
+  const validationSummary = dirtyTabLabels && versionLabel
+    ? <>Cambios sin guardar en <span className="font-medium">{dirtyTabLabels}</span>, basados en <span className="font-medium">{versionLabel}</span>. {willOverwrite ? <>Guardar sobrescribe esa versión — usa &quot;Guardar como nueva versión&quot; para conservarla y crear <span className="font-medium">{nextVersionLabel}</span> aparte.</> : "Guardar siempre crea una nueva versión; esa se conserva intacta."}</>
+    : dirtyTabLabels
+      ? <>Cambios sin guardar en <span className="font-medium">{dirtyTabLabels}</span>.</>
+      : versionLabel
+        ? <><span className="font-medium">{versionLabel}</span> {willOverwrite ? <>es la última versión, sin producción ni pruebas — guardar la modifica; usa &quot;Guardar como nueva versión&quot; para conservarla y crear <span className="font-medium">{nextVersionLabel}</span> aparte.</> : "está protegida o es anterior — guardar crea una nueva versión; se conserva intacta."}</>
+        : null;
+  const saveButtonLabel = savePreviewLoading ? "Validando cambios…" : willOverwrite ? `Guardar cambios en ${selectedConfig.name}:v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión";
+
+  const editorStatus = !selectedConfigId ? "Selecciona una configuración"
+    : !isDraftView ? `Consultando configuración ${selectedConfig.name} · Versión ${selectedVersion}${viewingIsLive ? " · Producción" : ""} · Solo lectura`
+    : unsaved ? `Creando configuración ${selectedConfig.name} · Versión 1`
+    : willOverwrite ? `Modificando configuración ${selectedConfig.name} · Versión ${selectedDraft?.basedOnVersion}`
+    : `Creando nueva versión de configuración ${selectedConfig.name} · Basada en versión ${selectedDraft?.basedOnVersion ?? "…"}`;
+
+  const hasChanges = !!selectedDraft && (selectedDraft.baseline
+    ? JSON.stringify(selectedDraft.workingCopy) !== JSON.stringify(selectedDraft.baseline)
+    : selectedDraft.dirtyTabs.length > 0);
+  const canSave = !locked && !!selectedConfigId && (unsaved || hasChanges);
+  const canRestore = isDraftView && !!selectedDraft && hasChanges && !saving && !restoring && !savePreviewLoading;
+  const actionButtonClass = "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed";
+
   return (
-    <DashboardLayout>
+    <DashboardLayout bottomBar={
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
+        <div className="min-w-0 text-[12px] text-text-secondary" role="status">
+          <p className="font-medium text-text-primary">{editorStatus}</p>
+          <p>{saving ? "Guardando…" : restoring ? "Restaurando cambios…" : savePreviewLoading ? "Validando cambios…" : !isDraftView ? "Versión guardada · Solo lectura" : unsaved ? "Configuración nueva sin guardar" : hasChanges ? "Cambios pendientes de guardar" : "Sin cambios pendientes"}</p>
+        </div>
+        {isDraftView && <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={!canRestore} onClick={() => { setActionError(null); setPendingAction("restore"); }} className={`${actionButtonClass} border border-border hover:bg-surface`}>
+            <RotateCcw className="h-4 w-4" /> Restaurar cambios
+          </button>
+          {willOverwrite && isDraftView && <button type="button" disabled={!canSave} onClick={() => requestSave(true)} className={`${actionButtonClass} border border-primary text-primary hover:bg-primary/5`}>
+            <Plus className="h-4 w-4" /> Guardar como nueva versión
+          </button>}
+          <button type="button" disabled={!canSave} title={saveButtonLabel} onClick={() => requestSave(false)} className={`${actionButtonClass} bg-primary text-white hover:bg-primary/90`}>
+            {saving || savePreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} {saving ? "Guardando…" : savePreviewLoading ? "Validando…" : willOverwrite ? "Guardar cambios" : "Crear versión"}
+          </button>
+        </div>}
+      </div>
+    }>
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
         <header className="mb-2">
           <h1 className="text-[20px] font-semibold text-text-primary">Configuración del Agente</h1>
@@ -516,17 +722,17 @@ function ConfiguracionPage() {
             {settingsLoading ? (
               <div className="flex items-center gap-2.5 bg-text-secondary/10 border border-border rounded-lg px-4 py-2.5">
                 <Loader2 className="h-4 w-4 text-text-secondary shrink-0 animate-spin" />
-                <p className="text-[12px] text-text-primary">Cargando versión v{selectedVersion}…</p>
+                <p className="text-[12px] text-text-primary">Cargando versión {selectedConfig.name}:v{selectedVersion}…</p>
               </div>
             ) : (
-              <div className="flex items-center gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
-                <Eye className="h-4 w-4 text-warning shrink-0" />
+              <div className={`flex items-center gap-2.5 border rounded-lg px-4 py-2.5 ${viewingIsLive ? "bg-success/10 border-success/30" : "bg-warning/10 border-warning/30"}`}>
+                {viewingIsLive ? <Radio className="h-4 w-4 text-success shrink-0" /> : <Eye className="h-4 w-4 text-warning shrink-0" />}
                 <p className="text-[12px] text-text-primary">
-                  Viendo la versión <span className="font-medium">v{selectedVersion}</span> — histórica, de solo lectura.
+                  Viendo la versión <span className="font-medium">{selectedConfig.name}:v{selectedVersion}</span> — {viewingIsLive ? "en producción, de solo lectura." : "versión guardada, de solo lectura."}
                 </p>
-                <button onClick={() => setSelectedVersion("draft")}
+                <button onClick={() => startNewVersionFrom(selectedVersion as number)}
                   className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/10 shrink-0">
-                  <Pencil className="h-3.5 w-3.5" /> Iniciar nueva versión basada en v{selectedVersion}
+                  <Pencil className="h-3.5 w-3.5" /> {canEditVersion(selectedVersion as number) ? "Modificar" : "Crear nueva versión basada en"} {selectedConfig.name}:v{selectedVersion}
                 </button>
               </div>
             )}
@@ -536,14 +742,17 @@ function ConfiguracionPage() {
         {/* Config + version selector */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">Configuraciones</h2>
+            <div>
+              <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">Configuraciones</h2>
+              <ConfigurationVersionGuide />
+            </div>
             <button onClick={() => setNewConfigForm({ name: "", baseId: selectedConfigId ?? "" })}
               className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline">
               <Plus className="h-3.5 w-3.5" /> Nueva configuración
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="self-start border border-border rounded-lg overflow-hidden">
               <button onClick={() => setConfigPickerCollapsed((v) => !v)}
                 className="w-full flex items-center justify-between px-3 py-2 bg-surface border-b border-border text-[11px] font-semibold text-text-secondary uppercase tracking-wider hover:text-text-primary">
                 Configuración
@@ -577,7 +786,7 @@ function ConfiguracionPage() {
                         <div className="flex items-center gap-1.5 shrink-0">
                           {c.dirtyTabs.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-warning" title="Cambios sin guardar" />}
                           {scheduledDeploys[c.id] && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary" title={`Despliegue en ventana programado — v${scheduledDeploys[c.id].version} a las ${scheduledDeploys[c.id].hour}`}>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary" title={`Despliegue en ventana programado — ${c.name}:v${scheduledDeploys[c.id].version} el ${formatMigrationDatetime(scheduledDeploys[c.id].hour)}`}>
                               <CalendarClock className="h-3.5 w-3.5" />
                             </span>
                           )}
@@ -594,7 +803,7 @@ function ConfiguracionPage() {
               )}
             </div>
 
-            <div className="border border-border rounded-lg overflow-hidden">
+            <div className="self-start border border-border rounded-lg overflow-hidden">
               <button onClick={() => setVersionPickerCollapsed((v) => !v)}
                 className="w-full flex items-center justify-between px-3 py-2 bg-surface border-b border-border text-[11px] font-semibold text-text-secondary uppercase tracking-wider hover:text-text-primary">
                 Versión
@@ -604,7 +813,7 @@ function ConfiguracionPage() {
                 <button onClick={() => setVersionPickerCollapsed(false)}
                   className="w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-surface">
                   <span className={`text-[13px] font-medium ${isDraftView ? "text-warning" : "text-text-primary"}`}>
-                    {isDraftView ? "Cambios sin guardar" : `v${selectedVersion}`}
+                    {isDraftView ? "Cambios sin guardar" : `${selectedConfig.name}:v${selectedVersion}`}
                   </span>
                 </button>
               ) : (
@@ -629,14 +838,20 @@ function ConfiguracionPage() {
                         onKeyDown={(e) => { if (e.key === "Enter") setSelectedVersion(v.version); }}
                         className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left cursor-pointer transition-colors ${isSelected ? "bg-primary/5" : "hover:bg-surface"}`}>
                         <div>
-                          <span className="text-[13px] font-medium text-text-primary">v{v.version}</span>
+                          <span className="text-[13px] font-medium text-text-primary">{selectedConfig.name}:v{v.version}</span>
                           <p className="text-[11px] text-text-secondary">
-                            {v.testRun ? `${v.testRun.date} · ${v.testRun.accuracy.toFixed(1)}% precisión` : "Sin datos de ciclo en esta sesión"}
+                            {v.testRun
+                              ? `${v.testRun.date} · ${v.testRun.accuracy.toFixed(1)}% precisión`
+                              : isRunningVersion
+                                ? "En producción — sin ciclo corrido en esta sesión"
+                                : v.everActivated
+                                  ? "Desplegada anteriormente — sin ciclo corrido en esta sesión"
+                                  : "Nunca desplegada — sin ciclo corrido en esta sesión"}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {isScheduledVersion && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary" title={`Programado para las ${scheduled!.hour}`}>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-primary" title={`Programado para el ${formatMigrationDatetime(scheduled!.hour)}`}>
                               <CalendarClock className="h-3.5 w-3.5" /> Programado
                             </span>
                           )}
@@ -677,6 +892,25 @@ function ConfiguracionPage() {
           </div>
         </section>
 
+        {/* Dirty-draft reminder for when the user has wandered off to a
+            different version/config while a draft is still pending — once
+            they're actually in the draft view, this same information shows
+            up in the save-confirmation modal instead of duplicating it here. */}
+        {!unsaved && !isDraftView && selectedConfig.dirtyTabs.length > 0 && (
+          <div className="flex items-center gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
+            <Pencil className="h-4 w-4 text-warning shrink-0" />
+            <p className="text-[12px] text-text-primary">
+              Tienes cambios sin guardar{selectedDraft?.basedOnVersion != null ? <> basados en <span className="font-medium">{selectedConfig.name}:v{selectedDraft.basedOnVersion}</span></> : null}.
+            </p>
+            <div className="ml-auto flex items-center gap-3 shrink-0">
+              <button onClick={() => setSelectedVersion("draft")} className="text-[12px] font-medium text-primary hover:underline">
+                Ver borrador
+              </button>
+
+            </div>
+          </div>
+        )}
+
         {versionConflict && (
           <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
@@ -700,98 +934,11 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {isDraftView && (selectedConfig.dirtyTabs.length > 0 || selectedConfig.lastTestResult) && (
-          <section className="bg-card rounded-xl border border-warning/30 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-            <div className="px-6 py-4 border-b border-warning/30 bg-warning/5 rounded-t-xl">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
-                <h2 className="text-[14px] font-semibold text-text-primary">Ciclo de validación</h2>
-              </div>
-              <p className="text-[12px] text-text-secondary mt-0.5">
-                {dirtyTabLabels
-                  ? <>Cambios sin validar en <span className="font-medium">{dirtyTabLabels}</span>. El ciclo de prueba puede tardar — puedes guardar esta configuración {willOverwrite ? "sin esperarlo" : "como nueva versión sin esperarlo"}.</>
-                  : `El ciclo de prueba puede tardar — puedes guardar esta configuración ${willOverwrite ? "sin esperarlo" : "como nueva versión sin esperarlo"}.`}
-              </p>
-            </div>
-            <div className="p-6 space-y-5">
-              <div className="flex items-center gap-3">
-                <button onClick={runCycle} disabled={locked || unsaved} title={unsaved ? "Guarda esta configuración como versión antes de correr el ciclo" : undefined}
-                  className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {selectedConfig.testState === "testing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-                  {selectedConfig.testState === "testing" ? "Corriendo ciclo…" : "Correr ciclo"}
-                </button>
-                <button onClick={() => requestSave(false)} disabled={locked}
-                  className="inline-flex items-center gap-2 border border-primary text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
-                  {savePreviewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {savePreviewLoading ? "Validando cambios…" : willOverwrite ? `Guardar cambios en v${selectedDraft?.basedOnVersion}` : "Guardar como nueva versión"}
-                </button>
-                {willOverwrite && (
-                  <button onClick={() => requestSave(true)} disabled={locked}
-                    className="inline-flex items-center gap-2 text-primary px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <Plus className="h-4 w-4" /> Guardar como nueva versión
-                  </button>
-                )}
-              </div>
-
-              {unsaved && (
-                <p className="text-[11px] text-warning">Guarda esta configuración como versión primero — el ciclo de validación corre sobre una versión guardada.</p>
-              )}
-              {willOverwrite && (
-                <p className="text-[11px] text-text-secondary">
-                  Esta versión nunca se ha desplegado a producción — "Guardar cambios" sobrescribe v{selectedDraft?.basedOnVersion} en vez de crear una versión nueva. Usa "Guardar como nueva versión" para conservar v{selectedDraft?.basedOnVersion} y crear v{(selectedDraft?.basedOnVersion ?? 0) + 1} aparte.
-                </p>
-              )}
-
-              {!hasSucceededTestRun && !testRunsQuery.isLoading ? (
-                <p className="text-[11px] text-warning">
-                  Esta configuración no ha sido probada y no puede desplegarse hasta satisfacer esta condición — corre al menos un test en Testing. <Link to="/testing" className="underline">Ir a Testing</Link>
-                </p>
-              ) : (
-                <p className="text-[11px] text-text-secondary">
-                  Guardar no pone la versión en producción. Usa "Desplegar" desde el historial de versiones para llevarla a producción.
-                </p>
-              )}
-
-              {selectedConfig.lastTestResult && !locked && (
-                <div className={`rounded-lg border p-4 ${selectedConfig.lastTestResult.passed ? "border-success/30 bg-success/5" : "border-danger/30 bg-danger/5"}`}>
-                  <div className="flex items-center gap-2 mb-3">
-                    {selectedConfig.lastTestResult.passed ? <ShieldCheck className="h-4 w-4 text-success" /> : <ShieldAlert className="h-4 w-4 text-danger" />}
-                    <span className={`text-[13px] font-semibold ${selectedConfig.lastTestResult.passed ? "text-success" : "text-danger"}`}>
-                      {selectedConfig.lastTestResult.passed ? "Ciclo aprobado" : "Ciclo no aprobado — precisión bajo el umbral (95%)"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4 text-[12px]">
-                    <div>
-                      <p className="text-text-secondary">Precisión</p>
-                      <p className="text-[16px] font-semibold text-text-primary font-mono">{selectedConfig.lastTestResult.accuracy.toFixed(2)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-text-secondary">Alertas evaluadas</p>
-                      <p className="text-[16px] font-semibold text-text-primary font-mono">{selectedConfig.lastTestResult.samples.toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {!selectedConfig.lastTestResult && !locked && (
-                <p className="text-[12px] text-text-secondary">Sin resultados todavía. Corre el ciclo para poder activar esta configuración.</p>
-              )}
-            </div>
-          </section>
-        )}
-
-        {selectedConfig.testState === "testing" && (
-          <div className="flex items-center gap-2.5 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2.5">
-            <Loader2 className="h-4 w-4 text-primary shrink-0 animate-spin" />
-            <p className="text-[12px] text-text-primary">Ciclo de validación en curso — edición bloqueada para evitar comportamiento inconsistente y pérdida de trazabilidad.</p>
-          </div>
-        )}
-
         {scheduledDeploys[selectedConfig.id] && (
           <div className="flex items-center gap-2.5 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2.5">
             <CalendarClock className="h-4 w-4 text-primary shrink-0" />
             <p className="text-[12px] text-text-primary">
-              Despliegue en ventana programado: <span className="font-medium">v{scheduledDeploys[selectedConfig.id].version}</span> se aplicará a las <span className="font-medium">{scheduledDeploys[selectedConfig.id].hour}</span>.
+              Despliegue en ventana programado: <span className="font-medium">{selectedConfig.name}:v{scheduledDeploys[selectedConfig.id].version}</span> se aplicará el <span className="font-medium">{formatMigrationDatetime(scheduledDeploys[selectedConfig.id].hour)}</span>.
             </p>
             <button onClick={() => cancelScheduledDeploy(selectedConfig.id)} className="ml-auto text-[12px] font-medium text-danger hover:underline shrink-0">Cancelar despliegue</button>
           </div>
@@ -878,12 +1025,16 @@ function ConfiguracionPage() {
                     </button>
                   </div>
                   {settings.migrationWindowEnabled && (
-                    <Field label="Hora de migración" hint="Hora del día en que se cierra la cola, se cambia la configuración y se reinicia la operación.">
-                      <div className="flex items-center gap-2 max-w-[180px]">
+                    <Field label="Fecha y hora de migración" hint="Fecha y hora en que se cierra la cola, se cambia la configuración y se reinicia la operación.">
+                      <div className="flex items-center gap-2 max-w-[260px]">
                         <Clock className="h-4 w-4 text-text-secondary shrink-0" />
-                        <input type="time" value={settings.migrationWindowHour} onChange={(e) => patchSettings("general", { migrationWindowHour: e.target.value })}
-                          className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary" />
+                        <input type="datetime-local" min={migrationDatetimeMin} value={settings.migrationWindowDatetime} onChange={(e) => patchSettings("general", { migrationWindowDatetime: e.target.value })}
+                          aria-invalid={migrationDatetimeInvalid}
+                          className={`w-full h-9 rounded-md border px-3 text-[13px] focus:outline-none ${migrationDatetimeInvalid ? "border-danger focus:border-danger" : "border-border focus:border-primary"}`} />
                       </div>
+                      {migrationDatetimeInvalid && (
+                        <p className="text-[12px] text-danger mt-1">Selecciona una fecha y hora al menos 30 minutos en el futuro.</p>
+                      )}
                     </Field>
                   )}
                 </div>
@@ -1107,6 +1258,27 @@ function ConfiguracionPage() {
       </div>
 
 
+      <AlertDialog open={pendingAction !== null} onOpenChange={(open) => { if (!open && !restoring) setPendingAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Restaurar los cambios?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Se descartarán los cambios sin guardar de ${selectedConfig.name} y se restaurará ${selectedDraft?.basedOnVersion != null ? `la versión base v${selectedDraft.basedOnVersion}` : "la configuración inicial del borrador"}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {actionError && <p role="alert" className="text-sm text-danger">{actionError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={restoring || !canRestore} onClick={(event) => {
+              event.preventDefault();
+              void restoreChanges();
+            }}>
+              {restoring ? "Restaurando…" : "Confirmar restauración"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Save confirmation modal — populated by POST /configuration/test. */}
       {pendingSave && (
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
@@ -1116,14 +1288,29 @@ function ConfiguracionPage() {
                 <Save className="h-4 w-4 text-primary" />
                 <h3 className="text-[14px] font-semibold text-text-primary">Confirmar cambios de configuración</h3>
               </div>
-              <button onClick={() => setPendingSave(null)} disabled={createMutation.isPending} className="text-text-secondary hover:text-text-primary disabled:opacity-50">
+              <button onClick={() => setPendingSave(null)} disabled={saving || createMutation.isPending} className="text-text-secondary hover:text-text-primary disabled:opacity-50">
                 <X className="h-4 w-4" />
               </button>
             </div>
             <div className="p-5 space-y-4">
               <p className="text-[12px] text-text-secondary">
-                Revisa los cambios antes de {pendingSave.forceNewVersion ? "crear la nueva versión" : willOverwrite ? `sobrescribir v${selectedDraft?.basedOnVersion}` : "guardar la nueva versión"}.
+                Revisa los cambios antes de {pendingSave.forceNewVersion ? "crear la nueva versión" : willOverwrite ? `sobrescribir ${selectedConfig.name}:v${selectedDraft?.basedOnVersion}` : "guardar la nueva versión"}.
               </p>
+
+              {validationSummary && <p className="text-[12px] text-text-secondary">{validationSummary}</p>}
+
+              {!hasSucceededTestRun && !testRunsQuery.isLoading ? (
+                <div className="flex items-start gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3">
+                  <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                  <p className="text-[12px] text-text-primary">
+                    Guardar no pone esta versión en producción. Además, ARIA aún no ha pasado ningún test — no podrás desplegarla hasta correr al menos uno en Testing. <Link to="/testing" className="underline">Ir a Testing</Link>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-[12px] text-text-secondary">
+                  Guardar no pone esta versión en producción. Usa "Desplegar" desde el historial de versiones para llevarla a producción.
+                </p>
+              )}
 
               {pendingSave.preview.warnings.map((warning) => (
                 <div key={warning} className="flex items-start gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-3">
@@ -1157,11 +1344,11 @@ function ConfiguracionPage() {
               </div>
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-              <button onClick={() => setPendingSave(null)} disabled={createMutation.isPending}
+              <button onClick={() => setPendingSave(null)} disabled={saving || createMutation.isPending}
                 className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface disabled:opacity-50">
                 Cancelar
               </button>
-              <button onClick={confirmSave} disabled={createMutation.isPending}
+              <button onClick={confirmSave} disabled={saving || createMutation.isPending}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
                 {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 {createMutation.isPending ? "Guardando…" : "Confirmar y guardar"}
@@ -1171,6 +1358,35 @@ function ConfiguracionPage() {
         </div>
       )}
 
+
+      {/* Discard-draft confirmation modal — replaces a window.confirm() so it
+          matches every other confirmation in this page. */}
+      {pendingVersionSwitch && (
+        <div className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4" onClick={() => setPendingVersionSwitch(null)}>
+          <div className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <h3 className="text-[14px] font-semibold text-text-primary">Descartar cambios sin guardar</h3>
+              </div>
+              <button onClick={() => setPendingVersionSwitch(null)} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5">
+              <p className="text-[13px] text-text-primary">
+                Tienes cambios sin guardar{pendingVersionSwitch.fromVersion != null ? <> basados en {selectedConfig.name}:v{pendingVersionSwitch.fromVersion}</> : null}. Si continúas, se perderán y se cargará {selectedConfig.name}:v{pendingVersionSwitch.toVersion} para editar.
+              </p>
+            </div>
+            <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
+              <button onClick={() => setPendingVersionSwitch(null)} className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface">Cancelar</button>
+              <button
+                onClick={() => { const { toVersion } = pendingVersionSwitch; setPendingVersionSwitch(null); void applyStartNewVersionFrom(toVersion); }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] bg-danger text-white font-medium hover:bg-danger/90">
+                Descartar y continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New config modal */}
       {newConfigForm && (
@@ -1210,7 +1426,7 @@ function ConfiguracionPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <Rocket className="h-4 w-4 text-primary" />
-                <h3 className="text-[14px] font-semibold text-text-primary">Desplegar v{deployTarget.version} a producción</h3>
+                <h3 className="text-[14px] font-semibold text-text-primary">Desplegar {configs.find((c) => c.id === deployTarget.configId)?.name}:v{deployTarget.version} a producción</h3>
               </div>
               <button onClick={closeDeploy} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
             </div>
@@ -1237,7 +1453,12 @@ function ConfiguracionPage() {
                       <Clock className="h-3.5 w-3.5 text-primary" /> Despliegue en ventana
                     </span>
                     {deployWindowEnabled ? (
-                      <p className="text-[12px] text-text-secondary mt-0.5">Se aplica en la próxima ventana de migración (<span className="font-medium text-text-primary">{deployWindowHour}</span>): ARIA cierra la cola de alertas pendientes, aplica esta versión y reinicia la operación.</p>
+                      <>
+                        <p className="text-[12px] text-text-secondary mt-0.5">Se aplica en la próxima ventana de migración (<span className="font-medium text-text-primary">{formatMigrationDatetime(deployWindowDatetime)}</span>): ARIA cierra la cola de alertas pendientes, aplica esta versión y reinicia la operación.</p>
+                        {!deployWindowDatetimeValid && (
+                          <p className="text-[12px] text-danger mt-1">La ventana debe estar al menos 30 minutos en el futuro. Edita y guarda la configuración antes de programar el despliegue.</p>
+                        )}
+                      </>
                     ) : (
                       <p className="text-[12px] text-text-secondary mt-0.5">Esta versión no tiene ventana de migración configurada. Actívala en la pestaña General para usar esta opción.</p>
                     )}
@@ -1251,16 +1472,27 @@ function ConfiguracionPage() {
                   className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary" />
               </div>
 
+              {/* Task 4 fix: this was a plain warning paragraph, easy to miss
+                  scrolling past it, sitting above a "Desplegar ahora" button
+                  that still looked fully clickable (just disabled:opacity-50
+                  on the same solid primary color) and gave zero feedback on
+                  click. Give it a bordered box right against the button, and
+                  make the button itself switch to a visibly neutral/disabled
+                  look instead of a dimmed version of the active one. */}
               {!hasSucceededTestRun && !testRunsQuery.isLoading && (
-                <p className="text-[12px] text-warning">
-                  Esta configuración no ha sido probada y no puede desplegarse hasta satisfacer esta condición — corre al menos un test en Testing. <Link to="/testing" className="underline">Ir a Testing</Link>
-                </p>
+                <div className="flex items-start gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2.5">
+                  <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                  <p className="text-[12px] text-text-primary">
+                    Esta configuración no ha sido probada y no puede desplegarse hasta satisfacer esta condición — corre al menos un test en Testing. <Link to="/testing" className="underline font-medium">Ir a Testing</Link>
+                  </p>
+                </div>
               )}
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
               <button onClick={closeDeploy} className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface">Cancelar</button>
               <button onClick={confirmDeploy} disabled={!canConfirmDeploy}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
+                title={!hasSucceededTestRun ? "Corre al menos un test en Testing antes de desplegar" : !deployConfirmed ? "Escribe CONFIRMAR para habilitar el despliegue" : undefined}
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium ${canConfirmDeploy ? "bg-primary text-white hover:bg-primary/90" : "bg-border text-text-secondary cursor-not-allowed"}`}>
                 <Rocket className="h-4 w-4" /> {deployMode === "immediate" ? "Desplegar ahora" : "Programar despliegue"}
               </button>
             </div>

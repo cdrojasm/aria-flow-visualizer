@@ -1,4 +1,4 @@
-import { Plus, Settings, Trash2, X } from "lucide-react";
+import { AlertTriangle, Plus, Settings, Trash2, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import type { DistributionValue, SamplingCriterion } from "@/data/configs";
@@ -66,6 +66,23 @@ export function TagInput({ value, onChange, placeholder }: { value: string[]; on
   );
 }
 
+const LARGE_CONTENT_VARIABLES = new Set(["transacciones_json"]);
+
+export function VariableContentSizeWarning({ variables }: { variables: string[] }) {
+  const selected = variables.filter((variable) => LARGE_CONTENT_VARIABLES.has(variable));
+  if (selected.length === 0) return null;
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-text-primary">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+      <p>
+        <span className="font-medium">Contenido potencialmente grande:</span>{" "}
+        <code>{selected.join(", ")}</code> incluye el historial completo de transacciones. Usarlo sin resumir puede aumentar considerablemente los tokens y la latencia; el payload completo de una alerta tiene un límite de 380 KB.
+      </p>
+    </div>
+  );
+}
+
 export function VariablePicker({
   value,
   onChange,
@@ -103,10 +120,11 @@ export function VariablePicker({
           </span>
         ))}
       </div>
+      <VariableContentSizeWarning variables={value} />
       <div className="flex items-center gap-1.5">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar variable…"
           className="flex-1 h-8 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary" />
-        <button type="button" onClick={() => setShowManager(true)} title="Gestionar variables"
+        <button type="button" onClick={() => setShowManager(true)} title="Gestionar variables de origen"
           className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-md border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors">
           <Settings className="h-3.5 w-3.5" />
         </button>

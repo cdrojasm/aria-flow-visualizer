@@ -1,15 +1,16 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChangeEvent, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Play,
   Loader2,
-  Upload,
   Eye,
+  Library,
   Radio,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 
 import {
@@ -20,7 +21,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDatasets, startTestRun, uploadDataset } from "@/lib/api/testing.functions";
+import { getDatasets } from "@/lib/api/datasets.functions";
+import { startTestRun } from "@/lib/api/testing.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
@@ -62,25 +64,6 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
     queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
     enabled: !!expandedConfigId,
   });
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return uploadDataset({ data: formData });
-    },
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["datasets"] });
-      setSelectedDataset(res.name);
-    },
-  });
-
-  function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (file) uploadMutation.mutate(file);
-  }
 
   const parsedSampleSize = sampleSize.trim() ? Number(sampleSize) : undefined;
   const parsedMaxAttempts = maxAttempts.trim() ? Number(maxAttempts) : 2;
@@ -149,26 +132,26 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-text-secondary">Dataset</label>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadMutation.isPending}
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline disabled:opacity-40"
-                >
-                  {uploadMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <Upload className="h-3 w-3" />
-                  )}
-                  Cargar dataset
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={handleFileSelected}
-                  className="hidden"
-                />
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => datasetsQuery.refetch()}
+                    title="Refrescar datasets"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Refrescar
+                  </button>
+                  <a
+                    href="/biblioteca?tab=datasets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    <Library className="h-3 w-3" />
+                    Gestionar en Biblioteca
+                  </a>
+                </div>
               </div>
               {datasetsQuery.isLoading && (
                 <p className="text-[12px] text-text-secondary py-2">Cargando datasets…</p>
@@ -200,11 +183,6 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                     <Eye className="h-3.5 w-3.5" /> Ver detalle
                   </button>
                 </div>
-              )}
-              {uploadMutation.isError && (
-                <p className="text-[11px] text-danger mt-1">
-                  {(uploadMutation.error as Error).message}
-                </p>
               )}
             </div>
 
@@ -302,7 +280,7 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                         >
                           <div className="min-w-0">
                             <span className="text-[13px] font-medium text-text-primary truncate">
-                              {c.name}:{pickedVersion}
+                              {c.name}:v{pickedVersion}
                             </span>
                             <p className="text-[11px] text-text-secondary truncate mt-0.5">
                               {c.description}
@@ -365,7 +343,7 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                                       className={`w-full flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 text-left transition-colors ${versionSelected ? "bg-primary/10" : "hover:bg-surface"}`}
                                     >
                                       <span className="text-[12px] text-text-primary">
-                                        v{v.version}
+                                        {c.name}:v{v.version}
                                       </span>
                                       {v.active && (
                                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
@@ -412,7 +390,6 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
         datasetName={selectedDataset}
         open={showDatasetDetail}
         onClose={() => setShowDatasetDetail(false)}
-        onDeleted={() => setSelectedDataset(null)}
       />
     </>
   );

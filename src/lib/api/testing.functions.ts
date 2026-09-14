@@ -1,28 +1,19 @@
-import { apiFetch, API_BASE } from "./client";
+import { apiFetch } from "./client";
 
 // Client functions wrapping the backend's batch-test-run API
 // (../backend, base path /api/v0 — see its CLAUDE.md for the hexagonal
 // layout, not relevant here since we only call the HTTP surface).
 
+export { getDatasets, uploadDataset, getDatasetSummary, deleteDataset } from "./datasets.functions";
+export type {
+  DatasetRecord,
+  DatasetStatus,
+  FieldDistribution,
+  DatasetSummaryResponse,
+} from "./datasets.functions";
+
 export type TestRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type StepStatus = "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-
-export type DatasetRecord = { name: string; row_count: number };
-
-export type DatasetStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED";
-
-export type FieldDistribution = { value: string; count: number; percentage: number };
-
-export type DatasetSummaryResponse = {
-  dataset_name: string;
-  status: DatasetStatus;
-  total_rows: number;
-  field_distributions: Record<string, FieldDistribution[]>;
-  available_fields: string[];
-  uploaded_at: string | null;
-  updated_at: string | null;
-  error: string | null;
-};
 
 // null = this run tested whatever configuration was active at dispatch
 // time (the only behavior before configuration_ref existed).
@@ -130,41 +121,6 @@ export type TestCaseDetailResponse = {
   output_tokens: number;
   steps: WorkflowStepResponse[];
 };
-
-export function getDatasets(): Promise<DatasetRecord[]> {
-  return apiFetch("/api/v0/datasets");
-}
-
-// FormData payload (the uploaded CSV file) - bypasses apiFetch's forced
-// JSON Content-Type so the browser's multipart boundary reaches the
-// backend intact.
-export async function uploadDataset({
-  data,
-}: {
-  data: FormData;
-}): Promise<{ name: string; status: DatasetStatus }> {
-  const res = await fetch(`${API_BASE}/api/v0/datasets`, { method: "POST", body: data });
-  if (!res.ok) {
-    throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<{ name: string; status: DatasetStatus }>;
-}
-
-export function getDatasetSummary({
-  data,
-}: {
-  data: { name: string };
-}): Promise<DatasetSummaryResponse> {
-  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`);
-}
-
-export function deleteDataset({
-  data,
-}: {
-  data: { name: string };
-}): Promise<{ name: string; deleted: boolean }> {
-  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}`, { method: "DELETE" });
-}
 
 export function listTestRuns({
   data,

@@ -1,13 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import {
-  ChevronRight, AlertTriangle, Check, ChevronDown, Clock,
+  ChevronRight, AlertTriangle, Check, ChevronDown, ChevronUp, Clock, Loader2,
   RefreshCw, ExternalLink, GitBranch, ShieldCheck, Sparkles, Database, X,
-  UserPlus, Pencil, KeyRound, ArrowLeftRight,
+  UserPlus, Pencil, KeyRound, ArrowLeftRight, Radio,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { curateAlertToDataset } from "@/lib/api/alerts.functions";
+import { getDatasets } from "@/lib/api/datasets.functions";
+import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
 
 export const Route = createFileRoute("/alerta/$id")({
   head: () => ({
@@ -688,8 +692,75 @@ const ACTION_META: Record<NonNullable<ActionKind>, { title: string; cta: string;
 
 function ActionModal({ action, alertId, onClose }: { action: NonNullable<ActionKind>; alertId: string; onClose: () => void }) {
   const [text, setText] = useState("");
+  const [selectedDataset, setSelectedDataset] = useState("");
+  // Configuration/version this curation's Feedback record attributes to.
+  // null lineage = "Detectar automáticamente" (the default) - the backend
+  // tries to infer it from the alert's origin test run and 400s asking for
+  // a manual pick if it can't. Same null-lineage / null-version shape as
+  // NewTestRunModal.tsx's own picker.
+  const [selectedConfigurationId, setSelectedConfigurationId] = useState<string | null>(null);
+  const [selectedConfigVersion, setSelectedConfigVersion] = useState<number | null>(null);
+  const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const meta = ACTION_META[action];
-  const disabled = text.trim().length < 20;
+
+  const queryClient = useQueryClient();
+  // Only the "dataset" action is wired to a real backend call today -
+  // "fraud"/"fp" remain mock UI (no alert-actions endpoint exists yet for
+  // those; building one is a separate, larger decision than this feature).
+  const datasetsQuery = useQuery({
+    queryKey: ["datasets"],
+    queryFn: () => getDatasets(),
+    enabled: action === "dataset",
+  });
+  const configurationsQuery = useQuery({
+    queryKey: ["configurations"],
+    queryFn: () => listConfigurations(),
+    enabled: action === "dataset",
+  });
+  const configVersionsQuery = useQuery({
+    queryKey: ["configurationVersions", expandedConfigId],
+    queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
+    enabled: action === "dataset" && !!expandedConfigId,
+  });
+
+  const configurations = configurationsQuery.data ?? [];
+  const selectedConfigurationLineage = configurations.find(
+    (c) => c.configuration_id === selectedConfigurationId,
+  );
+  // Version to actually attribute the Feedback record to: the one
+  // explicitly picked from the lineage's history, else the lineage's
+  // latest (list's own row) - same logic as NewTestRunModal.tsx.
+  const selectedConfiguration =
+    selectedConfigurationLineage && selectedConfigVersion != null
+      ? { ...selectedConfigurationLineage, version: selectedConfigVersion }
+      : selectedConfigurationLineage;
+
+  const curateMutation = useMutation({
+    mutationFn: () =>
+      curateAlertToDataset({
+        data: {
+          alertId,
+          datasetName: selectedDataset,
+          justification: text.trim(),
+          ...(selectedConfiguration
+            ? {
+                configurationId: selectedConfiguration.configuration_id,
+                version: selectedConfiguration.version,
+              }
+            : {}),
+        },
+      }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      queryClient.invalidateQueries({ queryKey: ["datasetSummary", res.dataset_name] });
+      onClose();
+    },
+  });
+
+  const disabled =
+    text.trim().length < 20 ||
+    (action === "dataset" && !selectedDataset) ||
+    curateMutation.isPending;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -701,22 +772,196 @@ function ActionModal({ action, alertId, onClose }: { action: NonNullable<ActionK
           </div>
           <button onClick={onClose} className="text-text-secondary hover:text-text-primary"><X className="h-4 w-4" /></button>
         </div>
-        <div className="px-5 py-4">
-          <label className="text-[11px] uppercase tracking-wider text-text-secondary">
-            Justificación <span className="text-danger normal-case tracking-normal">(mín. 20 caracteres)</span>
-          </label>
-          <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={500} rows={4}
-            placeholder="Describe brevemente la evidencia y el criterio aplicado…"
-            className="mt-2 w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/30" />
-          <div className="mt-1 flex justify-between text-[11px] text-text-secondary tabular-nums">
-            <span>{text.trim().length} / 20 mínimo</span>
-            <span>{text.length} / 500</span>
+        <div className="px-5 py-4 space-y-3">
+          {action === "dataset" && (
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-text-secondary">
+                Dataset destino
+              </label>
+              {datasetsQuery.isLoading && (
+                <p className="mt-1 text-[12px] text-text-secondary">Cargando datasets…</p>
+              )}
+              {datasetsQuery.isError && (
+                <p className="mt-1 text-[12px] text-danger">No se pudieron cargar los datasets.</p>
+              )}
+              {datasetsQuery.isSuccess && (
+                <select
+                  value={selectedDataset}
+                  onChange={(e) => setSelectedDataset(e.target.value)}
+                  className="mt-1 w-full h-9 rounded-lg border border-border bg-card px-3 text-[13px] text-text-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="">Selecciona un dataset…</option>
+                  {datasetsQuery.data.map((d) => (
+                    <option key={d.name} value={d.name}>
+                      {d.name} ({d.row_count} filas)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+          {action === "dataset" && (
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-text-secondary">
+                Configuración a atribuir
+              </label>
+              <div className="mt-1 border border-border rounded-lg overflow-hidden">
+                <div className="max-h-48 overflow-y-auto divide-y divide-border">
+                  {configurationsQuery.isLoading && (
+                    <p className="px-3 py-2.5 text-[12px] text-text-secondary">
+                      Cargando configuraciones…
+                    </p>
+                  )}
+                  {configurationsQuery.isError && (
+                    <p className="px-3 py-2.5 text-[12px] text-danger">
+                      No se pudieron cargar las configuraciones.
+                    </p>
+                  )}
+                  {configurationsQuery.isSuccess && configurations.length === 0 && (
+                    <p className="px-3 py-2.5 text-[12px] text-text-secondary">
+                      Aún no hay configuraciones creadas.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedConfigurationId(null);
+                      setSelectedConfigVersion(null);
+                      setExpandedConfigId(null);
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${
+                      selectedConfigurationId === null ? "bg-primary/5" : "hover:bg-surface"
+                    }`}
+                  >
+                    <span className="text-[13px] font-medium text-text-primary">
+                      Detectar automáticamente
+                    </span>
+                  </button>
+                  {configurations.map((c) => {
+                    const selected = c.configuration_id === selectedConfigurationId;
+                    const expanded = c.configuration_id === expandedConfigId;
+                    const pickedVersion =
+                      selected && selectedConfigVersion != null ? selectedConfigVersion : c.version;
+                    return (
+                      <div key={c.configuration_id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedConfigurationId(c.configuration_id);
+                            setSelectedConfigVersion(null);
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left transition-colors ${selected ? "bg-primary/5" : "hover:bg-surface"}`}
+                        >
+                          <div className="min-w-0">
+                            <span className="text-[13px] font-medium text-text-primary truncate">
+                              {c.name}:v{pickedVersion}
+                            </span>
+                            <p className="text-[11px] text-text-secondary truncate mt-0.5">
+                              {c.description}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {c.active && pickedVersion === c.version && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success">
+                                <Radio className="h-3.5 w-3.5" /> Producción
+                              </span>
+                            )}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title="Ver otras versiones"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedConfigId(expanded ? null : c.configuration_id);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.stopPropagation();
+                                setExpandedConfigId(expanded ? null : c.configuration_id);
+                              }}
+                              className="p-0.5 text-text-secondary hover:text-text-primary"
+                            >
+                              {expanded ? (
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              )}
+                            </span>
+                          </div>
+                        </button>
+                        {expanded && (
+                          <div className="bg-surface/60 divide-y divide-border border-t border-border">
+                            {configVersionsQuery.isLoading && (
+                              <p className="px-3 py-2 pl-6 text-[11px] text-text-secondary">
+                                Cargando versiones…
+                              </p>
+                            )}
+                            {configVersionsQuery.isError && (
+                              <p className="px-3 py-2 pl-6 text-[11px] text-danger">
+                                No se pudieron cargar las versiones.
+                              </p>
+                            )}
+                            {configVersionsQuery.isSuccess &&
+                              [...configVersionsQuery.data]
+                                .sort((a, b) => b.version - a.version)
+                                .map((v) => {
+                                  const versionSelected = selected && pickedVersion === v.version;
+                                  return (
+                                    <button
+                                      key={v.version}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedConfigurationId(c.configuration_id);
+                                        setSelectedConfigVersion(v.version);
+                                      }}
+                                      className={`w-full flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 text-left transition-colors ${versionSelected ? "bg-primary/10" : "hover:bg-surface"}`}
+                                    >
+                                      <span className="text-[12px] text-text-primary">
+                                        {c.name}:v{v.version}
+                                      </span>
+                                      {v.active && (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success shrink-0">
+                                          <Radio className="h-3.5 w-3.5" /> Producción
+                                        </span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="mt-1 text-[11px] text-text-secondary">
+                Si no se puede detectar automáticamente, selecciona una configuración específica.
+              </p>
+            </div>
+          )}
+          <div>
+            <label className="text-[11px] uppercase tracking-wider text-text-secondary">
+              Justificación <span className="text-danger normal-case tracking-normal">(mín. 20 caracteres)</span>
+            </label>
+            <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={500} rows={4}
+              placeholder="Describe brevemente la evidencia y el criterio aplicado…"
+              className="mt-2 w-full resize-none rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/30" />
+            <div className="mt-1 flex justify-between text-[11px] text-text-secondary tabular-nums">
+              <span>{text.trim().length} / 20 mínimo</span>
+              <span>{text.length} / 500</span>
+            </div>
           </div>
+          {curateMutation.isError && (
+            <p className="text-[12px] text-danger">
+              {(curateMutation.error as Error).message}
+            </p>
+          )}
         </div>
         <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 rounded-lg border border-border text-[13px] font-medium text-text-primary hover:bg-surface">Cancelar</button>
-          <button disabled={disabled} onClick={onClose}
-            className={`h-9 px-4 rounded-lg text-white text-[13px] font-medium transition-opacity ${meta.tone} ${disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-90"}`}>
+          <button disabled={disabled} onClick={() => (action === "dataset" ? curateMutation.mutate() : onClose())}
+            className={`h-9 px-4 rounded-lg text-white text-[13px] font-medium transition-opacity inline-flex items-center gap-1.5 ${meta.tone} ${disabled ? "opacity-40 cursor-not-allowed" : "hover:opacity-90"}`}>
+            {curateMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {meta.cta}
           </button>
         </div>
