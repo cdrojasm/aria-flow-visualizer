@@ -24,7 +24,7 @@ const SUBTAB_META: { key: AgentSubTab; label: string }[] = [
   { key: "classification", label: "Clasificación" },
   { key: "adversarial", label: "Adversarial" },
   { key: "analyst", label: "Analista" },
-  { key: "documentation", label: "Documentación" },
+  { key: "documentation", label: "Descripción de campos" },
   { key: "modelo", label: "Modelo" },
 ];
 

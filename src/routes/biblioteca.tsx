@@ -46,6 +46,8 @@ import {
 import { WatchlistManager } from "@/components/biblioteca/WatchlistManager";
 import { DatasetLibraryManager } from "@/components/biblioteca/DatasetLibraryManager";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { usePagination } from "@/hooks/usePagination";
 
 export const Route = createFileRoute("/biblioteca")({
   head: () => ({
@@ -119,6 +121,10 @@ function BibliotecaPage() {
   const modusOperandi = modusOperandiQuery.data ?? [];
   const flags = flagsQuery.data ?? [];
   const similarCases = similarCasesQuery.data ?? [];
+  const taxonomiesPage = usePagination(taxonomies, 10);
+  const modusOperandiPage = usePagination(modusOperandi, 10);
+  const flagsPage = usePagination(flags, 10);
+  const similarCasesPage = usePagination(similarCases, 10);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["libraryTaxonomies"] });
@@ -135,6 +141,7 @@ function BibliotecaPage() {
     queryFn: () => listChannelLibraryEntries({ data: { activeOnly: false } }),
   });
   const channels = channelsQuery.data ?? [];
+  const channelsPage = usePagination(channels, 10);
   const invalidateChannels = () => queryClient.invalidateQueries({ queryKey: ["channelLibrary"] });
 
   const [editingChannel, setEditingChannel] = useState<Partial<ChannelLibraryEntry> | null>(null);
@@ -404,7 +411,7 @@ function BibliotecaPage() {
                 </tr>
               </thead>
               <tbody>
-                {channels.map((c) => (
+                {channelsPage.pageItems.map((c) => (
                   <tr
                     key={c.id}
                     className="border-b border-border last:border-0 hover:bg-surface align-top"
@@ -452,6 +459,14 @@ function BibliotecaPage() {
                 )}
               </tbody>
             </table>
+            <PaginationFooter
+              page={channelsPage.page}
+              pageCount={channelsPage.pageCount}
+              total={channelsPage.total}
+              pageSize={channelsPage.pageSize}
+              onPageChange={channelsPage.setPage}
+              itemLabel="canal"
+            />
           </section>
         )}
 
@@ -570,7 +585,7 @@ function BibliotecaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {taxonomies.map((t) => (
+                  {taxonomiesPage.pageItems.map((t) => (
                     <tr
                       key={t.id}
                       className="border-b border-border last:border-0 hover:bg-surface align-top"
@@ -618,6 +633,14 @@ function BibliotecaPage() {
                   )}
                 </tbody>
               </table>
+              <PaginationFooter
+                page={taxonomiesPage.page}
+                pageCount={taxonomiesPage.pageCount}
+                total={taxonomiesPage.total}
+                pageSize={taxonomiesPage.pageSize}
+                onPageChange={taxonomiesPage.setPage}
+                itemLabel="taxonomía"
+              />
             </section>
 
             {/* Modus operandi */}
@@ -646,7 +669,7 @@ function BibliotecaPage() {
                 </button>
               </div>
               <div className="divide-y divide-border">
-                {modusOperandi.map((m) => {
+                {modusOperandiPage.pageItems.map((m) => {
                   const tax = taxonomies.find((t) => t.id === m.taxonomy_library_id);
                   return (
                     <div key={m.id} className="px-6 py-3 flex items-start justify-between gap-4">
@@ -683,6 +706,14 @@ function BibliotecaPage() {
                   </p>
                 )}
               </div>
+              <PaginationFooter
+                page={modusOperandiPage.page}
+                pageCount={modusOperandiPage.pageCount}
+                total={modusOperandiPage.total}
+                pageSize={modusOperandiPage.pageSize}
+                onPageChange={modusOperandiPage.setPage}
+                itemLabel="modus operandi"
+              />
             </section>
 
             {/* Flags */}
@@ -713,7 +744,7 @@ function BibliotecaPage() {
                 </button>
               </div>
               <div className="divide-y divide-border">
-                {flags.map((f) => (
+                {flagsPage.pageItems.map((f) => (
                   <div key={f.id} className="px-6 py-3 flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -764,6 +795,14 @@ function BibliotecaPage() {
                   </p>
                 )}
               </div>
+              <PaginationFooter
+                page={flagsPage.page}
+                pageCount={flagsPage.pageCount}
+                total={flagsPage.total}
+                pageSize={flagsPage.pageSize}
+                onPageChange={flagsPage.setPage}
+                itemLabel="flag"
+              />
             </section>
 
             {/* Casos similares */}
@@ -792,7 +831,7 @@ function BibliotecaPage() {
                 </button>
               </div>
               <div className="divide-y divide-border">
-                {similarCases.map((c) => {
+                {similarCasesPage.pageItems.map((c) => {
                   const mo = modusOperandi.find((m) => m.id === c.modus_operandi_library_id);
                   return (
                     <div key={c.id} className="px-6 py-3 flex items-start justify-between gap-4">
@@ -828,6 +867,14 @@ function BibliotecaPage() {
                   </p>
                 )}
               </div>
+              <PaginationFooter
+                page={similarCasesPage.page}
+                pageCount={similarCasesPage.pageCount}
+                total={similarCasesPage.total}
+                pageSize={similarCasesPage.pageSize}
+                onPageChange={similarCasesPage.setPage}
+                itemLabel="caso"
+              />
             </section>
           </>
         )}
@@ -1272,6 +1319,7 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
     queryFn: () => listTags({ data: { category, activeOnly: false } }),
   });
   const tags = tagsQuery.data ?? [];
+  const tagsPage = usePagination(tags, 10);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["tags", category] });
 
   const [newValue, setNewValue] = useState("");
@@ -1337,7 +1385,7 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
           </tr>
         </thead>
         <tbody>
-          {tags.map((t) => (
+          {tagsPage.pageItems.map((t) => (
             <tr key={t.id} className="border-b border-border last:border-0 hover:bg-surface">
               <td
                 className={`px-6 py-3 ${t.active ? "text-text-primary" : "text-text-secondary line-through"}`}
@@ -1373,6 +1421,14 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
           )}
         </tbody>
       </table>
+      <PaginationFooter
+        page={tagsPage.page}
+        pageCount={tagsPage.pageCount}
+        total={tagsPage.total}
+        pageSize={tagsPage.pageSize}
+        onPageChange={tagsPage.setPage}
+        itemLabel="valor"
+      />
       <ConfirmDeleteDialog
         open={!!deletingTag}
         onOpenChange={(open) => !open && setDeletingTag(null)}

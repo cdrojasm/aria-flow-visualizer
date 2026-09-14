@@ -257,6 +257,8 @@ function ColaPage() {
   const sortedProceso = useSortedRows(filteredProceso, sortKey, sortDir);
   const sortedPending = useSortedRows(filteredPending, sortKey, sortDir);
 
+  // Each tab has independent pagination, so changing tabs preserves the
+  // user's position in the other list.
   const proceso = usePagination(sortedProceso, 10);
   const pending = usePagination(sortedPending, 10);
 

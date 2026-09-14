@@ -7,8 +7,10 @@ import { useState } from "react";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { Progress } from "@/components/ui/progress";
 import { SectionTabs } from "@/components/ui/section-tabs";
+import { usePagination } from "@/hooks/usePagination";
 import { listAsyncOperations } from "@/lib/api/asyncOperations.functions";
 import {
   activateModel,
@@ -67,6 +69,7 @@ function ModelosPage() {
     models.find((model) => model.active) ??
     models[0] ??
     null;
+  const modelsPage = usePagination(models, 10);
 
   // "current training progress" table (task 7): the generic
   // /async-operations abstraction is the source of truth for progress
@@ -219,7 +222,7 @@ function ModelosPage() {
                     </td>
                   </tr>
                 )}
-                {models.map((m) => (
+                {modelsPage.pageItems.map((m) => (
                   <tr key={m.id} className="border-b border-border last:border-0">
                     <td className="px-6 py-3">
                       <button
@@ -301,6 +304,14 @@ function ModelosPage() {
                 ))}
               </tbody>
             </table>
+            <PaginationFooter
+              page={modelsPage.page}
+              pageCount={modelsPage.pageCount}
+              total={modelsPage.total}
+              pageSize={modelsPage.pageSize}
+              onPageChange={modelsPage.setPage}
+              itemLabel="modelo"
+            />
           </section>
         )}
 

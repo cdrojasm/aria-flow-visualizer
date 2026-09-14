@@ -1,9 +1,11 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import {
   Play,
   Loader2,
+  Upload,
+  Download,
   Eye,
   ExternalLink,
   Radio,
@@ -21,8 +23,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { startTestRun } from "@/lib/api/testing.functions";
-import { getDatasets } from "@/lib/api/datasets.functions";
+import { getDatasets, uploadDataset } from "@/lib/api/datasets.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
+import { downloadSampleDatasetCsv } from "@/lib/sampleDataset";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
 /* ─── New test run, extracted from testing/index.tsx (Phase B) ──────────
@@ -63,6 +66,25 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
     queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
     enabled: !!expandedConfigId,
   });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      return uploadDataset({ data: formData });
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      setSelectedDataset(res.name);
+    },
+  });
+
+  function handleFileSelected(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) uploadMutation.mutate(file);
+  }
 
   const parsedSampleSize = sampleSize.trim() ? Number(sampleSize) : undefined;
   const parsedMaxAttempts = maxAttempts.trim() ? Number(maxAttempts) : 2;
@@ -129,14 +151,30 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="text-[11px] text-text-secondary">Dataset</label>
-                <Link
-                  to="/biblioteca"
-                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-                >
-                  Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
-                </Link>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={downloadSampleDatasetCsv}
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    <Download className="h-3 w-3" /> Descargar dataset
+                  </button>
+                  <Link
+                    to="/biblioteca"
+                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelected}
+                  className="hidden"
+                />
               </div>
               {datasetsQuery.isLoading && (
                 <p className="text-[12px] text-text-secondary py-2">Cargando datasets…</p>
@@ -160,6 +198,19 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                   </select>
                   <button
                     type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadMutation.isPending}
+                    title="Cargar dataset"
+                    className="inline-flex items-center justify-center text-primary border border-primary/30 rounded-md p-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                  >
+                    {uploadMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setShowDatasetDetail(true)}
                     disabled={!selectedDataset}
                     title="Ver detalle del dataset"
@@ -168,6 +219,11 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                     <Eye className="h-3.5 w-3.5" /> Ver detalle
                   </button>
                 </div>
+              )}
+              {uploadMutation.isError && (
+                <p className="text-[11px] text-danger mt-1">
+                  {(uploadMutation.error as Error).message}
+                </p>
               )}
             </div>
 

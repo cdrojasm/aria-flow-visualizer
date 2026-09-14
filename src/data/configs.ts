@@ -7,6 +7,7 @@ import {
   emptyConfiguration,
   type FeatureConfiguration,
 } from "@/lib/api/feature-recipes.functions";
+import { createId } from "@/lib/createId";
 
 /* ─── Types ──────────────────────────────────────────── */
 
