@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ChangeEvent, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import {
   Play,
   Loader2,
@@ -37,6 +37,18 @@ import { DatasetDetailModal } from "./DatasetDetailModal";
    the new run's detail page itself on success - the parent only needs
    `open`/`onClose`. */
 
+// Remembers the last configuración/versión picked across modal openings
+// (and page reloads) - per the useRole.ts/configuracion.tsx localStorage
+// convention. Dataset/name/sample-size intentionally aren't persisted here:
+// those are per-run inputs, not a standing choice like which configuration
+// lineage to test against.
+const CONFIG_SELECTION_STORAGE_KEY = "aria.new-test-run.config-selection.v1";
+
+type PersistedConfigSelection = {
+  selectedConfigurationId: string | null;
+  selectedConfigVersion: number | null;
+};
+
 export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -55,6 +67,43 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
   // user expands a lineage's version history and picks an older one.
   const [selectedConfigVersion, setSelectedConfigVersion] = useState<number | null>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
+  const [configSelectionHydrated, setConfigSelectionHydrated] = useState(false);
+
+  // Restore the last-used configuración/versión once on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CONFIG_SELECTION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedConfigSelection>;
+        if (typeof parsed.selectedConfigurationId === "string") {
+          setSelectedConfigurationId(parsed.selectedConfigurationId);
+        }
+        if (typeof parsed.selectedConfigVersion === "number") {
+          setSelectedConfigVersion(parsed.selectedConfigVersion);
+        }
+      }
+    } catch {
+      // localStorage no disponible o corrupto - se queda en los valores por defecto.
+    } finally {
+      setConfigSelectionHydrated(true);
+    }
+  }, []);
+
+  // Persist on every change, once past the restore above (otherwise this
+  // fires first on the blank initial state and overwrites storage before
+  // the restore effect's setState calls above ever take effect).
+  useEffect(() => {
+    if (!configSelectionHydrated) return;
+    try {
+      const toPersist: PersistedConfigSelection = {
+        selectedConfigurationId,
+        selectedConfigVersion,
+      };
+      localStorage.setItem(CONFIG_SELECTION_STORAGE_KEY, JSON.stringify(toPersist));
+    } catch {
+      // localStorage no disponible - la preferencia solo dura la sesión actual.
+    }
+  }, [configSelectionHydrated, selectedConfigurationId, selectedConfigVersion]);
 
   const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
   const configurationsQuery = useQuery({
@@ -156,7 +205,7 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={downloadSampleDatasetCsv}
+                    onClick={() => downloadSampleDatasetCsv()}
                     className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
                   >
                     <Download className="h-3 w-3" /> Descargar dataset

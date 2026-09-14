@@ -266,6 +266,11 @@ function BibliotecaPage() {
       setDeletingMO(null);
     },
   });
+  const toggleMOActive = useMutation({
+    mutationFn: (entry: ModusOperandiLibraryEntry) =>
+      updateModusOperandiLibraryEntry({ data: { entryId: entry.id, active: !entry.active } }),
+    onSuccess: invalidateAll,
+  });
 
   // --- Flags ------------------------------------------------------------------
   const [editingFlag, setEditingFlag] = useState<Partial<FlagLibraryEntry> | null>(null);
@@ -306,6 +311,11 @@ function BibliotecaPage() {
       setDeletingFlag(null);
     },
   });
+  const toggleFlagActive = useMutation({
+    mutationFn: (entry: FlagLibraryEntry) =>
+      updateFlagLibraryEntry({ data: { entryId: entry.id, active: !entry.active } }),
+    onSuccess: invalidateAll,
+  });
 
   // --- Similar cases ------------------------------------------------------------
   const [editingCase, setEditingCase] = useState<Partial<SimilarCaseLibraryEntry> | null>(null);
@@ -342,6 +352,11 @@ function BibliotecaPage() {
       invalidateAll();
       setDeletingCase(null);
     },
+  });
+  const toggleCaseActive = useMutation({
+    mutationFn: (entry: SimilarCaseLibraryEntry) =>
+      updateSimilarCaseLibraryEntry({ data: { entryId: entry.id, active: !entry.active } }),
+    onSuccess: invalidateAll,
   });
 
   const modusOperandiForTaxonomy = (taxonomyLibraryId?: string) =>
@@ -680,7 +695,13 @@ function BibliotecaPage() {
                           {tax ? tax.code : "Taxonomía eliminada"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => toggleMOActive.mutate(m)}
+                          className={`text-[11px] uppercase tracking-wider ${m.active ? "text-success" : "text-text-secondary"}`}
+                        >
+                          {m.active ? "Activo" : "Inactivo"}
+                        </button>
                         <button
                           onClick={() => {
                             setEditingMO({ ...m });
@@ -770,7 +791,13 @@ function BibliotecaPage() {
                         })}
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => toggleFlagActive.mutate(f)}
+                        className={`text-[11px] uppercase tracking-wider ${f.active ? "text-success" : "text-text-secondary"}`}
+                      >
+                        {f.active ? "Activa" : "Inactiva"}
+                      </button>
                       <button
                         onClick={() => {
                           setEditingFlag({ ...f });
@@ -841,7 +868,13 @@ function BibliotecaPage() {
                           {mo ? mo.title : "Modus operandi eliminado"}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => toggleCaseActive.mutate(c)}
+                          className={`text-[11px] uppercase tracking-wider ${c.active ? "text-success" : "text-text-secondary"}`}
+                        >
+                          {c.active ? "Activo" : "Inactivo"}
+                        </button>
                         <button
                           onClick={() => {
                             setEditingCase({ ...c });
