@@ -1,5 +1,17 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck, History, Library, BrainCircuit } from "lucide-react";
+import {
+  LayoutDashboard,
+  Inbox,
+  Settings,
+  GaugeCircle,
+  FlaskConical,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  History,
+  Library,
+  BrainCircuit,
+} from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
 
 const nav = [
@@ -13,7 +25,13 @@ const nav = [
   { to: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
-export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHealthy }: {
+export function AppSidebar({
+  collapsed,
+  onToggle,
+  role,
+  onOpenRoleModal,
+  apiHealthy,
+}: {
   collapsed: boolean;
   onToggle: () => void;
   role: Role | null | undefined;
@@ -24,7 +42,9 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
   const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
 
   return (
-    <aside className={`fixed inset-y-0 left-0 ${collapsed ? "w-14" : "w-[220px]"} bg-sidebar text-sidebar-foreground flex flex-col z-20 transition-all duration-200`}>
+    <aside
+      className={`fixed inset-y-0 left-0 ${collapsed ? "w-14" : "w-[220px]"} bg-sidebar text-sidebar-foreground flex flex-col z-20 transition-all duration-200`}
+    >
       <div className="h-16 flex items-center justify-between px-3">
         {!collapsed && (
           <span className="flex items-center gap-2 text-[18px] font-bold tracking-tight px-2">
@@ -41,7 +61,8 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
       </div>
       <nav className="flex-1 px-2 space-y-1">
         {visibleNav.map((item) => {
-          const active = pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
+          const active =
+            pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
           const Icon = item.icon;
           const itemClasses = `flex items-center gap-3 px-3 py-2 rounded-md text-[13px] transition-colors ${
             active ? "bg-sidebar-accent font-medium" : "hover:bg-white/10"
@@ -49,7 +70,11 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
 
           if (!apiHealthy) {
             return (
-              <span key={item.to} title="No disponible — servicio API caído" className={itemClasses}>
+              <span
+                key={item.to}
+                title="No disponible — servicio API caído"
+                className={itemClasses}
+              >
                 <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </span>
@@ -81,7 +106,9 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
           {!collapsed && (
             <div className="min-w-0 text-left">
               <div className="text-[13px] font-medium truncate">María Rodríguez</div>
-              <div className="text-[11px] text-white/70 truncate">{role ? ROLE_LABELS[role] : "Supervisor"}</div>
+              <div className="text-[11px] text-white/70 truncate">
+                {role ? ROLE_LABELS[role] : "Supervisor"}
+              </div>
             </div>
           )}
         </button>
@@ -91,7 +118,9 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
               {apiHealthy && (
                 <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 animate-ping" />
               )}
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${apiHealthy ? "bg-success" : "bg-danger"}`} />
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${apiHealthy ? "bg-success" : "bg-danger"}`}
+              />
             </span>
             ARIA Agente · {apiHealthy ? "Operativo" : "No disponible"}
           </div>

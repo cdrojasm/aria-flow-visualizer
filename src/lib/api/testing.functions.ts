@@ -3,14 +3,9 @@ import { apiFetch } from "./client";
 // Client functions wrapping the backend's batch-test-run API
 // (../backend, base path /api/v0 — see its CLAUDE.md for the hexagonal
 // layout, not relevant here since we only call the HTTP surface).
-
-export { getDatasets, uploadDataset, getDatasetSummary, deleteDataset } from "./datasets.functions";
-export type {
-  DatasetRecord,
-  DatasetStatus,
-  FieldDistribution,
-  DatasetSummaryResponse,
-} from "./datasets.functions";
+// Dataset CRUD (getDatasets/uploadDataset/getDatasetSummary/deleteDataset)
+// used to live here too - moved to datasets.functions.ts, the canonical
+// module for the full dataset API surface (see DATASETS_LIBRARY_DESIGN.md).
 
 export type TestRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type StepStatus = "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";

@@ -1,3 +1,4 @@
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from "react";
@@ -70,10 +71,23 @@ const CHANGE_SECTION_LABELS: Record<string, string> = {
 
 const MIN_MIGRATION_LEAD_TIME_MS = 30 * 60 * 1000;
 
+// Sentinel "Basada en" value for the New config modal's explicit
+// "start from defaults" choice - distinct from "" so it's never confused
+// with an unselected/loading state, and picked as a real option instead of
+// only working by accident when configListItems happens to be empty.
+const NEW_CONFIG_NONE_BASE_ID = "__none__";
+
 // Persists the in-progress editing state (drafts + which config/version/tab
 // was open) so a refresh doesn't wipe unsaved work — mirrors the
 // try/catch-guarded localStorage convention in useRole.ts / ColumnVisibilityMenu.tsx.
-const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState";
+// Versioned suffix (matches aria.model-training.draft.v1's convention):
+// DraftState embeds ConfigSettings, whose shape changes over time (e.g. the
+// ProfilingConfig.fieldCategorizations -> fieldEnrichment migration) — a
+// draft persisted under an older shape must never be restored as-is (it
+// crashes components expecting the current shape). Bump this suffix on any
+// future breaking ConfigSettings change; an old key is simply never read
+// again and hydration falls back to defaults, same as "no draft yet".
+const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState.v2";
 
 const formatDatetimeLocal = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -185,7 +199,10 @@ function ConfiguracionPage() {
   const [localConfigs, setLocalConfigs] = useState<{ id: string; name: string; description: string }[]>([]);
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
 
-  const [newConfigForm, setNewConfigForm] = useState<{ name: string; baseId: string } | null>(null);
+  // baseVersion "latest" clones the base config's current draft (if one is
+  // open) or its latest saved version - a specific number pins one exact
+  // historical version instead, fetched fresh regardless of any open draft.
+  const [newConfigForm, setNewConfigForm] = useState<{ name: string; baseId: string; baseVersion: number | "latest" } | null>(null);
   const [configPickerCollapsed, setConfigPickerCollapsed] = useState(true);
   const [versionPickerCollapsed, setVersionPickerCollapsed] = useState(true);
 
@@ -230,6 +247,22 @@ function ConfiguracionPage() {
   const running = activeQuery.data
     ? { configId: activeQuery.data.configuration_id, version: activeQuery.data.version }
     : { configId: "", version: -1 };
+
+  // Version history for whichever config is picked as "Basada en" in the
+  // New config modal - separate from versionsQuery above (that one tracks
+  // selectedConfigId, which may differ from the modal's in-progress choice).
+  // Only meaningful for a backend-persisted base; a local/temp lineage has
+  // no saved versions to pick from, only its current draft.
+  const newConfigBaseItem = newConfigForm && newConfigForm.baseId !== NEW_CONFIG_NONE_BASE_ID
+    ? configListItems.find((c) => c.id === newConfigForm.baseId)
+    : undefined;
+  const newConfigBaseIsTemp = !!newConfigBaseItem && isTempId(newConfigBaseItem.id);
+  const newConfigBaseVersionsQuery = useQuery({
+    queryKey: ["configurationVersions", newConfigBaseItem?.id],
+    queryFn: () => listConfigurationVersions({ data: { configurationId: newConfigBaseItem!.id } }),
+    enabled: !!newConfigBaseItem && !newConfigBaseIsTemp,
+  });
+  const newConfigBaseVersions = newConfigBaseIsTemp ? [] : (newConfigBaseVersionsQuery.data ?? []);
 
   // Restore the editing object + which config/version/tab was open, so a
   // refresh doesn't lose unsaved work. Must run (and, if it finds anything,
@@ -624,18 +657,35 @@ function ConfiguracionPage() {
 
   const createConfig = async () => {
     if (!newConfigForm || !newConfigForm.name.trim()) return;
-    const baseItem = configListItems.find((c) => c.id === newConfigForm.baseId);
+    const baseItem = newConfigForm.baseId === NEW_CONFIG_NONE_BASE_ID
+      ? undefined
+      : configListItems.find((c) => c.id === newConfigForm.baseId);
+    const pinnedVersion = newConfigForm.baseVersion !== "latest" ? newConfigForm.baseVersion : null;
     let baseSettings: ConfigSettings;
-    const baseDraft = baseItem ? drafts[baseItem.id] : undefined;
+    let baseVersionLabel: number | null = null;
+    const baseDraft = baseItem && pinnedVersion === null ? drafts[baseItem.id] : undefined;
     if (baseDraft) {
       baseSettings = baseDraft.workingCopy;
+      baseVersionLabel = baseDraft.basedOnVersion ?? baseItem!.latestVersion;
+    } else if (baseItem && pinnedVersion !== null) {
+      // A specific historical version was picked - fetch it fresh even if
+      // there's an open draft for this lineage, so the pin is honored
+      // exactly instead of silently preferring unsaved edits.
+      const detail = await queryClient.fetchQuery({
+        queryKey: ["configurationVersion", baseItem.id, pinnedVersion],
+        queryFn: () => getConfigurationVersion({ data: { configurationId: baseItem.id, version: pinnedVersion } }),
+      });
+      baseSettings = settingsFromConfigurationDetail(detail);
+      baseVersionLabel = pinnedVersion;
     } else if (baseItem?.latestVersion != null) {
       const detail = await queryClient.fetchQuery({
         queryKey: ["configurationVersion", baseItem.id, baseItem.latestVersion],
         queryFn: () => getConfigurationVersion({ data: { configurationId: baseItem.id, version: baseItem.latestVersion! } }),
       });
       baseSettings = settingsFromConfigurationDetail(detail);
+      baseVersionLabel = baseItem.latestVersion;
     } else {
+      // Explicit "Ninguna" choice, or a base with nothing saved yet.
       baseSettings = defaultSettings();
       if (channels.length > 0) {
         baseSettings = { ...baseSettings, segments: buildSegmentsFromChannels(channels) };
@@ -650,7 +700,7 @@ function ConfiguracionPage() {
       segments: JSON.parse(JSON.stringify(baseSettings.segments)),
     };
     const id = `cfg-temp-${Date.now()}`;
-    setLocalConfigs((prev) => [...prev, { id, name: newConfigForm.name.trim(), description: baseItem ? `Basada en ${baseItem.name}.` : "" }]);
+    setLocalConfigs((prev) => [...prev, { id, name: newConfigForm.name.trim(), description: baseItem ? `Basada en ${baseItem.name}${baseVersionLabel != null ? `:v${baseVersionLabel}` : ""}.` : "" }]);
     setDrafts((prev) => ({ ...prev, [id]: { workingCopy: clonedSettings, baseline: structuredClone(clonedSettings), dirtyTabs: [] } }));
     setSelectedConfigId(id);
     setSelectedVersion("draft");
@@ -746,7 +796,7 @@ function ConfiguracionPage() {
               <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">Configuraciones</h2>
               <ConfigurationVersionGuide />
             </div>
-            <button onClick={() => setNewConfigForm({ name: "", baseId: selectedConfigId ?? "" })}
+            <button onClick={() => setNewConfigForm({ name: "", baseId: selectedConfigId ?? NEW_CONFIG_NONE_BASE_ID, baseVersion: "latest" })}
               className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline">
               <Plus className="h-3.5 w-3.5" /> Nueva configuración
             </button>
@@ -945,19 +995,13 @@ function ConfiguracionPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-border">
-          {TAB_META.map((t) => {
-            const active = activeTab === t.key;
-            const dirty = selectedConfig.dirtyTabs.includes(t.key);
-            return (
-              <button key={t.key} onClick={() => setActiveTab(t.key)} disabled={apiDown}
-                className={`relative px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors ${active ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-text-primary"} ${apiDown ? "opacity-40 cursor-not-allowed" : ""}`}>
-                {t.label}
-                {dirty && <span className="absolute top-1.5 right-0.5 h-1.5 w-1.5 rounded-full bg-warning" />}
-              </button>
-            );
-          })}
-        </div>
+        <SectionTabs
+          label="Secciones de configuración"
+          items={TAB_META.map((tab) => ({ ...tab, dirty: selectedConfig.dirtyTabs.includes(tab.key) }))}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          disabled={apiDown}
+        />
 
         <fieldset disabled={locked} className="contents">
           {activeTab === "general" && (
@@ -1401,12 +1445,30 @@ function ConfiguracionPage() {
                 <input value={newConfigForm.name} onChange={(e) => setNewConfigForm({ ...newConfigForm, name: e.target.value })}
                   className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary" placeholder="Ej: Canario 5%" />
               </Field>
-              <Field label="Basada en" hint="Clona las taxonomías, límites y prompts de la configuración elegida.">
-                <select value={newConfigForm.baseId} onChange={(e) => setNewConfigForm({ ...newConfigForm, baseId: e.target.value })}
+              <Field label="Basada en" hint="Clona las taxonomías, límites y prompts de la configuración elegida, o arranca en blanco.">
+                <select value={newConfigForm.baseId}
+                  onChange={(e) => setNewConfigForm({ ...newConfigForm, baseId: e.target.value, baseVersion: "latest" })}
                   className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background">
+                  <option value={NEW_CONFIG_NONE_BASE_ID}>Ninguna (valores por defecto)</option>
                   {configs.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </Field>
+              {newConfigBaseItem && !newConfigBaseIsTemp && (
+                <Field label="Versión" hint="La versión más reciente incluye cambios sin guardar de esa configuración, si la tienes abierta ahora mismo.">
+                  <select
+                    value={newConfigForm.baseVersion === "latest" ? "latest" : String(newConfigForm.baseVersion)}
+                    onChange={(e) => setNewConfigForm({ ...newConfigForm, baseVersion: e.target.value === "latest" ? "latest" : Number(e.target.value) })}
+                    disabled={newConfigBaseVersionsQuery.isLoading}
+                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50">
+                    <option value="latest">
+                      Más reciente{newConfigBaseItem.latestVersion != null ? ` (v${newConfigBaseItem.latestVersion})` : ""}
+                    </option>
+                    {[...newConfigBaseVersions].sort((a, b) => b.version - a.version).map((v) => (
+                      <option key={v.version} value={v.version}>v{v.version}{v.ever_activated ? " · estuvo en producción" : ""}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
               <button onClick={() => setNewConfigForm(null)} className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface">Cancelar</button>

@@ -1,12 +1,14 @@
+import { ModelTrainingWizard } from "@/components/modelos/ModelTrainingWizard";
+import { ModelTrainingResults } from "@/components/modelos/ModelTrainingResults";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power, Trash2 } from "lucide-react";
+import { Eye, Loader2, Plus, Power, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { ModelFormModal } from "@/components/modelos/ModelFormModal";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { Progress } from "@/components/ui/progress";
+import { SectionTabs } from "@/components/ui/section-tabs";
 import { listAsyncOperations } from "@/lib/api/asyncOperations.functions";
 import {
   activateModel,
@@ -23,7 +25,7 @@ export const Route = createFileRoute("/modelos")({
       { title: "ARIA - Agente prevención de Fraude" },
       {
         name: "description",
-        content: "Entrenamiento y versionado de modelos XGBoost servidos vía MCP.",
+        content: "Creación, entrenamiento único y activación de modelos XGBoost servidos vía MCP.",
       },
     ],
   }),
@@ -46,8 +48,11 @@ const STATUS_LABELS: Record<ModelStatus, string> = {
 
 function ModelosPage() {
   const queryClient = useQueryClient();
-  const [formOpen, setFormOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [resultId, setResultId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ModelResponse | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("catalog");
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
@@ -57,6 +62,11 @@ function ModelosPage() {
     refetchInterval: 4000,
   });
   const models = modelsQuery.data ?? [];
+  const selectedModel =
+    models.find((model) => model.id === selectedModelId) ??
+    models.find((model) => model.active) ??
+    models[0] ??
+    null;
 
   // "current training progress" table (task 7): the generic
   // /async-operations abstraction is the source of truth for progress
@@ -78,7 +88,9 @@ function ModelosPage() {
     mutationFn: (id: string) => trainModel({ data: { id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["models"] });
-      queryClient.invalidateQueries({ queryKey: ["asyncOperations", "model_training"] });
+      queryClient.invalidateQueries({
+        queryKey: ["asyncOperations", "model_training"],
+      });
     },
   });
   const activateMutation = useMutation({
@@ -93,151 +105,252 @@ function ModelosPage() {
     },
   });
 
+  const actionButtonClass =
+    "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium disabled:cursor-not-allowed disabled:opacity-50";
+
   return (
-    <DashboardLayout>
+    <DashboardLayout
+      bottomBar={
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
+          <div className="min-w-0 text-[12px] text-text-secondary" role="status">
+            <p className="font-medium text-text-primary">
+              {selectedModel
+                ? `${selectedModel.tag} · ${STATUS_LABELS[selectedModel.status]}`
+                : "Selecciona un modelo"}
+            </p>
+            <p>
+              {selectedModel?.active
+                ? "Modelo activo en producción"
+                : selectedModel?.status === "TRAINING"
+                  ? "Entrenamiento en curso; el estado se actualiza automáticamente"
+                  : "Selecciona una acción para este modelo"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={!selectedModel}
+              onClick={() => selectedModel && setResultId(selectedModel.id)}
+              className={`${actionButtonClass} border border-border hover:bg-surface`}
+            >
+              <Eye className="h-4 w-4" /> Ver detalle
+            </button>
+            {selectedModel && !selectedModel.active && (
+              <button
+                type="button"
+                disabled={selectedModel.status !== "READY" || activateMutation.isPending}
+                onClick={() => activateMutation.mutate(selectedModel.id)}
+                className={`${actionButtonClass} border border-primary text-primary hover:bg-primary/5`}
+              >
+                {activateMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Power className="h-4 w-4" />
+                )}
+                Activar en producción
+              </button>
+            )}
+            {selectedModel && !selectedModel.active && (
+              <button
+                type="button"
+                disabled={selectedModel.status !== "DRAFT" || trainMutation.isPending}
+                onClick={() => trainMutation.mutate(selectedModel.id)}
+                className={`${actionButtonClass} bg-primary text-white hover:bg-primary/90`}
+              >
+                {trainMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Entrenar por única vez
+              </button>
+            )}
+          </div>
+        </div>
+      }
+    >
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
-        <header className="flex items-start justify-between">
+        <header className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-[20px] font-semibold text-text-primary">Modelos</h1>
             <p className="text-[13px] text-text-secondary mt-1">
-              Entrena y versiona modelos XGBoost sobre datasets del sistema. El servicio MCP sirve
-              la versión que actives aquí a los agentes que la consulten.
+              Crea y entrena una única vez modelos XGBoost sobre datasets del sistema. El servicio
+              MCP sirve el modelo que actives aquí a los agentes que lo consulten.
             </p>
           </div>
           <button
-            onClick={() => setFormOpen(true)}
+            onClick={() => setWizardOpen(true)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white shrink-0"
           >
-            <Plus className="h-4 w-4" /> Crear modelo
+            <Plus className="h-4 w-4" /> Nuevo modelo
           </button>
         </header>
 
-        {trainingOps.length > 0 && (
+        <SectionTabs
+          label="Secciones de motores"
+          items={[
+            { key: "catalog", label: "Catálogo y resultados" },
+            {
+              key: "operations",
+              label: `Operaciones${trainingOps.length ? ` (${trainingOps.length})` : ""}`,
+            },
+          ]}
+          value={activeSection}
+          onValueChange={setActiveSection}
+        />
+
+        {activeSection === "catalog" && (
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="px-6 py-4 border-b border-border">
+              <h2 className="text-[14px] font-semibold text-text-primary">Modelos</h2>
+            </div>
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-text-secondary border-b border-border">
+                  <th className="px-6 py-2.5 font-medium">Tag</th>
+                  <th className="px-6 py-2.5 font-medium">Dataset</th>
+                  <th className="px-6 py-2.5 font-medium">Estado</th>
+                  <th className="px-6 py-2.5 font-medium">Métricas</th>
+                  <th className="px-6 py-2.5 font-medium">Activo</th>
+                  <th className="px-6 py-2.5 font-medium text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {models.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-8 text-center text-text-secondary">
+                      Sin modelos todavía.
+                    </td>
+                  </tr>
+                )}
+                {models.map((m) => (
+                  <tr key={m.id} className="border-b border-border last:border-0">
+                    <td className="px-6 py-3">
+                      <button
+                        className="font-medium text-primary hover:underline"
+                        onClick={() => {
+                          setSelectedModelId(m.id);
+                          setResultId(m.id);
+                        }}
+                      >
+                        {m.tag}
+                      </button>
+                      <div className="text-[11px] text-text-secondary">{m.description}</div>
+                    </td>
+                    <td className="px-6 py-3 text-text-secondary">{m.dataset_name}</td>
+                    <td className="px-6 py-3">
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${STATUS_STYLE[m.status]}`}
+                      >
+                        {STATUS_LABELS[m.status]}
+                      </span>
+                      {m.error && <div className="text-[11px] text-danger mt-1">{m.error}</div>}
+                    </td>
+                    <td className="px-6 py-3 text-text-secondary">
+                      {m.metrics ? (
+                        <>
+                          ROC-AUC {m.metrics["roc_auc"]?.toFixed(3)} · F1{" "}
+                          {m.metrics["f1_macro"]?.toFixed(3)}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-6 py-3">
+                      {m.active ? (
+                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-success/10 text-success">
+                          Activo
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={m.status !== "READY" || activateMutation.isPending}
+                          onClick={() => {
+                            setSelectedModelId(m.id);
+                            activateMutation.mutate(m.id);
+                          }}
+                          className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary disabled:opacity-40"
+                          title="Activar"
+                        >
+                          <Power className="h-3.5 w-3.5" /> Activar
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-6 py-3">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          type="button"
+                          disabled={m.status !== "DRAFT" || m.active || trainMutation.isPending}
+                          onClick={() => {
+                            setSelectedModelId(m.id);
+                            trainMutation.mutate(m.id);
+                          }}
+                          className="text-[12px] text-primary disabled:opacity-40"
+                        >
+                          Entrenar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedModelId(m.id);
+                            setDeleteTarget(m);
+                          }}
+                          className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {activeSection === "operations" && (
           <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
             <div className="px-6 py-4 border-b border-border">
               <h2 className="text-[14px] font-semibold text-text-primary">
                 Progreso de entrenamiento
               </h2>
+              <p className="text-[12px] text-text-secondary mt-0.5">
+                Las operaciones se actualizan automáticamente mientras el entrenamiento esté en
+                curso.
+              </p>
             </div>
             <div className="p-6 space-y-4">
-              {trainingOps.map((op) => {
-                const stage = (op.result?.stage as string | undefined) ?? op.status;
-                const pct = (op.result?.progress_pct as number | undefined) ?? 0;
-                const tag =
-                  (op.payload?.tag as string | undefined) ?? String(op.payload?.model_id ?? "");
-                return (
-                  <div key={op.id} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span className="font-medium text-text-primary">{tag}</span>
-                      <span className="text-text-secondary">
-                        {stage} · {pct}%
-                      </span>
+              {trainingOps.length === 0 ? (
+                <p className="text-[13px] text-text-secondary">No hay entrenamientos en curso.</p>
+              ) : (
+                trainingOps.map((op) => {
+                  const stage = (op.result?.stage as string | undefined) ?? op.status;
+                  const pct = (op.result?.progress_pct as number | undefined) ?? 0;
+                  const tag =
+                    (op.payload?.tag as string | undefined) ?? String(op.payload?.model_id ?? "");
+                  return (
+                    <div key={op.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="font-medium text-text-primary">{tag}</span>
+                        <span className="text-text-secondary">
+                          {stage} · {pct}%
+                        </span>
+                      </div>
+                      <Progress value={pct} />
                     </div>
-                    <Progress value={pct} />
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </section>
         )}
-
-        <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-          <div className="px-6 py-4 border-b border-border">
-            <h2 className="text-[14px] font-semibold text-text-primary">Modelos</h2>
-          </div>
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-wide text-text-secondary border-b border-border">
-                <th className="px-6 py-2.5 font-medium">Tag</th>
-                <th className="px-6 py-2.5 font-medium">Dataset</th>
-                <th className="px-6 py-2.5 font-medium">Estado</th>
-                <th className="px-6 py-2.5 font-medium">Métricas</th>
-                <th className="px-6 py-2.5 font-medium">Activo</th>
-                <th className="px-6 py-2.5 font-medium text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {models.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-text-secondary">
-                    Sin modelos todavía.
-                  </td>
-                </tr>
-              )}
-              {models.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0">
-                  <td className="px-6 py-3">
-                    <div className="font-medium text-text-primary">{m.tag}</div>
-                    <div className="text-[11px] text-text-secondary">{m.description}</div>
-                  </td>
-                  <td className="px-6 py-3 text-text-secondary">{m.dataset_name}</td>
-                  <td className="px-6 py-3">
-                    <span
-                      className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${STATUS_STYLE[m.status]}`}
-                    >
-                      {STATUS_LABELS[m.status]}
-                    </span>
-                    {m.error && <div className="text-[11px] text-danger mt-1">{m.error}</div>}
-                  </td>
-                  <td className="px-6 py-3 text-text-secondary">
-                    {m.metrics ? (
-                      <>
-                        ROC-AUC {m.metrics["roc_auc"]?.toFixed(3)} · F1{" "}
-                        {m.metrics["f1_macro"]?.toFixed(3)}
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-6 py-3">
-                    {m.active ? (
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-success/10 text-success">
-                        Activo
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={m.status !== "READY" || activateMutation.isPending}
-                        onClick={() => activateMutation.mutate(m.id)}
-                        className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary disabled:opacity-40"
-                        title="Activar"
-                      >
-                        <Power className="h-3.5 w-3.5" /> Activar
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        disabled={m.status === "TRAINING" || trainMutation.isPending}
-                        onClick={() => trainMutation.mutate(m.id)}
-                        className="text-[12px] text-primary disabled:opacity-40"
-                      >
-                        Entrenar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(m)}
-                        className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
       </div>
 
-      <ModelFormModal open={formOpen} onClose={() => setFormOpen(false)} />
+      {wizardOpen && <ModelTrainingWizard open onClose={() => setWizardOpen(false)} />}
+      {resultId && (
+        <ModelTrainingResults key={resultId} id={resultId} onClose={() => setResultId(null)} />
+      )}
       <ConfirmDeleteDialog
         open={!!deleteTarget}
         onOpenChange={(o) => !o && setDeleteTarget(null)}
         itemName={deleteTarget?.tag ?? ""}
-        consequence="Se eliminará el modelo y su registro de versión (el artefacto en MinIO no se borra automáticamente)."
+        consequence="Se eliminará el modelo y su registro de entrenamiento (el artefacto en MinIO no se borra automáticamente)."
         pending={deleteMutation.isPending}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
       />

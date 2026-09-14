@@ -1,16 +1,15 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Play,
   Loader2,
   Eye,
-  Library,
+  ExternalLink,
   Radio,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
-  RefreshCw,
 } from "lucide-react";
 
 import {
@@ -21,8 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getDatasets } from "@/lib/api/datasets.functions";
 import { startTestRun } from "@/lib/api/testing.functions";
+import { getDatasets } from "@/lib/api/datasets.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
@@ -132,26 +131,12 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-text-secondary">Dataset</label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => datasetsQuery.refetch()}
-                    title="Refrescar datasets"
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Refrescar
-                  </button>
-                  <a
-                    href="/biblioteca?tab=datasets"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-                  >
-                    <Library className="h-3 w-3" />
-                    Gestionar en Biblioteca
-                  </a>
-                </div>
+                <Link
+                  to="/biblioteca"
+                  className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                >
+                  Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
+                </Link>
               </div>
               {datasetsQuery.isLoading && (
                 <p className="text-[12px] text-text-secondary py-2">Cargando datasets…</p>

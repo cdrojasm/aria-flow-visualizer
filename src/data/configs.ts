@@ -3,6 +3,10 @@
 /* read the same configs/versions without a real backend.                */
 
 import { TEST_RUNS, type TestRunIndicators } from "./testRuns";
+import {
+  emptyConfiguration,
+  type FeatureConfiguration,
+} from "@/lib/api/feature-recipes.functions";
 
 /* ─── Types ──────────────────────────────────────────── */
 
@@ -94,62 +98,11 @@ export type SegmentMonitoringConfig = {
 
 /* ─── Profiling chain (Phase 3) ──────────────────────────
    Fixed 3-step chain (usuario -> transaccion -> transaccional), run in
-   this order. Field categorizations (below) are "data enrichment" - each
-   one's outputVariable is citable from every agent prompt in the segment
-   (not just later profiling strategies) - mirrors backend's
-   ProfilingConfig/ProfilingStrategy/FieldCategorization. */
-
-export type FieldKind = "cuantizable" | "categorico";
-
-// Cuantizable fields are validated by intervalo (range) or comparativa
-// (operator + value); categorico fields by igualdad/no_igualdad (single
-// value) or pertenencia/no_pertenencia (set membership). Each criterion
-// carries its own output (e.g. a risk label) - mirrors backend's
-// FieldCriterion/CriteriaMode (configuration_port.py).
-export type CriteriaMode = "intervalo" | "comparativa" | "igualdad" | "no_igualdad" | "pertenencia" | "no_pertenencia";
-export type ComparisonOperator = ">" | ">=" | "<" | "<=";
-export type FieldCriterion = {
-  id: string;
-  mode: CriteriaMode;
-  output: string;
-  minValue?: number;
-  maxValue?: number;
-  operator?: ComparisonOperator;
-  numericValue?: number;
-  textValue?: string;
-  values: string[];
-};
-// outputVariable: name of the enrichment variable this categorization
-// produces (the transformed/derived value - e.g. field "saldo" ->
-// outputVariable "saldo_riesgo"). Distinct from `field` so both the
-// original and the transformed value can be referenced, and citable from
-// every agent prompt in this segment (classification/adversarial/analyst/
-// documentation/profiling) - see SegmentAgentSection.tsx's
-// enrichmentVariables.
-export type FieldCategorization = { field: string; kind: FieldKind; criteria: FieldCriterion[]; outputVariable: string };
-
-export const CRITERIA_MODES_BY_KIND: Record<FieldKind, CriteriaMode[]> = {
-  cuantizable: ["intervalo", "comparativa"],
-  categorico: ["igualdad", "no_igualdad", "pertenencia", "no_pertenencia"],
-};
-
-export const CRITERIA_MODE_LABELS: Record<CriteriaMode, string> = {
-  intervalo: "Intervalo",
-  comparativa: "Comparativa",
-  igualdad: "Igualdad",
-  no_igualdad: "No igualdad",
-  pertenencia: "Pertenencia",
-  no_pertenencia: "No pertenencia",
-};
-
-export const COMPARISON_OPERATOR_LABELS: Record<ComparisonOperator, string> = {
-  ">": "Mayor que",
-  ">=": "Mayor o igual que",
-  "<": "Menor que",
-  "<=": "Menor o igual que",
-};
-
-export const COMPARISON_OPERATORS: ComparisonOperator[] = [">", ">=", "<", "<="];
+   this order. fieldEnrichment (below) is "data enrichment" - a feature-
+   recipe configuration (same Recipe/RecipeStep shape modelos/ uses, see
+   @/lib/api/feature-recipes.functions) where each enabled recipe's `name`
+   is citable from Perfilamiento's own prompts - mirrors backend's
+   ProfilingConfig/ProfilingStrategy (configuration_port.py). */
 
 export type ProfilingStrategyKey = "usuario" | "transaccion" | "transaccional";
 // Whether mainPrompt is used as a literal f-string (placeholders
@@ -166,7 +119,7 @@ export type ProfilingStrategy = {
   usePandasHistoryMcp: boolean;
 };
 export type ProfilingConfig = {
-  fieldCategorizations: FieldCategorization[];
+  fieldEnrichment: FeatureConfiguration;
   strategies: ProfilingStrategy[];
 };
 
@@ -193,7 +146,7 @@ export const defaultProfilingStrategy = (key: ProfilingStrategyKey): ProfilingSt
 });
 
 export const defaultProfilingConfig = (): ProfilingConfig => ({
-  fieldCategorizations: [],
+  fieldEnrichment: emptyConfiguration,
   strategies: PROFILING_STRATEGY_KEYS.map(defaultProfilingStrategy),
 });
 
@@ -623,28 +576,57 @@ export const defaultSettings = (): ConfigSettings => ({
       },
       agent: {
         profiling: {
-          fieldCategorizations: [
-            {
-              field: "Saldo",
-              kind: "cuantizable",
-              outputVariable: "saldo_riesgo",
-              criteria: [
-                { id: "crit-saldo-1", mode: "intervalo", output: "bajo", minValue: 1, maxValue: 1_000_000, values: [] },
-                { id: "crit-saldo-2", mode: "intervalo", output: "medio", minValue: 1_000_001, maxValue: 3_000_000, values: [] },
-                { id: "crit-saldo-3", mode: "intervalo", output: "alto", minValue: 3_000_001, maxValue: 7_000_000, values: [] },
-                { id: "crit-saldo-4", mode: "comparativa", output: "altisimo", operator: ">", numericValue: 7_000_000, values: [] },
-              ],
-            },
-            {
-              field: "Canal de ingreso",
-              kind: "categorico",
-              outputVariable: "canal_ingreso_riesgo",
-              criteria: [
-                { id: "crit-canal-1", mode: "pertenencia", output: "bajo", values: ["app", "web"] },
-                { id: "crit-canal-2", mode: "igualdad", output: "alto", textValue: "sucursal", values: [] },
-              ],
-            },
-          ],
+          fieldEnrichment: {
+            schema_version: 2,
+            mappings: { timezone: "America/Bogota", history: "history" },
+            recipes: [
+              {
+                id: "saldo-riesgo",
+                name: "saldo_riesgo",
+                description: "",
+                enabled: true,
+                output_type: "string",
+                source: "current",
+                path: "Saldo",
+                missing: { policy: "missing" },
+                steps: [
+                  { id: "s1", operation: "number" },
+                  {
+                    id: "s2",
+                    operation: "categorize",
+                    rules: [
+                      { max: 1_000_000, include_max: true, value: "bajo" },
+                      { min: 1_000_000, max: 3_000_000, include_max: true, value: "medio" },
+                      { min: 3_000_000, max: 7_000_000, include_max: true, value: "alto" },
+                    ],
+                    fallback: "altisimo",
+                  },
+                ],
+              },
+              {
+                id: "canal-ingreso-riesgo",
+                name: "canal_ingreso_riesgo",
+                description: "",
+                enabled: true,
+                output_type: "string",
+                source: "current",
+                path: "Canal de ingreso",
+                missing: { policy: "missing" },
+                steps: [
+                  {
+                    id: "s1",
+                    operation: "categorize",
+                    rules: [
+                      { equals: "app", value: "bajo" },
+                      { equals: "web", value: "bajo" },
+                      { equals: "sucursal", value: "alto" },
+                    ],
+                    fallback: "medio",
+                  },
+                ],
+              },
+            ],
+          },
           strategies: [
             {
               ...defaultProfilingStrategy("usuario"),

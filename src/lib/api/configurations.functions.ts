@@ -1,4 +1,5 @@
 import { apiFetch, API_BASE } from "./client";
+import type { FeatureConfiguration } from "./feature-recipes.functions";
 
 // Client functions wrapping the backend's configuration CRUD/versioning API
 // (../backend, base path /api/v0/configurations — see backend/CLAUDE.md).
@@ -73,31 +74,6 @@ export type ApiMonitoringSettings = {
   prompt_monitoreo_vars: string[];
 };
 
-export type ApiCriteriaMode =
-  | "intervalo"
-  | "comparativa"
-  | "igualdad"
-  | "no_igualdad"
-  | "pertenencia"
-  | "no_pertenencia";
-export type ApiComparisonOperator = ">" | ">=" | "<" | "<=";
-export type ApiFieldCriterion = {
-  id: string;
-  mode: ApiCriteriaMode;
-  output: string;
-  min_value: number | null;
-  max_value: number | null;
-  operator: ApiComparisonOperator | null;
-  numeric_value: number | null;
-  text_value: string | null;
-  values: string[];
-};
-export type ApiFieldCategorization = {
-  field: string;
-  kind: "cuantizable" | "categorico";
-  criteria: ApiFieldCriterion[];
-  output_variable: string;
-};
 export type ApiProfilingStrategy = {
   key: "usuario" | "transaccion" | "transaccional";
   main_prompt: string;
@@ -108,7 +84,9 @@ export type ApiProfilingStrategy = {
   use_pandas_history_mcp: boolean;
 };
 export type ApiProfilingConfig = {
-  field_categorizations: ApiFieldCategorization[];
+  // Same wire shape as modelos/'s FeatureConfiguration - shared canonical
+  // type for "recipe" across the whole frontend, see feature-recipes.functions.
+  field_enrichment: FeatureConfiguration;
   strategies: ApiProfilingStrategy[];
 };
 

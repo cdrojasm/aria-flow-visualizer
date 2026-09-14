@@ -46,7 +46,9 @@ export function SegmentEvaluationTab({
       <SegmentEvaluationSection
         value={segment.monitoring}
         onChange={(patch) => onChange(selected, { monitoring: { ...segment.monitoring, ...patch } })}
-        extraVariables={segment.agent.profiling.fieldCategorizations.map((field) => field.outputVariable)}
+        extraVariables={segment.agent.profiling.fieldEnrichment.recipes
+          .filter((r) => r.enabled)
+          .map((r) => r.name)}
         disabled={disabled}
       />
     </div>

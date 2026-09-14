@@ -4,8 +4,6 @@ import type {
   ApiClassificationConfig,
   ApiAdversarialConfig,
   ApiDocumentationConfig,
-  ApiFieldCategorization,
-  ApiFieldCriterion,
   ApiFilterGroup,
   ApiMonitoringSettings,
   ApiProfilingConfig,
@@ -16,8 +14,6 @@ import type {
 } from "./configurations.functions";
 import {
   type ConfigSettings,
-  type FieldCategorization,
-  type FieldCriterion,
   type FilterGroup,
   type SegmentAgentConfig,
   type SegmentCode,
@@ -90,42 +86,12 @@ function monitoringFromApi(m: ApiMonitoringSettings): SegmentMonitoringConfig {
   };
 }
 
-function fieldCriterionToApi(c: FieldCriterion): ApiFieldCriterion {
-  return {
-    id: c.id,
-    mode: c.mode,
-    output: c.output,
-    min_value: c.minValue ?? null,
-    max_value: c.maxValue ?? null,
-    operator: c.operator ?? null,
-    numeric_value: c.numericValue ?? null,
-    text_value: c.textValue ?? null,
-    values: c.values,
-  };
-}
-function fieldCriterionFromApi(c: ApiFieldCriterion): FieldCriterion {
-  return {
-    id: c.id,
-    mode: c.mode,
-    output: c.output,
-    minValue: c.min_value ?? undefined,
-    maxValue: c.max_value ?? undefined,
-    operator: c.operator ?? undefined,
-    numericValue: c.numeric_value ?? undefined,
-    textValue: c.text_value ?? undefined,
-    values: c.values,
-  };
-}
-function fieldCategorizationToApi(fc: FieldCategorization): ApiFieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionToApi), output_variable: fc.outputVariable };
-}
-function fieldCategorizationFromApi(fc: ApiFieldCategorization): FieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionFromApi), outputVariable: fc.output_variable };
-}
-
 function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
   const profiling: ApiProfilingConfig = {
-    field_categorizations: a.profiling.fieldCategorizations.map(fieldCategorizationToApi),
+    // fieldEnrichment is already a plain FeatureConfiguration (Recipe/
+    // RecipeStep) object - same wire shape backend and frontend share with
+    // modelos/, so it travels as-is, no per-item mapping needed.
+    field_enrichment: a.profiling.fieldEnrichment,
     strategies: a.profiling.strategies.map((s) => ({
       key: s.key,
       main_prompt: s.mainPrompt,
@@ -214,7 +180,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
 function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
   return {
     profiling: {
-      fieldCategorizations: a.profiling.field_categorizations.map(fieldCategorizationFromApi),
+      fieldEnrichment: a.profiling.field_enrichment,
       strategies: a.profiling.strategies.map((s) => ({
         key: s.key,
         mainPrompt: s.main_prompt,

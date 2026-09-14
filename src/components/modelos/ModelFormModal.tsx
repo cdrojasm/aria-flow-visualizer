@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Library, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import {
@@ -27,8 +28,7 @@ const KIND_LABELS: Record<FieldTransformKind, string> = {
 };
 
 /* ─── Crear modelo (task 6) ──────────────────────────────
-   Field/transformation builder, same list-editable shape as
-   SegmentProfilingSection.tsx's FieldCategorizationTable: pick a dataset,
+   Field/transformation builder: pick a dataset,
    pick fields from its already-analyzed distribution (GET /datasets/{name}
    /summary, same call the testing page's dataset picker makes), propose a
    transformation kind per field. Kept intentionally generic - the backend
@@ -55,7 +55,11 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
   });
 
   const fields = useMemo(
-    () => [...(summaryQuery.data?.available_fields ?? Object.keys(summaryQuery.data?.field_distributions ?? {}))].sort(),
+    () =>
+      [
+        ...(summaryQuery.data?.available_fields ??
+          Object.keys(summaryQuery.data?.field_distributions ?? {})),
+      ].sort(),
     [summaryQuery.data],
   );
   const targetValues = useMemo(
@@ -145,26 +149,15 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
             />
           </Field>
 
-          <Field label="Dataset">
-            <div className="flex items-center justify-end gap-3 mb-1">
-              <button
-                type="button"
-                onClick={() => datasetsQuery.refetch()}
-                title="Refrescar datasets"
-                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[12px] font-medium text-text-primary">Dataset</label>
+              <Link
+                to="/biblioteca"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
               >
-                <RefreshCw className="h-3 w-3" />
-                Refrescar
-              </button>
-              <a
-                href="/biblioteca?tab=datasets"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-              >
-                <Library className="h-3 w-3" />
-                Gestionar en Biblioteca
-              </a>
+                Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
+              </Link>
             </div>
             <select
               value={datasetName}
@@ -183,7 +176,7 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
                 </option>
               ))}
             </select>
-          </Field>
+          </div>
 
           {datasetName && summaryQuery.isLoading && (
             <p className="text-[12px] text-text-secondary">Cargando campos del dataset…</p>

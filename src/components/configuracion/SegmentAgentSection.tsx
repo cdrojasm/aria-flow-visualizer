@@ -45,11 +45,15 @@ export function SegmentAgentSection({
   disabled?: boolean;
 }) {
   const [subtab, setSubtab] = useState<AgentSubTab>("knowledge");
-  // Enrichment variables (field categorizations' outputVariable) - citable
-  // from every agent prompt in this segment, not just profiling's own.
-  const enrichmentVariables = value.profiling.fieldCategorizations
-    .map((fc) => fc.outputVariable)
-    .filter((v) => v.trim().length > 0);
+  // Enrichment variables (fieldEnrichment's enabled recipe names) - listed
+  // here for the other agent-tab prompt pickers below (classification/
+  // adversarial/analyst/documentation), but only Perfilamiento's own
+  // prompts actually resolve {variable} tokens today - the backend doesn't
+  // substitute them anywhere else yet (see alert_review_workflow.py's
+  // _run_profiling).
+  const enrichmentVariables = value.profiling.fieldEnrichment.recipes
+    .filter((r) => r.enabled)
+    .map((r) => r.name);
 
   return (
     <div className="space-y-4">
