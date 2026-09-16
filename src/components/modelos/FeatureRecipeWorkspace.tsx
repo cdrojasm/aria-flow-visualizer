@@ -8,6 +8,7 @@ import {
   FlaskConical,
   Download,
   CircleAlert,
+  AlertTriangle,
 } from "lucide-react";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { getDatasetRows } from "@/lib/api/datasets.functions";
@@ -891,19 +892,26 @@ export function FeatureRecipeWorkspace({
     <section className={panel}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-lg">Ingeniería de características</h3>
-          <p className="text-sm text-text-secondary">
+          <h3 className="text-[15px] font-semibold text-text-primary">
+            Ingeniería de características
+          </h3>
+          <p className="mt-0.5 text-[12px] text-text-secondary">
             Mapea variables, transforma transacciones y calcula señales del historial.
           </p>
         </div>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs">
-          {value.recipes.filter((r) => r.enabled).length} mapeos activos · versión 1
-        </span>
+        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-text-primary">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+          <p>
+            <span className="font-medium">Mapeos activos:</span>{" "}
+            {value.recipes.filter((r) => r.enabled).length} · versión 1
+          </p>
+        </div>
       </div>
       <SectionTabs
         label="Ingeniería de características"
         value={tab as "recipes" | "preview" | "json" | "templates"}
         onValueChange={setTab}
+        variant="pills"
         items={[
           { key: "recipes", label: "Mapeo y transformaciones" },
           { key: "preview", label: "Prueba de configuración" },
@@ -911,15 +919,25 @@ export function FeatureRecipeWorkspace({
           { key: "templates", label: "Plantillas reutilizables" },
         ]}
       />
-      <p className="text-sm text-text-secondary rounded-lg bg-muted/30 p-3">
-        {tab === "recipes" &&
-          "Define qué información entra al modelo y cómo se transforma. Cada mapeo produce una variable de salida; el campo original solo se conserva si lo incluyes como otro mapeo."}
-        {tab === "preview" &&
-          "Ejecuta los mapeos sobre filas de prueba y revisa los valores que produciría el modelo antes de entrenarlo."}
-        {tab === "json" &&
-          "Edita o importa la configuración completa cuando necesites precisión o automatización."}
-        {tab === "templates" &&
-          "Guarda mapeos para reutilizarlos en otros modelos; cada modelo recibe una copia independiente."}
+      <p className="text-[12px] text-text-secondary rounded-lg bg-muted/30 p-3">
+        {tab === "recipes" && "Define los mapeos que transforman los datos de una alerta."}
+        {tab === "preview" && "Comprueba los resultados de los mapeos con datos de prueba."}
+        {tab === "json" && "Edita o importa la configuración completa."}
+        {tab === "templates" && "Guarda y reutiliza conjuntos de mapeos."}
+        <span
+          className="ml-1 inline-flex cursor-help"
+          title={
+            tab === "recipes"
+              ? "Cada mapeo produce una variable de salida. El campo original solo se conserva si lo incluyes como otro mapeo."
+              : tab === "preview"
+                ? "Ejecuta los mapeos sobre filas de prueba antes de usarlos."
+                : tab === "json"
+                  ? "Úsalo cuando necesites precisión o automatización. Las muestras no se guardan en esta configuración."
+                  : "Cada modelo recibe una copia independiente de la plantilla."
+          }
+        >
+          ⓘ
+        </span>
       </p>
       <datalist id="fe-paths">
         {suggestedPaths.map((path) => (
@@ -958,9 +976,13 @@ export function FeatureRecipeWorkspace({
                 </datalist>
               </Field>
               <p className="text-xs text-text-secondary">
-                Los campos de la alerta usan su ruta completa. Los campos del historial son
-                relativos a cada evento. Las sugerencias se obtienen de hasta 20 filas reales;
-                puedes escribir una ruta que no aparezca en la muestra.
+                Selecciona el array que contiene el historial.{" "}
+                <span
+                  className="cursor-help"
+                  title="Los campos de la alerta usan su ruta completa; los del historial son relativos a cada evento. Las sugerencias se obtienen de hasta 20 filas reales y puedes escribir una ruta que no aparezca en la muestra."
+                >
+                  ⓘ
+                </span>
               </p>
               {sampleLoading && (
                 <p role="status" className="text-sm">
@@ -974,8 +996,13 @@ export function FeatureRecipeWorkspace({
               )}
               {historyPath && !sampleLoading && historyPaths.length === 0 && (
                 <p className="text-sm text-text-secondary">
-                  No se encontraron campos de eventos en la muestra para este historial. Comprueba
-                  la ruta o introduce los campos manualmente.
+                  No hay campos de eventos en la muestra.{" "}
+                  <span
+                    className="cursor-help"
+                    title="Comprueba la ruta o introduce los campos manualmente."
+                  >
+                    ⓘ
+                  </span>
                 </p>
               )}
               <button
@@ -1016,8 +1043,13 @@ export function FeatureRecipeWorkspace({
                 </div>
               ) : (
                 <p className="text-sm text-text-secondary">
-                  El historial se procesa completo. Añade filtros para limitar fechas, cuentas u
-                  otros campos antes de agregar sus valores.
+                  El historial se procesa completo.{" "}
+                  <span
+                    className="cursor-help"
+                    title="Añade filtros para limitar fechas, cuentas u otros campos antes de agregar sus valores."
+                  >
+                    ⓘ
+                  </span>
                 </p>
               )}
             </div>
@@ -1556,10 +1588,13 @@ export function FeatureRecipeWorkspace({
                           </Field>
                           {(s.conditions ?? []).map((c, j) => {
                             const inputIsPrimitiveList =
-                              recipe.steps.slice(0, i).some(
-                                (step) => step.enabled !== false && step.operation === "to_array",
-                              ) ||
-                              (recipe.source === "current" && alertPathPreview.some(isPrimitiveArray));
+                              recipe.steps
+                                .slice(0, i)
+                                .some(
+                                  (step) => step.enabled !== false && step.operation === "to_array",
+                                ) ||
+                              (recipe.source === "current" &&
+                                alertPathPreview.some(isPrimitiveArray));
                             const changeCondition = (
                               patch: Partial<NonNullable<RecipeStep["conditions"]>[number]>,
                             ) =>
@@ -1578,22 +1613,24 @@ export function FeatureRecipeWorkspace({
                                     Elemento de la lista
                                   </p>
                                 ) : (
-                                <Field
-                                  label={
-                                    recipe.source === "history"
-                                      ? "Campo del evento histórico"
-                                      : "Campo del elemento"
-                                  }
-                                >
-                                  <input
-                                    className={input}
-                                    list={
-                                      recipe.source === "history" ? "fe-history-paths" : "fe-paths"
+                                  <Field
+                                    label={
+                                      recipe.source === "history"
+                                        ? "Campo del evento histórico"
+                                        : "Campo del elemento"
                                     }
-                                    value={c.path ?? ""}
-                                    onChange={(e) => changeCondition({ path: e.target.value })}
-                                  />
-                                </Field>
+                                  >
+                                    <input
+                                      className={input}
+                                      list={
+                                        recipe.source === "history"
+                                          ? "fe-history-paths"
+                                          : "fe-paths"
+                                      }
+                                      value={c.path ?? ""}
+                                      onChange={(e) => changeCondition({ path: e.target.value })}
+                                    />
+                                  </Field>
                                 )}
                                 <Field label="Tipo de comparación">
                                   <select
@@ -1981,7 +2018,7 @@ export function FeatureRecipeWorkspace({
             </button>
             <textarea
               aria-label="Configuración JSON"
-              className={`${input} min-h-80 font-mono pt-10`}
+              className={`${input} min-h-80 font-mono text-[12px] leading-5 pt-10`}
               value={raw}
               onChange={(e) => {
                 setRaw(e.target.value);
@@ -2093,47 +2130,49 @@ export function FeatureRecipeWorkspace({
       )}
       {tab === "preview" && (
         <>
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-xs rounded-full bg-primary/10 px-3 py-1">{source}</span>
-            <button
-              className={button}
-              disabled={!dataset || busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  const r = await getDatasetRows({
-                    data: { name: dataset, limit: 20 },
-                  });
-                  setSamples(JSON.stringify(r.rows, null, 2));
-                  setSource(`Dataset: ${dataset} · hasta 20 filas`);
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Cargar muestra del dataset
-            </button>
-            <button
-              className={button}
-              onClick={() => {
-                setSamples(JSON.stringify(fixture, null, 2));
-                setSource("Ejemplos ficticios");
-              }}
-            >
-              Ejemplos ficticios
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-1">
+              <button
+                type="button"
+                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium ${source === "Ejemplos ficticios" ? "bg-primary text-white" : "text-text-secondary"}`}
+                onClick={() => {
+                  setSamples(JSON.stringify(fixture, null, 2));
+                  setSource("Ejemplos ficticios");
+                }}
+              >
+                Ejemplos ficticios
+              </button>
+              <button
+                className={`rounded-lg px-3 py-1.5 text-[13px] font-medium ${source.startsWith("Dataset:") ? "bg-primary text-white" : "text-text-secondary"}`}
+                disabled={!dataset || busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    const r = await getDatasetRows({
+                      data: { name: dataset, limit: 20 },
+                    });
+                    setSamples(JSON.stringify(r.rows, null, 2));
+                    setSource(`Dataset: ${dataset} · hasta 20 filas`);
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Cargar muestra del dataset
+              </button>
+            </div>
           </div>
           {source === "Ejemplos ficticios" && (
-            <p className="text-sm text-text-secondary" role="note">
+            <p className="text-[12px] text-text-secondary" role="note">
               Los ejemplos usan las rutas del dataset seleccionado, pero sus valores son ficticios.
               Carga una muestra del dataset para comprobar los valores reales.
             </p>
           )}
           <textarea
             aria-label="Muestras JSON"
-            className={`${input} min-h-40 font-mono`}
+            className={`${input} min-h-40 font-mono text-[12px] leading-5`}
             value={samples}
             onChange={(e) => {
               setSamples(e.target.value);
@@ -2251,15 +2290,20 @@ export function FeatureRecipeWorkspace({
                 errores
               </p>
               {errorRowIndexes.length > 0 && (
-                <div role="alert" className="rounded-lg border border-danger/30 bg-danger/5 p-3 text-sm">
+                <div
+                  role="alert"
+                  className="rounded-lg border border-danger/30 bg-danger/5 p-3 text-sm"
+                >
                   <p className="font-medium text-danger">
-                    No puedes continuar todavía: hay errores de transformación en {errorRowIndexes.length} fila
+                    No puedes continuar todavía: hay errores de transformación en{" "}
+                    {errorRowIndexes.length} fila
                     {errorRowIndexes.length === 1 ? "" : "s"}.
                   </p>
                   <p className="mt-1 text-text-secondary">
                     Afectan: {errorFeatureNames.slice(0, 3).join(", ")}
-                    {errorFeatureNames.length > 3 ? ` y ${errorFeatureNames.length - 3} más` : ""}. Selecciona
-                    una fila con error e inspecciónala; después usa “Expandir todo” para ver el motivo técnico.
+                    {errorFeatureNames.length > 3 ? ` y ${errorFeatureNames.length - 3} más` : ""}.
+                    Selecciona una fila con error e inspecciónala; después usa “Expandir todo” para
+                    ver el motivo técnico.
                   </p>
                   <button
                     type="button"
