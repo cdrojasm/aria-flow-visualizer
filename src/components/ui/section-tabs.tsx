@@ -9,6 +9,7 @@ type SectionTabsProps<T extends string> = {
   onValueChange: (value: T) => void;
   disabled?: boolean;
   className?: string;
+  variant?: "underline" | "pills";
 };
 
 /** Shared section navigation used by configuration and the model wizard. */
@@ -19,12 +20,15 @@ export function SectionTabs<T extends string>({
   onValueChange,
   disabled = false,
   className,
+  variant = "underline",
 }: SectionTabsProps<T>) {
   return (
     <nav
       aria-label={label}
       className={cn(
-        "flex shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
+        variant === "pills"
+          ? "flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1.5"
+          : "flex shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-border",
         className,
       )}
     >
@@ -36,10 +40,14 @@ export function SectionTabs<T extends string>({
           disabled={disabled}
           onClick={() => onValueChange(tab.key)}
           className={cn(
-            "relative shrink-0 whitespace-nowrap px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:opacity-40 disabled:cursor-not-allowed",
+            "relative shrink-0 whitespace-nowrap px-3 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:opacity-40 disabled:cursor-not-allowed",
             value === tab.key
-              ? "border-primary text-primary"
-              : "border-transparent text-text-secondary hover:text-text-primary",
+              ? variant === "pills"
+                ? "rounded-lg bg-primary text-white"
+                : "border-b-2 border-primary -mb-px text-primary"
+              : variant === "pills"
+                ? "rounded-lg text-text-secondary hover:text-text-primary"
+                : "border-b-2 border-transparent -mb-px text-text-secondary hover:text-text-primary",
           )}
         >
           {tab.label}

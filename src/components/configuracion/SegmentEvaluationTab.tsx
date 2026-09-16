@@ -4,10 +4,12 @@ import { type SegmentCode, type SegmentSettings } from "@/data/configs";
 import { SegmentEvaluationSection } from "./SegmentEvaluationSection";
 
 /* ─── "Evaluación" tab ───────────────────────────────────
-   Own independent segment picker (not shared with Agente/Muestreo -
-   see SegmentAgentTab.tsx/SegmentSamplingTab.tsx, split out of what
-   used to be one combined "Config. por segmento" tab). Segment keys come
-   from the channel catalog (see SegmentoTab.tsx), not a fixed enum. */
+   Own independent segment picker (not shared with Agente - see
+   SegmentAgentTab.tsx, split out of what used to be one combined
+   "Config. por segmento" tab). Now also covers sampling (interval,
+   filters/distribution) - former standalone "Muestreo" tab, merged in
+   since both operate on the same SegmentMonitoringConfig. Segment keys
+   come from the channel catalog (see SegmentoTab.tsx), not a fixed enum. */
 
 export function SegmentEvaluationTab({
   value,
@@ -35,7 +37,9 @@ export function SegmentEvaluationTab({
             type="button"
             onClick={() => setSelected(code)}
             className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
-              selected === code ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
+              selected === code
+                ? "bg-primary text-white"
+                : "text-text-secondary hover:text-text-primary"
             }`}
           >
             {channelLabels[code] ?? code}
@@ -45,7 +49,9 @@ export function SegmentEvaluationTab({
 
       <SegmentEvaluationSection
         value={segment.monitoring}
-        onChange={(patch) => onChange(selected, { monitoring: { ...segment.monitoring, ...patch } })}
+        onChange={(patch) =>
+          onChange(selected, { monitoring: { ...segment.monitoring, ...patch } })
+        }
         extraVariables={segment.agent.profiling.fieldEnrichment.recipes
           .filter((r) => r.enabled)
           .map((r) => r.name)}

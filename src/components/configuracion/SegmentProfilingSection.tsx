@@ -1,7 +1,6 @@
 import { useRef, type MutableRefObject } from "react";
 
 import { FeatureRecipeWorkspace } from "@/components/modelos/FeatureRecipeWorkspace";
-import { Switch } from "@/components/ui/switch";
 import {
   PROFILING_STRATEGY_KEYS,
   PROFILING_STRATEGY_LABELS,
@@ -10,29 +9,26 @@ import {
   type ProfilingStrategy,
   type ProfilingStrategyKey,
 } from "@/data/configs";
+import type { Rubric } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
+import { SegmentRubricsSection } from "./SegmentRubricsSection";
 import { Field, VariablePicker } from "./shared/FormControls";
-import { spliceToken } from "./shared/promptTokens";
+import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
 const MAIN_PROMPT_MODE_OPTIONS: { key: ProfilingPromptMode; label: string }[] = [
   { key: "fstring", label: "F-string (sin LLM)" },
   { key: "llm", label: "Prompt (LLM)" },
 ];
 
-/* ─── Profiling chain ─────────────────────────────────────
-   fieldEnrichment = "data enrichment": the same feature-recipe engine
-   modelos/ uses for training (see FeatureRecipeWorkspace), reused here to
-   compute named variables from the alert's own fields and its transaction
-   history. Each enabled recipe's `name` is citable from this segment's own
-   profiling prompts below (see SegmentAgentSection.tsx's
-   enrichmentVariables for how it's surfaced to the other agent-tab prompt
-   pickers too - though only Perfilamiento's prompts actually resolve
-   {variable} tokens today, see alert_review_workflow.py's _run_profiling). */
+/* ─── Profiling chain ───────────────────────────────────── */
 
 export function SegmentProfilingSection({
   value,
   onChange,
   extraVariables,
+  rubrics,
+  onRubricsChange,
+  rubricVariables,
   disabled,
 }: {
   value: ProfilingConfig;
@@ -41,6 +37,9 @@ export function SegmentProfilingSection({
   // computed once by SegmentAgentSection and handed down, same list every
   // other agent-tab prompt gets.
   extraVariables: string[];
+  rubrics: Rubric[];
+  onRubricsChange: (rubrics: Rubric[]) => void;
+  rubricVariables: string[];
   disabled?: boolean;
 }) {
   const { variables } = useVariableCatalog();
@@ -52,12 +51,7 @@ export function SegmentProfilingSection({
   };
 
   return (
-    <div className="space-y-6">
-      {/* FeatureRecipeWorkspace has no disabled prop of its own (it's always
-          editable in modelos/, which has no read-only historical view) - a
-          native <fieldset disabled> reaches every control inside it without
-          touching that shared component, same technique this file already
-          uses below for mainPromptMode === "fstring". */}
+    <section className="space-y-6 rounded-xl border border-border bg-card p-5 shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
       <fieldset disabled={disabled}>
         <FeatureRecipeWorkspace
           value={value.fieldEnrichment}
@@ -68,12 +62,11 @@ export function SegmentProfilingSection({
           onValidity={() => {}}
         />
       </fieldset>
-
       <div className="space-y-3">
-        <div>
-          <h2 className="text-[15px] font-semibold text-text-primary">Cadena de perfilamiento</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">Tres estrategias, ejecutadas en este orden. Todas pueden referenciar las variables base y las de enriquecimiento de arriba.</p>
-        </div>
+        <p className="text-[12px] text-text-secondary">
+          Las tres estrategias se ejecutan en este orden y pueden usar las variables base y las
+          señales definidas arriba.
+        </p>
         {PROFILING_STRATEGY_KEYS.map((key, index) => {
           const strategy = value.strategies.find((s) => s.key === key) ?? value.strategies[index];
           return (
@@ -89,7 +82,13 @@ export function SegmentProfilingSection({
           );
         })}
       </div>
-    </div>
+      <SegmentRubricsSection
+        value={rubrics}
+        onChange={onRubricsChange}
+        variables={[...extraVariables, ...rubricVariables]}
+        disabled={disabled}
+      />
+    </section>
   );
 }
 // Own component (not inlined in the .map() above) so each of the 3
@@ -129,7 +128,10 @@ function ProfilingStrategyCard({
     variable: string,
   ) => {
     const { next, cursor } = spliceToken(strategy[promptField], selection, `{${variable}}`);
-    onUpdate({ [promptField]: next, [varsField]: [...strategy[varsField], variable] } as Partial<ProfilingStrategy>);
+    onUpdate({
+      [promptField]: next,
+      [varsField]: [...strategy[varsField], variable],
+    } as Partial<ProfilingStrategy>);
     selectionRef.current = { start: cursor, end: cursor };
     requestAnimationFrame(() => {
       el?.focus();
@@ -154,7 +156,9 @@ function ProfilingStrategyCard({
                 onClick={() => onUpdate({ mainPromptMode: o.key })}
                 disabled={disabled}
                 className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-colors disabled:opacity-50 ${
-                  strategy.mainPromptMode === o.key ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
+                  strategy.mainPromptMode === o.key
+                    ? "bg-primary text-white"
+                    : "text-text-secondary hover:text-text-primary"
                 }`}
               >
                 {o.label}
@@ -170,18 +174,38 @@ function ProfilingStrategyCard({
             ref={mainPromptRef}
             value={strategy.mainPrompt}
             onChange={(e) => onUpdate({ mainPrompt: e.target.value })}
-            onSelect={(e) => { mainPromptSelection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }; }}
-            onFocus={(e) => { mainPromptSelection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }; }}
+            onBlur={(e) =>
+              onUpdate({
+                mainPromptVars: variablesInPrompt(e.target.value).filter((variable) =>
+                  pool.includes(variable),
+                ),
+              })
+            }
+            onSelect={(e) => {
+              mainPromptSelection.current = {
+                start: e.currentTarget.selectionStart,
+                end: e.currentTarget.selectionEnd,
+              };
+            }}
+            onFocus={(e) => {
+              mainPromptSelection.current = {
+                start: e.currentTarget.selectionStart,
+                end: e.currentTarget.selectionEnd,
+              };
+            }}
             rows={3}
             disabled={disabled}
             className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none disabled:opacity-50"
           />
           <div className="mt-2">
-            <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles (catálogo + variables de enriquecimiento)</p>
+            <p className="text-[11px] font-medium text-text-secondary mb-1.5">
+              Variables usadas en este prompt
+            </p>
             <VariablePicker
               value={strategy.mainPromptVars}
               onChange={(v) => onUpdate({ mainPromptVars: v })}
               pool={pool}
+              prompt={strategy.mainPrompt}
               onInsert={(v) =>
                 insertToken(
                   mainPromptRef.current,
@@ -212,18 +236,38 @@ function ProfilingStrategyCard({
               ref={categorizationPromptRef}
               value={strategy.categorizationPrompt}
               onChange={(e) => onUpdate({ categorizationPrompt: e.target.value })}
-              onSelect={(e) => { categorizationPromptSelection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }; }}
-              onFocus={(e) => { categorizationPromptSelection.current = { start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }; }}
+              onBlur={(e) =>
+                onUpdate({
+                  categorizationPromptVars: variablesInPrompt(e.target.value).filter((variable) =>
+                    pool.includes(variable),
+                  ),
+                })
+              }
+              onSelect={(e) => {
+                categorizationPromptSelection.current = {
+                  start: e.currentTarget.selectionStart,
+                  end: e.currentTarget.selectionEnd,
+                };
+              }}
+              onFocus={(e) => {
+                categorizationPromptSelection.current = {
+                  start: e.currentTarget.selectionStart,
+                  end: e.currentTarget.selectionEnd,
+                };
+              }}
               rows={3}
               placeholder="Ej: Dado el historial transaccional, clasifica el riesgo del usuario como bajo, medio o alto."
               className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none disabled:opacity-50"
             />
             <div className="mt-2">
-              <p className="text-[11px] font-medium text-text-secondary mb-1.5">Variables disponibles (catálogo + variables de enriquecimiento)</p>
+              <p className="text-[11px] font-medium text-text-secondary mb-1.5">
+                Variables usadas en este prompt
+              </p>
               <VariablePicker
                 value={strategy.categorizationPromptVars}
                 onChange={(v) => onUpdate({ categorizationPromptVars: v })}
                 pool={pool}
+                prompt={strategy.categorizationPrompt}
                 onInsert={(v) =>
                   insertToken(
                     categorizationPromptRef.current,
@@ -237,18 +281,6 @@ function ProfilingStrategyCard({
               />
             </div>
           </Field>
-
-          <div className="flex items-center justify-between pt-2 border-t border-border">
-            <div className="pr-4">
-              <p className="text-[13px] font-medium text-text-primary">Historial de alertas vía pandas (MCP)</p>
-              <p className="text-[12px] text-text-secondary mt-0.5">El LLM de categorización puede consultar el historial de alertas del cliente vía pandas, expuesto como herramienta MCP.</p>
-            </div>
-            <Switch
-              checked={strategy.usePandasHistoryMcp}
-              onCheckedChange={(checked) => onUpdate({ usePandasHistoryMcp: checked })}
-              disabled={disabled || strategy.mainPromptMode === "fstring"}
-            />
-          </div>
         </fieldset>
       </div>
     </section>

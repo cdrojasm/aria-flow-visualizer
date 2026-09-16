@@ -4,10 +4,10 @@ import { type SegmentCode, type SegmentSettings } from "@/data/configs";
 import { SegmentAgentSection } from "./SegmentAgentSection";
 
 /* ─── "Agente" tab ───────────────────────────────────────
-   Own independent segment picker (not shared with Muestreo/Evaluación -
-   see SegmentSamplingTab.tsx/SegmentEvaluationTab.tsx, split out of what
-   used to be one combined "Config. por segmento" tab). Segment keys come
-   from the channel catalog (see SegmentoTab.tsx), not a fixed enum. */
+   Own independent segment picker (not shared with Evaluación - see
+   SegmentEvaluationTab.tsx, split out of what used to be one combined
+   "Config. por segmento" tab). Segment keys come from the channel
+   catalog (see SegmentoTab.tsx), not a fixed enum. */
 
 export function SegmentAgentTab({
   value,
@@ -28,19 +28,23 @@ export function SegmentAgentTab({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-1 bg-card rounded-xl border border-border p-1.5 w-fit">
-        {orderedCodes.map((code) => (
-          <button
-            key={code}
-            type="button"
-            onClick={() => setSelected(code)}
-            className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
-              selected === code ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"
-            }`}
-          >
-            {channelLabels[code] ?? code}
-          </button>
-        ))}
+      <div className="sticky top-0 z-30 -mx-1 bg-background/95 py-2 backdrop-blur">
+        <div className="flex items-center gap-1 bg-card rounded-xl border border-border p-1.5 w-fit">
+          {orderedCodes.map((code) => (
+            <button
+              key={code}
+              type="button"
+              onClick={() => setSelected(code)}
+              className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
+                selected === code
+                  ? "bg-primary text-white"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {channelLabels[code] ?? code}
+            </button>
+          ))}
+        </div>
       </div>
 
       <SegmentAgentSection

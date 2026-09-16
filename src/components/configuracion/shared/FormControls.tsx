@@ -1,8 +1,16 @@
 import { AlertTriangle, Plus, Settings, Trash2, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import type { DistributionValue, SamplingCriterion } from "@/data/configs";
+import {
+  VECTOR_STORE_TOOLS,
+  VECTOR_STORE_TOOL_DESCRIPTIONS,
+  VECTOR_STORE_TOOL_LABELS,
+  type DistributionValue,
+  type SamplingCriterion,
+  type VectorStoreTool,
+} from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
+import { useVectorStoreVersions } from "@/hooks/useVectorStoreVersions";
 import { VariableCatalogManager } from "../VariableCatalogManager";
 
 /* ─── Shared form controls, extracted verbatim from configuracion.tsx ──
@@ -11,7 +19,15 @@ import { VariableCatalogManager } from "../VariableCatalogManager";
    configuracion.tsx imports Field/LimitField back for its own remaining
    general/infra/ops/test usages. */
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
   return (
     <div>
       <label className="block text-[12px] font-medium text-text-primary mb-1">{label}</label>
@@ -21,23 +37,66 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
   );
 }
 
-export function LimitField({ label, hint, value, onChange, min, max, step = 1, suffix }: { label: string; hint: string; value: number; onChange: (n: number) => void; min: number; max: number; step?: number; suffix: string }) {
+export function LimitField({
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  suffix,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (n: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  suffix: string;
+}) {
   return (
     <div>
       <label className="block text-[13px] font-medium text-text-primary">{label}</label>
       <p className="text-[12px] text-text-secondary mt-0.5 mb-2">{hint}</p>
       <div className="flex items-center gap-3">
-        <input type="number" value={value} min={min} max={max} step={step} onChange={(e) => onChange(Number(e.target.value))}
-          className="w-32 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary" />
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="w-32 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+        />
         {suffix && <span className="text-[12px] text-text-secondary">{suffix}</span>}
-        <span className="text-[11px] text-text-secondary ml-auto">rango {min}–{max}</span>
+        <span className="text-[11px] text-text-secondary ml-auto">
+          rango {min}–{max}
+        </span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-full mt-2 accent-primary" />
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full mt-2 accent-primary"
+      />
     </div>
   );
 }
 
-export function TagInput({ value, onChange, placeholder }: { value: string[]; onChange: (v: string[]) => void; placeholder?: string }) {
+export function TagInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+  placeholder?: string;
+}) {
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -48,20 +107,38 @@ export function TagInput({ value, onChange, placeholder }: { value: string[]; on
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit(); }
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commit();
+    }
     if (e.key === "Backspace" && !input && value.length > 0) onChange(value.slice(0, -1));
   };
 
   return (
-    <div onClick={() => inputRef.current?.focus()} className="min-h-[40px] flex flex-wrap gap-1.5 items-center rounded-md border border-border px-3 py-2 cursor-text focus-within:border-primary">
+    <div
+      onClick={() => inputRef.current?.focus()}
+      className="min-h-[40px] flex flex-wrap gap-1.5 items-center rounded-md border border-border px-3 py-2 cursor-text focus-within:border-primary"
+    >
       {value.map((f) => (
-        <span key={f} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[12px]">
-          {f}<button type="button" onClick={() => onChange(value.filter((x) => x !== f))}><X className="h-3 w-3" /></button>
+        <span
+          key={f}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[12px]"
+        >
+          {f}
+          <button type="button" onClick={() => onChange(value.filter((x) => x !== f))}>
+            <X className="h-3 w-3" />
+          </button>
         </span>
       ))}
-      <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={onKey} onBlur={commit}
-        placeholder={value.length === 0 ? placeholder ?? "" : ""}
-        className="flex-1 min-w-[120px] text-[13px] outline-none bg-transparent" />
+      <input
+        ref={inputRef}
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={onKey}
+        onBlur={commit}
+        placeholder={value.length === 0 ? (placeholder ?? "") : ""}
+        className="flex-1 min-w-[120px] text-[13px] outline-none bg-transparent"
+      />
     </div>
   );
 }
@@ -77,7 +154,9 @@ export function VariableContentSizeWarning({ variables }: { variables: string[] 
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
       <p>
         <span className="font-medium">Contenido potencialmente grande:</span>{" "}
-        <code>{selected.join(", ")}</code> incluye el historial completo de transacciones. Usarlo sin resumir puede aumentar considerablemente los tokens y la latencia; el payload completo de una alerta tiene un límite de 380 KB.
+        <code>{selected.join(", ")}</code> incluye el historial completo de transacciones. Usarlo
+        sin resumir puede aumentar considerablemente los tokens y la latencia; el payload completo
+        de una alerta tiene un límite de 380 KB.
       </p>
     </div>
   );
@@ -88,6 +167,7 @@ export function VariablePicker({
   onChange,
   pool,
   onInsert,
+  prompt,
 }: {
   value: string[];
   // Adds/removes from the selected list. When onInsert is given, adding a
@@ -98,65 +178,135 @@ export function VariablePicker({
   onChange: (v: string[]) => void;
   pool?: string[];
   onInsert?: (variable: string) => void;
+  prompt?: string;
 }) {
   const [search, setSearch] = useState("");
   const [showManager, setShowManager] = useState(false);
   const { variables } = useVariableCatalog();
   const effectivePool = pool ?? variables;
-  const available = effectivePool.filter((v) => !value.includes(v) && v.toLowerCase().includes(search.toLowerCase()));
+  const searching = search.trim().length > 0;
+  const MAX_MATCHES = 8;
+  const matches = effectivePool.filter(
+    (v) => !value.includes(v) && v.toLowerCase().includes(search.toLowerCase()),
+  );
+  const visibleMatches = matches.slice(0, MAX_MATCHES);
+  const promptBound = prompt !== undefined;
+  const visible = promptBound ? value.filter((v) => prompt.includes(`{${v}}`)) : value;
 
   const select = (v: string) => {
     if (onInsert) onInsert(v);
     else onChange([...value, v]);
+    setSearch("");
   };
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-1.5 min-h-[28px]">
-        {value.length === 0 && <span className="text-[11px] text-text-secondary">Sin variables seleccionadas.</span>}
-        {value.map((v) => (
-          <span key={v} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium">
-            {v}<button type="button" onClick={() => onChange(value.filter((x) => x !== v))} className="hover:text-danger transition-colors"><X className="h-3 w-3" /></button>
+        {visible.length === 0 && (
+          <span className="text-[11px] text-text-secondary">
+            {promptBound ? "No hay variables de este prompt." : "Sin variables seleccionadas."}
+          </span>
+        )}
+        {visible.map((v) => (
+          <span
+            key={v}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium"
+          >
+            {v}
+            {!promptBound && (
+              <button
+                type="button"
+                onClick={() => onChange(value.filter((x) => x !== v))}
+                className="hover:text-danger transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </span>
         ))}
       </div>
       <VariableContentSizeWarning variables={value} />
-      <div className="flex items-center gap-1.5">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar variable…"
-          className="flex-1 h-8 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary" />
-        <button type="button" onClick={() => setShowManager(true)} title="Gestionar variables de origen"
-          className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-md border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors">
-          <Settings className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
-        {available.length === 0 && <span className="text-[11px] text-text-secondary">Sin coincidencias.</span>}
-        {available.map((v) => (
-          <button key={v} type="button" onClick={() => select(v)}
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border text-text-secondary text-[11px] hover:border-primary hover:text-primary transition-colors">
-            <Plus className="h-3 w-3" /> {v}
+      <div className="relative">
+        <div className="flex items-center gap-1.5">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar variable…"
+            className="flex-1 h-8 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => setShowManager(true)}
+            title="Gestionar variables de origen"
+            className="h-8 w-8 shrink-0 inline-flex items-center justify-center rounded-md border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" />
           </button>
-        ))}
+        </div>
+        {searching && (
+          <div className="absolute z-10 mt-1 w-full max-h-56 overflow-y-auto rounded-md border border-border bg-card shadow-lg py-1">
+            {matches.length === 0 && (
+              <p className="px-3 py-2 text-[11px] text-text-secondary">Sin coincidencias.</p>
+            )}
+            {visibleMatches.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onMouseDown={() => select(v)}
+                className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-[12px] text-text-primary hover:bg-primary/10 hover:text-primary transition-colors"
+              >
+                <Plus className="h-3 w-3 shrink-0" /> {v}
+              </button>
+            ))}
+            {matches.length > MAX_MATCHES && (
+              <p className="px-3 py-1.5 text-[11px] text-text-secondary">
+                y {matches.length - MAX_MATCHES} más — sigue escribiendo para filtrar.
+              </p>
+            )}
+          </div>
+        )}
       </div>
       <VariableCatalogManager open={showManager} onOpenChange={setShowManager} />
     </div>
   );
 }
 
-export function SamplingDistributionEditor({ value, onChange }: { value: SamplingCriterion[]; onChange: (v: SamplingCriterion[]) => void }) {
+export function SamplingDistributionEditor({
+  value,
+  onChange,
+}: {
+  value: SamplingCriterion[];
+  onChange: (v: SamplingCriterion[]) => void;
+}) {
   const updateCriterion = (id: string, patch: Partial<SamplingCriterion>) =>
     onChange(value.map((c) => (c.id === id ? { ...c, ...patch } : c)));
 
   const addCriterion = () =>
-    onChange([...value, { id: `crit-${Date.now()}`, name: "Nuevo criterio", values: [{ id: `v-${Date.now()}`, label: "Valor", pct: 100 }] }]);
+    onChange([
+      ...value,
+      {
+        id: `crit-${Date.now()}`,
+        name: "Nuevo criterio",
+        values: [{ id: `v-${Date.now()}`, label: "Valor", pct: 100 }],
+      },
+    ]);
 
   const removeCriterion = (id: string) => onChange(value.filter((c) => c.id !== id));
 
   const updateValue = (critId: string, valId: string, patch: Partial<DistributionValue>) =>
-    updateCriterion(critId, { values: value.find((c) => c.id === critId)!.values.map((v) => (v.id === valId ? { ...v, ...patch } : v)) });
+    updateCriterion(critId, {
+      values: value
+        .find((c) => c.id === critId)!
+        .values.map((v) => (v.id === valId ? { ...v, ...patch } : v)),
+    });
 
   const addValue = (critId: string) =>
-    updateCriterion(critId, { values: [...value.find((c) => c.id === critId)!.values, { id: `v-${Date.now()}`, label: "Nuevo valor", pct: 0 }] });
+    updateCriterion(critId, {
+      values: [
+        ...value.find((c) => c.id === critId)!.values,
+        { id: `v-${Date.now()}`, label: "Nuevo valor", pct: 0 },
+      ],
+    });
 
   const removeValue = (critId: string, valId: string) => {
     const criterion = value.find((c) => c.id === critId)!;
@@ -171,36 +321,137 @@ export function SamplingDistributionEditor({ value, onChange }: { value: Samplin
         return (
           <div key={c.id} className="rounded-lg border border-border p-3">
             <div className="flex items-center gap-2 mb-2">
-              <input value={c.name} onChange={(e) => updateCriterion(c.id, { name: e.target.value })}
-                className="h-8 rounded-md border border-border px-2 text-[13px] font-medium focus:outline-none focus:border-primary" />
-              <span className={`text-[11px] font-mono ml-1 ${total === 100 ? "text-success" : "text-warning"}`}>{total}% {total === 100 ? "" : "(debería sumar 100%)"}</span>
-              <button onClick={() => removeCriterion(c.id)} className="ml-auto p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger">
+              <input
+                value={c.name}
+                onChange={(e) => updateCriterion(c.id, { name: e.target.value })}
+                className="h-8 rounded-md border border-border px-2 text-[13px] font-medium focus:outline-none focus:border-primary"
+              />
+              <span
+                className={`text-[11px] font-mono ml-1 ${total === 100 ? "text-success" : "text-warning"}`}
+              >
+                {total}% {total === 100 ? "" : "(debería sumar 100%)"}
+              </span>
+              <button
+                onClick={() => removeCriterion(c.id)}
+                className="ml-auto p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+              >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="space-y-1.5">
               {c.values.map((v) => (
                 <div key={v.id} className="flex items-center gap-2">
-                  <input value={v.label} onChange={(e) => updateValue(c.id, v.id, { label: e.target.value })}
-                    className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary" />
-                  <input type="number" min={0} max={100} value={v.pct} onChange={(e) => updateValue(c.id, v.id, { pct: Number(e.target.value) })}
-                    className="w-16 h-8 rounded-md border border-border px-2 text-[12px] text-right focus:outline-none focus:border-primary" />
+                  <input
+                    value={v.label}
+                    onChange={(e) => updateValue(c.id, v.id, { label: e.target.value })}
+                    className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={v.pct}
+                    onChange={(e) => updateValue(c.id, v.id, { pct: Number(e.target.value) })}
+                    className="w-16 h-8 rounded-md border border-border px-2 text-[12px] text-right focus:outline-none focus:border-primary"
+                  />
                   <span className="text-[11px] text-text-secondary">%</span>
-                  <button onClick={() => removeValue(c.id, v.id)} disabled={c.values.length <= 1} className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed">
+                  <button
+                    onClick={() => removeValue(c.id, v.id)}
+                    disabled={c.values.length <= 1}
+                    className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
             </div>
-            <button onClick={() => addValue(c.id)} className="inline-flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline">
+            <button
+              onClick={() => addValue(c.id)}
+              className="inline-flex items-center gap-1 mt-2 text-[11px] font-medium text-primary hover:underline"
+            >
               <Plus className="h-3 w-3" /> Agregar valor
             </button>
           </div>
         );
       })}
-      <button onClick={addCriterion} className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline">
+      <button
+        onClick={addCriterion}
+        className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline"
+      >
         <Plus className="h-3.5 w-3.5" /> Nuevo criterio de filtrado
       </button>
     </div>
+  );
+}
+
+/* ─── Vector store tool toggle + version selector (Wave 6) ──
+   Shared by SegmentClassificationSection and SegmentDetectorSection - the
+   same category pill-toggle group as before, plus a version <select> that
+   only appears once at least one category is active (item 9: "cuando uno
+   de los agentes active la herramienta vector store, debe poder
+   seleccionar entre las versiones de la misma"). */
+
+export function VectorStoreToolField({
+  value,
+  onChange,
+  versionId,
+  onVersionChange,
+  disabled,
+}: {
+  value: VectorStoreTool[];
+  onChange: (v: VectorStoreTool[]) => void;
+  versionId: string | null;
+  onVersionChange: (id: string | null) => void;
+  disabled?: boolean;
+}) {
+  const { versions } = useVectorStoreVersions();
+  const toggle = (tool: VectorStoreTool) =>
+    onChange(value.includes(tool) ? value.filter((t) => t !== tool) : [...value, tool]);
+
+  return (
+    <Field
+      label="Base de conocimiento (vector store)"
+      hint="Categorías que el agente puede buscar semánticamente."
+    >
+      <div className="flex flex-wrap gap-1.5">
+        {VECTOR_STORE_TOOLS.map((tool) => {
+          const active = value.includes(tool);
+          return (
+            <button
+              key={tool}
+              type="button"
+              disabled={disabled}
+              title={VECTOR_STORE_TOOL_DESCRIPTIONS[tool]}
+              onClick={() => toggle(tool)}
+              className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
+                active
+                  ? "bg-primary text-white border-primary"
+                  : "border-border text-text-secondary hover:border-primary hover:text-primary"
+              }`}
+            >
+              {VECTOR_STORE_TOOL_LABELS[tool]}
+            </button>
+          );
+        })}
+      </div>
+      {value.length > 0 && (
+        <div className="flex items-center gap-2 mt-2">
+          <span className="text-[11px] text-text-secondary">Versión</span>
+          <select
+            value={versionId ?? ""}
+            onChange={(e) => onVersionChange(e.target.value || null)}
+            disabled={disabled}
+            className="h-8 rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
+          >
+            <option value="">Usa la versión más reciente</option>
+            {[...versions].reverse().map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+    </Field>
   );
 }
