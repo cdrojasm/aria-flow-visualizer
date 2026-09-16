@@ -1,23 +1,49 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
+import { useCanGoBack, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { AppSidebar } from "./AppSidebar";
-import { RoleModal } from "./RoleModal";
-import { useRole } from "@/hooks/useRole";
+import { ROLE_NAV, useRole } from "@/hooks/useRole";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
-export function DashboardLayout({ children, bottomBar }: { children: ReactNode; bottomBar?: ReactNode }) {
+export function DashboardLayout({
+  children,
+  bottomBar,
+}: {
+  children: ReactNode;
+  bottomBar?: ReactNode;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const router = useRouter();
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
-  const { role, setRole } = useRole();
-  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const { location } = useRouterState();
+  const pathname = location.pathname;
+  const { user, role, logout } = useRole();
   const { healthy: apiHealthy, checked: apiChecked } = useApiHealth();
 
-  const forced = role === null; // read from localStorage, nothing stored yet
-  const showModal = forced || switcherOpen;
+  useEffect(() => {
+    if (user !== null) return;
+
+    const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    navigate({
+      to: "/login",
+      search: { redirect },
+      replace: true,
+    });
+  }, [location.href, navigate, user]);
+
+  useEffect(() => {
+    if (!role) return;
+    const allowed = ROLE_NAV[role].some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
+    if (!allowed) navigate({ to: ROLE_NAV[role][0] as never, replace: true });
+  }, [navigate, pathname, role]);
+
+  // Never leave protected application content behind an authentication prompt.
+  // The effect above replaces this route with the standalone login page.
+  if (user === null) return null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -25,7 +51,8 @@ export function DashboardLayout({ children, bottomBar }: { children: ReactNode; 
         collapsed={collapsed}
         onToggle={() => setCollapsed((c) => !c)}
         role={role}
-        onOpenRoleModal={() => setSwitcherOpen(true)}
+        user={user}
+        onLogout={logout}
         apiHealthy={apiHealthy}
       />
       <main
@@ -60,22 +87,16 @@ export function DashboardLayout({ children, bottomBar }: { children: ReactNode; 
         </div>
         {bottomBar ? <div className="pb-64 sm:pb-44 lg:pb-32">{children}</div> : children}
         {bottomBar && (
-          <div className={`fixed bottom-0 right-0 z-30 border-t border-border bg-card shadow-[0_-4px_16px_rgba(0,0,0,0.06)] transition-[left] duration-200 ${collapsed ? "left-14" : "left-[220px]"}`} style={{ paddingBottom: "env(safe-area-inset-bottom)" }} role="region" aria-label="Acciones de configuración">
+          <div
+            className={`fixed bottom-0 right-0 z-30 border-t border-border bg-card shadow-[0_-4px_16px_rgba(0,0,0,0.06)] transition-[left] duration-200 ${collapsed ? "left-14" : "left-[220px]"}`}
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            role="region"
+            aria-label="Acciones de configuración"
+          >
             {bottomBar}
           </div>
         )}
       </main>
-      {showModal && (
-        <RoleModal
-          current={role ?? null}
-          forced={forced}
-          onSelect={(r) => {
-            setRole(r);
-            setSwitcherOpen(false);
-          }}
-          onClose={forced ? undefined : () => setSwitcherOpen(false)}
-        />
-      )}
     </div>
   );
 }

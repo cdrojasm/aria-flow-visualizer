@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TestingRouteImport } from './routes/testing'
 import { Route as MonitorRouteImport } from './routes/monitor'
 import { Route as ModelosRouteImport } from './routes/modelos'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoricoFraudeRouteImport } from './routes/historico-fraude'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
@@ -35,6 +36,11 @@ const MonitorRoute = MonitorRouteImport.update({
 const ModelosRoute = ModelosRouteImport.update({
   id: '/modelos',
   path: '/modelos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoricoFraudeRoute = HistoricoFraudeRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/testing': typeof TestingRouteWithChildren
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/alerta/$id': typeof AlertaIdRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/testing': typeof TestingRouteWithChildren
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/testing'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/alerta/$id'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/testing'
@@ -176,6 +188,7 @@ export interface RootRouteChildren {
   ConfiguracionRoute: typeof ConfiguracionRoute
   DashboardRoute: typeof DashboardRoute
   HistoricoFraudeRoute: typeof HistoricoFraudeRoute
+  LoginRoute: typeof LoginRoute
   ModelosRoute: typeof ModelosRoute
   MonitorRoute: typeof MonitorRoute
   TestingRoute: typeof TestingRouteWithChildren
@@ -203,6 +216,13 @@ declare module '@tanstack/react-router' {
       path: '/modelos'
       fullPath: '/modelos'
       preLoaderRoute: typeof ModelosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/historico-fraude': {
@@ -291,6 +311,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracionRoute: ConfiguracionRoute,
   DashboardRoute: DashboardRoute,
   HistoricoFraudeRoute: HistoricoFraudeRoute,
+  LoginRoute: LoginRoute,
   ModelosRoute: ModelosRoute,
   MonitorRoute: MonitorRoute,
   TestingRoute: TestingRouteWithChildren,

@@ -13,6 +13,7 @@ import {
   BrainCircuit,
 } from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
+import type { AuthUser } from "@/lib/api/auth.functions";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -29,13 +30,15 @@ export function AppSidebar({
   collapsed,
   onToggle,
   role,
-  onOpenRoleModal,
+  user,
+  onLogout,
   apiHealthy,
 }: {
   collapsed: boolean;
   onToggle: () => void;
   role: Role | null | undefined;
-  onOpenRoleModal: () => void;
+  user: AuthUser | null | undefined;
+  onLogout: () => void;
   apiHealthy: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -96,18 +99,20 @@ export function AppSidebar({
       </nav>
       <div className="px-3 py-4 border-t border-white/10">
         <button
-          onClick={onOpenRoleModal}
-          title="Cambiar rol"
+          onClick={onLogout}
+          title="Cerrar sesión"
           className={`w-full flex items-center rounded-md -mx-1 px-1 py-1 hover:bg-white/10 transition-colors ${collapsed ? "justify-center" : "gap-3"}`}
         >
           <div className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold">
-            MR
+            {user?.name.slice(0, 2).toUpperCase() ?? "AR"}
           </div>
           {!collapsed && (
             <div className="min-w-0 text-left">
-              <div className="text-[13px] font-medium truncate">María Rodríguez</div>
+              <div className="text-[13px] font-medium truncate">
+                {user?.name ?? "Sesión requerida"}
+              </div>
               <div className="text-[11px] text-white/70 truncate">
-                {role ? ROLE_LABELS[role] : "Supervisor"}
+                {role ? ROLE_LABELS[role] : "Sin sesión"}
               </div>
             </div>
           )}

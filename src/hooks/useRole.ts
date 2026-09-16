@@ -1,17 +1,35 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  clearAccessToken,
+  getCurrentUser,
+  login,
+  storeAccessToken,
+  type AuthUser,
+  type Role,
+} from "@/lib/api/auth.functions";
 
-export type Role = "admin" | "analyst" | "datascience";
-
-const STORAGE_KEY = "aria_role";
+export type { Role } from "@/lib/api/auth.functions";
 
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: "Admin",
-  analyst: "Analista",
-  datascience: "Data Science",
+  manager: "Manager",
+  channel_manager: "Channel Manager",
+  release_manager: "Release Manager",
+  data_analyst: "Data Analyst",
+  fraud_analyst: "Fraud Analyst",
+  ops_analyst: "Ops Analyst",
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  admin: [
+  manager: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/configuracion"],
+  release_manager: [
+    "/dashboard",
+    "/cola",
+    "/historico-fraude",
+    "/monitor",
+    "/configuracion",
+    "/testing",
+  ],
+  channel_manager: [
     "/dashboard",
     "/cola",
     "/historico-fraude",
@@ -21,28 +39,37 @@ export const ROLE_NAV: Record<Role, string[]> = {
     "/configuracion",
     "/modelos",
   ],
-  analyst: ["/cola", "/dashboard"],
-  datascience: ["/historico-fraude", "/monitor", "/dashboard", "/biblioteca", "/modelos"],
+  data_analyst: ["/monitor", "/testing", "/biblioteca", "/modelos"],
+  fraud_analyst: ["/cola"],
+  ops_analyst: ["/dashboard", "/cola", "/monitor"],
 };
 
-function isRole(v: string | null): v is Role {
-  return v === "admin" || v === "analyst" || v === "datascience";
-}
-
-// undefined = not read from localStorage yet (avoids an SSR/client hydration mismatch);
-// null = read, nothing stored — caller should force a selection.
 export function useRole() {
-  const [role, setRoleState] = useState<Role | null | undefined>(undefined);
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setRoleState(isRole(stored) ? stored : null);
+    if (!localStorage.getItem("aria.auth.accessToken")) {
+      setUser(null);
+      return;
+    }
+    getCurrentUser()
+      .then(setUser)
+      .catch(() => {
+        clearAccessToken();
+        setUser(null);
+      });
   }, []);
 
-  const setRole = useCallback((r: Role) => {
-    localStorage.setItem(STORAGE_KEY, r);
-    setRoleState(r);
+  const signIn = useCallback(async (email: string, password: string) => {
+    const session = await login(email, password);
+    storeAccessToken(session.access_token);
+    setUser(session);
   }, []);
 
-  return { role, setRole };
+  const logout = useCallback(() => {
+    clearAccessToken();
+    setUser(null);
+  }, []);
+
+  return { user, role: user?.role, signIn, logout };
 }

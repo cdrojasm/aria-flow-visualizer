@@ -6,10 +6,19 @@
 // GitHub Pages).
 export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
+function accessToken(): string | null {
+  return typeof window === "undefined" ? null : localStorage.getItem("aria.auth.accessToken");
+}
+
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = accessToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
