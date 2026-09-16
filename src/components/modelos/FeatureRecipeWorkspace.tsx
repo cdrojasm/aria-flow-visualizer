@@ -504,7 +504,7 @@ function JsonField<T>({
   );
 }
 export function FeatureRecipeWorkspace({
-  value,
+  value: rawValue,
   onChange,
   dataset,
   target,
@@ -526,6 +526,22 @@ export function FeatureRecipeWorkspace({
   onDiagnostic?: (diagnostic: FeatureDiagnostic | null) => void;
   focusRecipeId?: string | null;
 }) {
+  // Feature configurations are persisted inside several versioned resources
+  // (models and agent configuration). Older versions did not always contain
+  // the new `recipes`/`steps` arrays. Treat those missing collections as
+  // empty at the editor boundary: a historical configuration must be
+  // viewable, and opening it must never make the whole configuration route
+  // fail before the user has a chance to save a migrated version.
+  const value: FeatureConfiguration = {
+    schema_version: rawValue?.schema_version ?? 2,
+    mappings: rawValue?.mappings ?? { timezone: "America/Bogota" },
+    recipes: Array.isArray(rawValue?.recipes)
+      ? rawValue.recipes.map((recipe) => ({
+          ...recipe,
+          steps: Array.isArray(recipe.steps) ? recipe.steps : [],
+        }))
+      : [],
+  };
   const [selected, setSelected] = useState(value.recipes[0]?.id ?? "");
   const [tab, setTab] = useState("recipes");
   const [invalidField, setInvalidField] = useState(false);

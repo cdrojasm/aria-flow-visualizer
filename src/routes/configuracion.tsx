@@ -134,12 +134,15 @@ const NEW_CONFIG_NONE_BASE_ID = "__none__";
 // try/catch-guarded localStorage convention in useRole.ts / ColumnVisibilityMenu.tsx.
 // Versioned suffix (matches aria.model-training.draft.v1's convention):
 // DraftState embeds ConfigSettings, whose shape changes over time (e.g. the
-// ProfilingConfig.fieldCategorizations -> fieldEnrichment migration) — a
-// draft persisted under an older shape must never be restored as-is (it
-// crashes components expecting the current shape). Bump this suffix on any
-// future breaking ConfigSettings change; an old key is simply never read
-// again and hydration falls back to defaults, same as "no draft yet".
-const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState.v2";
+// ProfilingConfig.fieldCategorizations -> fieldEnrichment migration, or the
+// Wave 6 detector/detectorAdversarial/executor/rubrics split) — a draft
+// persisted under an older shape must never be restored as-is (it crashes
+// components expecting the current shape, e.g. SegmentExecutorSection doing
+// value.voicebotCall.categoryPrompts.map(...) with no `executor` key on an
+// old draft). Bump this suffix on any future breaking ConfigSettings change;
+// an old key is simply never read again and hydration falls back to
+// defaults, same as "no draft yet".
+const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState.v3";
 
 const formatDatetimeLocal = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
