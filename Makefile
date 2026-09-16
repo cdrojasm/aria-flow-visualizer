@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy run down logs shell
+.PHONY: help build build-static deploy refresh-github-token run down logs shell
 
 .DEFAULT_GOAL := help
 
@@ -22,6 +22,30 @@ deploy: build-static ## Build static SPA and push docs/ to GitHub Pages
 	git diff --cached --quiet && echo "Nothing to commit." || \
 		git commit -m "Publish static build to docs/ for GitHub Pages"
 	git push origin main
+
+refresh-github-token: ## Replace the saved GitHub credential with a classic PAT
+	@set -eu; \
+	branch="$$(git branch --show-current)"; \
+	remote="$$(git config --get "branch.$$branch.remote" || printf '%s' origin)"; \
+	remote_url="$$(git remote get-url "$$remote")"; \
+	case "$$remote_url" in \
+		https://*) ;; \
+		*) echo "Remote $$remote must use an HTTPS URL (found: $$remote_url)" >&2; exit 2;; \
+	esac; \
+	host="$${remote_url#https://}"; host="$${host%%/*}"; \
+	old_credential="$$(printf 'protocol=https\nhost=%s\n\n' "$$host" | GIT_TERMINAL_PROMPT=0 git credential fill 2>/dev/null || true)"; \
+	if [ -n "$$old_credential" ]; then \
+		printf '%s\n' "$$old_credential" | git credential reject; \
+		echo "Removed the existing credential for $$remote ($$host)."; \
+	fi; \
+	printf 'GitHub username: '; IFS= read -r username; \
+	[ -n "$$username" ] || { echo "Username cannot be empty." >&2; exit 2; }; \
+	printf 'New GitHub classic personal access token: '; \
+	stty -echo; trap 'stty echo' EXIT HUP INT TERM; IFS= read -r token; stty echo; trap - EXIT HUP INT TERM; printf '\n'; \
+	[ -n "$$token" ] || { echo "Token cannot be empty." >&2; exit 2; }; \
+	printf 'protocol=https\nhost=%s\nusername=%s\npassword=%s\n\n' "$$host" "$$username" "$$token" | git credential approve; \
+	unset token; \
+	echo "Saved the new credential for $$username@$$host."
 
 run: ## Start app in background
 	docker compose up -d
