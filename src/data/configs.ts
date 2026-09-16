@@ -3,16 +3,28 @@
 /* read the same configs/versions without a real backend.                */
 
 import { TEST_RUNS, type TestRunIndicators } from "./testRuns";
-import {
-  emptyConfiguration,
-  type FeatureConfiguration,
-} from "@/lib/api/feature-recipes.functions";
+import { emptyConfiguration, type FeatureConfiguration } from "@/lib/api/feature-recipes.functions";
 import { createId } from "@/lib/createId";
 
 /* ─── Types ──────────────────────────────────────────── */
 
-export type Taxonomy = { id: string; code: string; name: string; description: string; variables: string[]; examples: string[]; active: boolean };
-export type ModusOperandi = { id: string; title: string; narrative: string; taxonomyId: string; evolvedVariables: string[]; active: boolean };
+export type Taxonomy = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  variables: string[];
+  examples: string[];
+  active: boolean;
+};
+export type ModusOperandi = {
+  id: string;
+  title: string;
+  narrative: string;
+  taxonomyId: string;
+  evolvedVariables: string[];
+  active: boolean;
+};
 
 /* Many-to-many with ModusOperandi (via modusOperandiIds) - mirrors
    backend's Flag (application/ports/configuration_port.py), the merge of
@@ -38,14 +50,7 @@ export type SimilarCase = {
 };
 
 export type TabKey =
-  | "general"
-  | "infra"
-  | "ops"
-  | "test"
-  | "segmento"
-  | "segmentoAgente"
-  | "segmentoMuestreo"
-  | "segmentoEvaluacion";
+  "general" | "infra" | "ops" | "test" | "segmento" | "segmentoAgente" | "segmentoEvaluacion";
 
 /* ─── Segment configuration (Phase 1) ───────────────────
    Two fixed segments (not user-creatable). Each has an on/off toggle and
@@ -124,6 +129,23 @@ export type ProfilingConfig = {
   strategies: ProfilingStrategy[];
 };
 
+export type RuleComparison = "gt" | "gte" | "lt" | "lte" | "eq" | "neq" | "between" | "in";
+export type RuleCondition = {
+  id: string;
+  variable: string;
+  comparison: RuleComparison;
+  values: string[];
+  score: number;
+};
+export type DeterministicDecision = "risk_suspected" | "risk";
+export type DeterministicRule = RuleCondition & { decision: DeterministicDecision };
+export type DeterministicConfig = {
+  alertFilter: FilterGroup;
+  fieldEnrichment: FeatureConfiguration;
+  rules: DeterministicRule[];
+};
+export type Rubric = { id: string; name: string; conditions: RuleCondition[] };
+
 export const PROFILING_STRATEGY_LABELS: Record<ProfilingStrategyKey, string> = {
   usuario: "Perfilamiento de usuario",
   transaccion: "Perfilamiento de transacción",
@@ -151,12 +173,19 @@ export const defaultProfilingConfig = (): ProfilingConfig => ({
   strategies: PROFILING_STRATEGY_KEYS.map(defaultProfilingStrategy),
 });
 
+export const defaultDeterministicConfig = (): DeterministicConfig => ({
+  alertFilter: emptyFilterGroup(),
+  fieldEnrichment: emptyConfiguration,
+  rules: [],
+});
+
 /* ─── Classification + Adversarial (Phase 4) ────────────
    Mirrors backend's ClassificationConfig/AdversarialConfig. Adversarial
    has no tool picker of its own - it reuses whichever tools Classification
    already has configured (shown read-only in its section). */
 
-export type VectorStoreTool = "taxonomia" | "modus_operandi" | "similar_case" | "red_flag" | "yellow_flag";
+export type VectorStoreTool =
+  "taxonomia" | "modus_operandi" | "similar_case" | "red_flag" | "yellow_flag";
 export type BuiltInTool = "blacklist" | "whitelist" | "calculator";
 
 export const VECTOR_STORE_TOOL_LABELS: Record<VectorStoreTool, string> = {
@@ -174,11 +203,16 @@ export const BUILT_IN_TOOL_LABELS: Record<BuiltInTool, string> = {
 };
 
 export const VECTOR_STORE_TOOL_DESCRIPTIONS: Record<VectorStoreTool, string> = {
-  taxonomia: "Busca semánticamente entre las categorías de fraude definidas en Biblioteca → Taxonomías.",
-  modus_operandi: "Busca casos concretos de modus operandi similares al de la alerta actual.",
-  similar_case: "Busca alertas pasadas con características parecidas, ya resueltas.",
-  red_flag: "Busca señales de alto riesgo (red flags) que apliquen al comportamiento observado.",
-  yellow_flag: "Busca señales de riesgo moderado (yellow flags) que apliquen al comportamiento observado.",
+  taxonomia:
+    "Busca semánticamente entre las categorías de fraude de la versión del vector store seleccionada (Biblioteca → Repositorio de Conocimiento).",
+  modus_operandi:
+    "Busca casos concretos de modus operandi similares al de la alerta actual, en la versión del vector store seleccionada.",
+  similar_case:
+    "Busca alertas pasadas con características parecidas, ya resueltas, en la versión del vector store seleccionada.",
+  red_flag:
+    "Busca señales de alto riesgo (red flags) que apliquen al comportamiento observado, en la versión del vector store seleccionada.",
+  yellow_flag:
+    "Busca señales de riesgo moderado (yellow flags) que apliquen al comportamiento observado, en la versión del vector store seleccionada.",
 };
 
 export const BUILT_IN_TOOL_DESCRIPTIONS: Record<BuiltInTool, string> = {
@@ -187,14 +221,26 @@ export const BUILT_IN_TOOL_DESCRIPTIONS: Record<BuiltInTool, string> = {
   calculator: "Permite al agente hacer cálculos numéricos exactos en vez de estimarlos.",
 };
 
-export const VECTOR_STORE_TOOLS: VectorStoreTool[] = ["taxonomia", "modus_operandi", "similar_case", "red_flag", "yellow_flag"];
+export const VECTOR_STORE_TOOLS: VectorStoreTool[] = [
+  "taxonomia",
+  "modus_operandi",
+  "similar_case",
+  "red_flag",
+  "yellow_flag",
+];
 export const BUILT_IN_TOOLS: BuiltInTool[] = ["blacklist", "whitelist", "calculator"];
 
 export type ClassificationConfig = {
   vectorStoreTools: VectorStoreTool[];
+  vectorStoreVersionId: string | null;
   builtInTools: BuiltInTool[];
   prompt: string;
   promptVars: string[];
+  // "iteraciones de pensamiento" - max ReAct-style tool-call loops before
+  // the agent must answer. Only Clasificación and Adversarial (Detector)
+  // carry this field (see DetectorAdversarialConfig) - not Detector itself,
+  // not Adversarial (Clasificación).
+  maxThoughtIterations: number;
 };
 
 export type AdversarialConfig = {
@@ -206,9 +252,11 @@ export type AdversarialConfig = {
 
 export const defaultClassificationConfig = (): ClassificationConfig => ({
   vectorStoreTools: [],
+  vectorStoreVersionId: null,
   builtInTools: [],
   prompt: "",
   promptVars: [],
+  maxThoughtIterations: 5,
 });
 
 export const defaultAdversarialConfig = (): AdversarialConfig => ({
@@ -218,17 +266,54 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
   feedFeedbackToClassification: true,
 });
 
+/* ─── Detector + Adversarial (Detector) (Wave 6) ─────────
+   Runs before Clasificación in the agent pipeline, immediately followed by
+   its own adversarial critique step - mirrors Clasificación/Adversarial's
+   shape (same tool categories + prompt), plus tool-specific extras: an
+   XGBoost model toggle (own model-version selector, same pattern as the
+   "Modelo" subtab) and a free-form pandas query tool over the alert's
+   transaction-history dataframe. DetectorAdversarialConfig intentionally
+   has the exact same fields as AdversarialConfig (item 7: "los mismos
+   parámetros que el de clasificación") plus maxThoughtIterations. */
+
+export type DetectorConfig = {
+  vectorStoreTools: VectorStoreTool[];
+  vectorStoreVersionId: string | null;
+  builtInTools: BuiltInTool[];
+  enablePandasHistoryTool: boolean;
+  useXgboostModel: boolean;
+  xgboostModelId: string | null;
+  prompt: string;
+  promptVars: string[];
+};
+
+export type DetectorAdversarialConfig = AdversarialConfig & {
+  maxThoughtIterations: number;
+};
+
+export const defaultDetectorConfig = (): DetectorConfig => ({
+  vectorStoreTools: [],
+  vectorStoreVersionId: null,
+  builtInTools: [],
+  enablePandasHistoryTool: false,
+  useXgboostModel: false,
+  xgboostModelId: null,
+  prompt: "",
+  promptVars: [],
+});
+
+export const defaultDetectorAdversarialConfig = (): DetectorAdversarialConfig => ({
+  ...defaultAdversarialConfig(),
+  maxThoughtIterations: 5,
+});
+
 /* ─── Analista + Documentación (Phase 5) ────────────────
    Mirrors backend's AnalystConfig/DocumentationConfig. AnalystPlaybook is
    distinct from the pre-existing runtime FraudPlaybookRecord concept - see
    backend's configuration_port.py for the disambiguation note. */
 
 export type ResolutionTag =
-  | "scale_to_analyst"
-  | "send_to_voicebot"
-  | "handle_by_aria"
-  | "block_soft"
-  | "block_hard";
+  "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
 
 export const RESOLUTION_TAG_LABELS: Record<ResolutionTag, string> = {
   scale_to_analyst: "Escalar a analista",
@@ -263,7 +348,6 @@ export type VoicebotConfig = {
 
 export type AnalystConfig = {
   playbooks: AnalystPlaybook[];
-  voicebot: VoicebotConfig;
 };
 
 export type DocumentationStrategy = "template" | "agent";
@@ -284,7 +368,6 @@ export const defaultVoicebotConfig = (): VoicebotConfig => ({
 
 export const defaultAnalystConfig = (): AnalystConfig => ({
   playbooks: [],
-  voicebot: defaultVoicebotConfig(),
 });
 
 export const defaultDocumentationConfig = (): DocumentationConfig => ({
@@ -295,16 +378,38 @@ export const defaultDocumentationConfig = (): DocumentationConfig => ({
   agentPromptVars: [],
 });
 
+/* ─── Ejecutor (Wave 6) ──────────────────────────────────
+   Former "Descripción de campos" subtab, renamed and expanded to 4
+   sections: the comment the agent leaves at ARIC marking time, the
+   voicebot call (moved here from AnalystConfig - a single agent-facing
+   "execution" concept, not a human-review one), the final alert
+   documentation (unchanged DocumentationConfig, just relocated), and the
+   prompt that personalizes the concept handed to the analyst on escalation. */
+
+export type ExecutorConfig = {
+  aricMarking: { prompt: string; promptVars: string[] };
+  voicebotCall: VoicebotConfig;
+  documentador: DocumentationConfig;
+  analystEscalation: { prompt: string; promptVars: string[] };
+};
+
+export const defaultExecutorConfig = (): ExecutorConfig => ({
+  aricMarking: { prompt: "", promptVars: [] },
+  voicebotCall: defaultVoicebotConfig(),
+  documentador: defaultDocumentationConfig(),
+  analystEscalation: { prompt: "", promptVars: [] },
+});
+
 export type SegmentAgentConfig = {
+  deterministic: DeterministicConfig;
   profiling: ProfilingConfig;
+  rubrics: Rubric[];
+  detector: DetectorConfig;
+  detectorAdversarial: DetectorAdversarialConfig;
   classification: ClassificationConfig;
   adversarial: AdversarialConfig;
   analyst: AnalystConfig;
-  documentation: DocumentationConfig;
-  taxonomies: Taxonomy[];
-  modusOperandi: ModusOperandi[];
-  flags: Flag[];
-  similarCases: SimilarCase[];
+  executor: ExecutorConfig;
   activeFields: string[];
   // Trained model (models.functions.ts ModelResponse.id) this segment's
   // agent scores alerts with - set from the "Modelo" subtab, see
@@ -350,15 +455,15 @@ export const defaultSegmentMonitoring = (): SegmentMonitoringConfig => ({
 });
 
 export const defaultSegmentAgent = (): SegmentAgentConfig => ({
+  deterministic: defaultDeterministicConfig(),
   profiling: defaultProfilingConfig(),
+  rubrics: [],
+  detector: defaultDetectorConfig(),
+  detectorAdversarial: defaultDetectorAdversarialConfig(),
   classification: defaultClassificationConfig(),
   adversarial: defaultAdversarialConfig(),
   analyst: defaultAnalystConfig(),
-  documentation: defaultDocumentationConfig(),
-  taxonomies: [],
-  modusOperandi: [],
-  flags: [],
-  similarCases: [],
+  executor: defaultExecutorConfig(),
   activeFields: [],
   activeModelId: null,
 });
@@ -474,50 +579,165 @@ export type ConfigSettings = {
 /* ─── Static data ────────────────────────────────────── */
 
 export const initialTaxonomies: Taxonomy[] = [
-  { id: "tx-1", code: "FRD-CARD", name: "Fraude con tarjeta", description: "Uso no autorizado de tarjeta de crédito/débito.", variables: ["Última transacción", "Saldo", "Canal de ingreso", "Tipo de cuenta"], examples: ["Compra en comercio internacional minutos después de un rechazo por fondos insuficientes."], active: true },
-  { id: "tx-2", code: "PHISH", name: "Phishing", description: "Suplantación de identidad por canales digitales.", variables: ["Correo", "Celular", "Teléfono adicional", "Canal de ingreso"], examples: ["Cambio de correo y celular horas antes de una transferencia a un tercero nuevo."], active: true },
-  { id: "tx-3", code: "AML", name: "Lavado de activos", description: "Patrones sospechosos de movimientos.", variables: ["Saldo", "Última transacción", "Número de cuenta", "Segmento"], examples: ["Múltiples transferencias pequeñas entrantes seguidas de un único retiro consolidado."], active: true },
-  { id: "tx-4", code: "ID-THEFT", name: "Robo de identidad", description: "Apertura o uso de cuentas con identidad ajena.", variables: ["Documento", "Fecha de nacimiento", "Dirección", "Canal de ingreso"], examples: ["Apertura de cuenta 100% digital con documento reportado como perdido."], active: true },
-  { id: "tx-5", code: "MULE", name: "Cuenta mula", description: "Cuentas usadas como puente para transferencias ilícitas.", variables: ["Fecha de alta", "Saldo", "Segmento", "Última transacción"], examples: ["Cuenta reciente sin historial con flujo de entrada/salida muy superior a su segmento."], active: false },
+  {
+    id: "tx-1",
+    code: "FRD-CARD",
+    name: "Fraude con tarjeta",
+    description: "Uso no autorizado de tarjeta de crédito/débito.",
+    variables: ["Última transacción", "Saldo", "Canal de ingreso", "Tipo de cuenta"],
+    examples: [
+      "Compra en comercio internacional minutos después de un rechazo por fondos insuficientes.",
+    ],
+    active: true,
+  },
+  {
+    id: "tx-2",
+    code: "PHISH",
+    name: "Phishing",
+    description: "Suplantación de identidad por canales digitales.",
+    variables: ["Correo", "Celular", "Teléfono adicional", "Canal de ingreso"],
+    examples: ["Cambio de correo y celular horas antes de una transferencia a un tercero nuevo."],
+    active: true,
+  },
+  {
+    id: "tx-3",
+    code: "AML",
+    name: "Lavado de activos",
+    description: "Patrones sospechosos de movimientos.",
+    variables: ["Saldo", "Última transacción", "Número de cuenta", "Segmento"],
+    examples: [
+      "Múltiples transferencias pequeñas entrantes seguidas de un único retiro consolidado.",
+    ],
+    active: true,
+  },
+  {
+    id: "tx-4",
+    code: "ID-THEFT",
+    name: "Robo de identidad",
+    description: "Apertura o uso de cuentas con identidad ajena.",
+    variables: ["Documento", "Fecha de nacimiento", "Dirección", "Canal de ingreso"],
+    examples: ["Apertura de cuenta 100% digital con documento reportado como perdido."],
+    active: true,
+  },
+  {
+    id: "tx-5",
+    code: "MULE",
+    name: "Cuenta mula",
+    description: "Cuentas usadas como puente para transferencias ilícitas.",
+    variables: ["Fecha de alta", "Saldo", "Segmento", "Última transacción"],
+    examples: [
+      "Cuenta reciente sin historial con flujo de entrada/salida muy superior a su segmento.",
+    ],
+    active: false,
+  },
 ];
 
 export const initialModusOperandi: ModusOperandi[] = [
-  { id: "mo-1", title: "Vishing con suplantación de soporte", narrative: "Un tercero llama por teléfono al cliente haciéndose pasar por soporte del banco o de Stripe, lo induce a leer el código OTP recibido por SMS y con ese código autoriza una transferencia inmediata hacia una cuenta mula.", taxonomyId: "tx-2", evolvedVariables: ["Teléfono adicional", "Celular"], active: true },
-  { id: "mo-2", title: "Compra fraccionada con tarjeta clonada", narrative: "Con los datos de una tarjeta clonada en un cajero externo, el defraudador realiza varias compras pequeñas en comercios en línea distintos en pocos minutos para evitar los topes de validación por monto único.", taxonomyId: "tx-1", evolvedVariables: ["Número de cuenta"], active: true },
+  {
+    id: "mo-1",
+    title: "Vishing con suplantación de soporte",
+    narrative:
+      "Un tercero llama por teléfono al cliente haciéndose pasar por soporte del banco o de Stripe, lo induce a leer el código OTP recibido por SMS y con ese código autoriza una transferencia inmediata hacia una cuenta mula.",
+    taxonomyId: "tx-2",
+    evolvedVariables: ["Teléfono adicional", "Celular"],
+    active: true,
+  },
+  {
+    id: "mo-2",
+    title: "Compra fraccionada con tarjeta clonada",
+    narrative:
+      "Con los datos de una tarjeta clonada en un cajero externo, el defraudador realiza varias compras pequeñas en comercios en línea distintos en pocos minutos para evitar los topes de validación por monto único.",
+    taxonomyId: "tx-1",
+    evolvedVariables: ["Número de cuenta"],
+    active: true,
+  },
 ];
 
 export const initialFlags: Flag[] = [
-  { id: "rf-1", flagType: "red", name: "Transacción nocturna", description: "Movimiento ejecutado en horario atípico (madrugada), fuera del patrón habitual del cliente.", evolvedVariables: ["Última transacción", "Canal de ingreso"], modusOperandiIds: ["mo-1", "mo-2"] },
-  { id: "rf-2", flagType: "red", name: "País distinto al habitual", description: "Transacción originada desde o hacia un país diferente al de residencia u operación habitual del cliente.", evolvedVariables: ["País de origen", "Última transacción"], modusOperandiIds: ["mo-2"] },
-  { id: "rf-3", flagType: "yellow", name: "Monto elevado", description: "Valor de la transacción muy superior al promedio histórico del cliente para ese canal.", evolvedVariables: ["Saldo", "Última transacción", "Tipo de cuenta"], modusOperandiIds: ["mo-2"] },
-  { id: "rf-4", flagType: "red", name: "Cambio de datos de contacto", description: "Modificación reciente de celular o correo seguida de actividad transaccional inusual.", evolvedVariables: ["Celular", "Correo", "Teléfono adicional"], modusOperandiIds: ["mo-1"] },
+  {
+    id: "rf-1",
+    flagType: "red",
+    name: "Transacción nocturna",
+    description:
+      "Movimiento ejecutado en horario atípico (madrugada), fuera del patrón habitual del cliente.",
+    evolvedVariables: ["Última transacción", "Canal de ingreso"],
+    modusOperandiIds: ["mo-1", "mo-2"],
+  },
+  {
+    id: "rf-2",
+    flagType: "red",
+    name: "País distinto al habitual",
+    description:
+      "Transacción originada desde o hacia un país diferente al de residencia u operación habitual del cliente.",
+    evolvedVariables: ["País de origen", "Última transacción"],
+    modusOperandiIds: ["mo-2"],
+  },
+  {
+    id: "rf-3",
+    flagType: "yellow",
+    name: "Monto elevado",
+    description:
+      "Valor de la transacción muy superior al promedio histórico del cliente para ese canal.",
+    evolvedVariables: ["Saldo", "Última transacción", "Tipo de cuenta"],
+    modusOperandiIds: ["mo-2"],
+  },
+  {
+    id: "rf-4",
+    flagType: "red",
+    name: "Cambio de datos de contacto",
+    description:
+      "Modificación reciente de celular o correo seguida de actividad transaccional inusual.",
+    evolvedVariables: ["Celular", "Correo", "Teléfono adicional"],
+    modusOperandiIds: ["mo-1"],
+  },
 ];
 
 export const initialSimilarCases: SimilarCase[] = [
-  { id: "sc-1", text: "Cliente reporta llamada de 'soporte' pidiendo el código OTP recibido por SMS; minutos después se registra una transferencia a un tercero nuevo.", modusOperandiId: "mo-1", taxonomyId: "tx-2" },
+  {
+    id: "sc-1",
+    text: "Cliente reporta llamada de 'soporte' pidiendo el código OTP recibido por SMS; minutos después se registra una transferencia a un tercero nuevo.",
+    modusOperandiId: "mo-1",
+    taxonomyId: "tx-2",
+  },
 ];
 
 export const defaultSamplingCriteria = (): SamplingCriterion[] => [
-  { id: "crit-canal", name: "Canal", values: [
-    { id: "v-web", label: "Web", pct: 30 },
-    { id: "v-glomo", label: "GLOMO", pct: 40 },
-    { id: "v-app", label: "App", pct: 20 },
-    { id: "v-callcenter", label: "Call center", pct: 10 },
-  ] },
-  { id: "crit-monto", name: "Monto", values: [
-    { id: "v-bajo", label: "Bajo", pct: 50 },
-    { id: "v-medio", label: "Medio", pct: 35 },
-    { id: "v-alto", label: "Alto", pct: 15 },
-  ] },
-  { id: "crit-hora", name: "Hora", values: [
-    { id: "v-diurno", label: "Diurno", pct: 70 },
-    { id: "v-nocturno", label: "Nocturno", pct: 30 },
-  ] },
-  { id: "crit-resultado", name: "Resultado", values: [
-    { id: "v-aprobado", label: "Aprobado", pct: 60 },
-    { id: "v-rechazado", label: "Rechazado", pct: 25 },
-    { id: "v-escalado", label: "Escalado", pct: 15 },
-  ] },
+  {
+    id: "crit-canal",
+    name: "Canal",
+    values: [
+      { id: "v-web", label: "Web", pct: 30 },
+      { id: "v-glomo", label: "GLOMO", pct: 40 },
+      { id: "v-app", label: "App", pct: 20 },
+      { id: "v-callcenter", label: "Call center", pct: 10 },
+    ],
+  },
+  {
+    id: "crit-monto",
+    name: "Monto",
+    values: [
+      { id: "v-bajo", label: "Bajo", pct: 50 },
+      { id: "v-medio", label: "Medio", pct: 35 },
+      { id: "v-alto", label: "Alto", pct: 15 },
+    ],
+  },
+  {
+    id: "crit-hora",
+    name: "Hora",
+    values: [
+      { id: "v-diurno", label: "Diurno", pct: 70 },
+      { id: "v-nocturno", label: "Nocturno", pct: 30 },
+    ],
+  },
+  {
+    id: "crit-resultado",
+    name: "Resultado",
+    values: [
+      { id: "v-aprobado", label: "Aprobado", pct: 60 },
+      { id: "v-rechazado", label: "Rechazado", pct: 25 },
+      { id: "v-escalado", label: "Escalado", pct: 15 },
+    ],
+  },
 ];
 
 export const PROFILE_COLORS = [
@@ -529,8 +749,18 @@ export const PROFILE_COLORS = [
 
 export const defaultAnalystCapacity = (): AnalystCapacity => ({
   profiles: [
-    { id: "regular", name: "Día regular", description: "Cobertura estándar para días hábiles sin eventos especiales.", hourly: Array(24).fill(4) },
-    { id: "pago", name: "Día de pago", description: "Refuerzo por mayor volumen de alertas en fechas de pago.", hourly: Array(24).fill(8) },
+    {
+      id: "regular",
+      name: "Día regular",
+      description: "Cobertura estándar para días hábiles sin eventos especiales.",
+      hourly: Array(24).fill(4),
+    },
+    {
+      id: "pago",
+      name: "Día de pago",
+      description: "Refuerzo por mayor volumen de alertas en fechas de pago.",
+      hourly: Array(24).fill(8),
+    },
   ],
   defaultProfileId: "regular",
   dayOverrides: { 15: "pago", 20: "pago", 30: "pago" },
@@ -576,6 +806,7 @@ export const defaultSettings = (): ConfigSettings => ({
         promptMonitoreoVars: [],
       },
       agent: {
+        ...defaultSegmentAgent(),
         profiling: {
           fieldEnrichment: {
             schema_version: 2,
@@ -646,6 +877,17 @@ export const defaultSettings = (): ConfigSettings => ({
             },
           ],
         },
+        detector: {
+          ...defaultDetectorConfig(),
+          vectorStoreTools: ["taxonomia", "modus_operandi"],
+          prompt: "",
+          promptVars: ["CoT (cadena de razonamiento)"],
+        },
+        detectorAdversarial: {
+          ...defaultDetectorAdversarialConfig(),
+          prompt: "",
+          promptVars: ["Red flag detectada"],
+        },
         classification: {
           ...defaultClassificationConfig(),
           vectorStoreTools: ["taxonomia", "modus_operandi", "red_flag"],
@@ -664,35 +906,35 @@ export const defaultSettings = (): ConfigSettings => ({
             {
               id: "pb-1",
               name: "Fraude confirmado con evidencia clara",
-              strategy: "Escalar directamente al analista con el resumen del caso y las red flags detectadas.",
+              strategy:
+                "Escalar directamente al analista con el resumen del caso y las red flags detectadas.",
               resolutionTag: "scale_to_analyst",
             },
             {
               id: "pb-2",
               name: "Duda razonable sobre la transacción",
-              strategy: "Enviar al voicebot para confirmar la operación con el cliente antes de escalar.",
+              strategy:
+                "Enviar al voicebot para confirmar la operación con el cliente antes de escalar.",
               resolutionTag: "send_to_voicebot",
             },
           ],
-          voicebot: {
+        },
+        executor: {
+          aricMarking: { prompt: "", promptVars: [] },
+          voicebotCall: {
             basePrompt: "",
             basePromptVars: ["Nombre del cliente", "Última transacción"],
-            categoryPrompts: [
-              { id: "vcp-1", taxonomyId: "tx-1", prompt: "" },
-            ],
+            categoryPrompts: [{ id: "vcp-1", taxonomyId: "tx-1", prompt: "" }],
           },
+          documentador: {
+            strategy: "template",
+            template: "",
+            templateVars: ["Taxonomía asignada", "Resultado final"],
+            agentPrompt: "",
+            agentPromptVars: [],
+          },
+          analystEscalation: { prompt: "", promptVars: [] },
         },
-        documentation: {
-          strategy: "template",
-          template: "",
-          templateVars: ["Taxonomía asignada", "Resultado final"],
-          agentPrompt: "",
-          agentPromptVars: [],
-        },
-        taxonomies: initialTaxonomies.map((t) => ({ ...t, variables: [...t.variables], examples: [...t.examples] })),
-        modusOperandi: initialModusOperandi.map((m) => ({ ...m, evolvedVariables: [...m.evolvedVariables] })),
-        flags: initialFlags.map((f) => ({ ...f, evolvedVariables: [...f.evolvedVariables], modusOperandiIds: [...f.modusOperandiIds] })),
-        similarCases: initialSimilarCases.map((s) => ({ ...s })),
         activeFields: ["Altamira", "Documento", "Celular", "Nombre del cliente", "Saldo"],
         activeModelId: null,
       },
@@ -710,14 +952,35 @@ export const RUNNING_DEFAULT = { configId: "cfg-prod", version: 3 };
 export const INITIAL_CONFIGS: AgentConfig[] = [
   (() => {
     const versions = versionsFor("cfg-prod");
-    return { id: "cfg-prod", name: "Producción", description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.", versions, workingCopy: { ...versions[versions.length - 1].settings! }, dirtyTabs: [] };
+    return {
+      id: "cfg-prod",
+      name: "Producción",
+      description: "Agente activo con umbrales estrictos y todas las taxonomías habilitadas.",
+      versions,
+      workingCopy: { ...versions[versions.length - 1].settings! },
+      dirtyTabs: [],
+    };
   })(),
   (() => {
     const versions = versionsFor("cfg-staging");
     const draft = { ...versions[versions.length - 1].settings!, maxInstances: 12 };
-    return { id: "cfg-staging", name: "Staging", description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.", versions, workingCopy: draft, dirtyTabs: ["infra", "ops"] as TabKey[] };
+    return {
+      id: "cfg-staging",
+      name: "Staging",
+      description: "Ambiente de pruebas con taxonomías experimentales y umbral relajado.",
+      versions,
+      workingCopy: draft,
+      dirtyTabs: ["infra", "ops"] as TabKey[],
+    };
   })(),
-  { id: "cfg-canary", name: "Canario 2%", description: "Despliegue progresivo al 2% del tráfico real para validación.", versions: [], workingCopy: defaultSettings(), dirtyTabs: [] },
+  {
+    id: "cfg-canary",
+    name: "Canario 2%",
+    description: "Despliegue progresivo al 2% del tráfico real para validación.",
+    versions: [],
+    workingCopy: defaultSettings(),
+    dirtyTabs: [],
+  },
 ];
 
 /** A config has edits pending validation — the only ones ready to run through Testing. */

@@ -19,7 +19,8 @@ export type ApiAnalystCapacity = {
 };
 // Shared with ApiAnalystPlaybook.resolution_tag below - one catalog, two
 // consumers (see resolution_method_catalog_port.py on the backend).
-export type ApiResolutionTag = "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
+export type ApiResolutionTag =
+  "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
 export type ApiShortageBehavior = {
   resolution_tag: ApiResolutionTag;
   resolution_method_id: string | null;
@@ -89,18 +90,47 @@ export type ApiProfilingConfig = {
   field_enrichment: FeatureConfiguration;
   strategies: ApiProfilingStrategy[];
 };
+export type ApiRuleCondition = {
+  id: string;
+  variable: string;
+  comparison: "gt" | "gte" | "lt" | "lte" | "eq" | "neq" | "between" | "in";
+  values: string[];
+  score: number;
+};
+export type ApiDeterministicRule = ApiRuleCondition & { decision: "risk_suspected" | "risk" };
+export type ApiDeterministicConfig = {
+  alert_filter: ApiFilterGroup;
+  field_enrichment: FeatureConfiguration;
+  rules: ApiDeterministicRule[];
+};
+export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition[] };
 
 export type ApiClassificationConfig = {
   vector_store_tools: string[];
+  vector_store_version_id: string | null;
   built_in_tools: string[];
   prompt: string;
   prompt_vars: string[];
+  max_thought_iterations: number;
 };
 export type ApiAdversarialConfig = {
   prompt: string;
   prompt_vars: string[];
   max_cycles: number;
   feed_feedback_to_classification: boolean;
+};
+export type ApiDetectorConfig = {
+  vector_store_tools: string[];
+  vector_store_version_id: string | null;
+  built_in_tools: string[];
+  enable_pandas_history_tool: boolean;
+  use_xgboost_model: boolean;
+  xgboost_model_id: string | null;
+  prompt: string;
+  prompt_vars: string[];
+};
+export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
+  max_thought_iterations: number;
 };
 
 export type ApiAnalystPlaybook = {
@@ -116,7 +146,7 @@ export type ApiVoicebotConfig = {
   base_prompt_vars: string[];
   category_prompts: ApiVoicebotCategoryPrompt[];
 };
-export type ApiAnalystConfig = { playbooks: ApiAnalystPlaybook[]; voicebot: ApiVoicebotConfig };
+export type ApiAnalystConfig = { playbooks: ApiAnalystPlaybook[] };
 
 export type ApiDocumentationConfig = {
   strategy: "template" | "agent";
@@ -126,52 +156,24 @@ export type ApiDocumentationConfig = {
   agent_prompt_vars: string[];
 };
 
-export type ApiTaxonomy = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  variables: string[];
-  examples: string[];
-  active: boolean;
-  segmento: string;
-};
-export type ApiModusOperandi = {
-  id: string;
-  title: string;
-  narrative: string;
-  taxonomy_id: string;
-  evolved_variables: string[];
-  active: boolean;
-  segmento: string;
-};
-export type ApiFlag = {
-  id: string;
-  flag_type: "red" | "yellow";
-  name: string;
-  description: string;
-  evolved_variables: string[];
-  modus_operandi_ids: string[];
-  segmento: string;
-};
-export type ApiExampleCase = {
-  id: string;
-  text: string;
-  modus_operandi_id: string;
-  taxonomy_id: string;
-  segmento: string;
+export type ApiPromptField = { prompt: string; prompt_vars: string[] };
+export type ApiExecutorConfig = {
+  aric_marking: ApiPromptField;
+  voicebot_call: ApiVoicebotConfig;
+  documentador: ApiDocumentationConfig;
+  analyst_escalation: ApiPromptField;
 };
 
 export type ApiAgentSettings = {
+  deterministic: ApiDeterministicConfig;
   profiling: ApiProfilingConfig;
+  rubrics: ApiRubric[];
+  detector: ApiDetectorConfig;
+  detector_adversarial: ApiDetectorAdversarialConfig;
   classification: ApiClassificationConfig;
   adversarial: ApiAdversarialConfig;
   analyst: ApiAnalystConfig;
-  documentation: ApiDocumentationConfig;
-  taxonomies: ApiTaxonomy[];
-  modus_operandi: ApiModusOperandi[];
-  flags: ApiFlag[];
-  example_cases: ApiExampleCase[];
+  executor: ApiExecutorConfig;
   active_fields: string[];
   active_model_id: string | null;
 };

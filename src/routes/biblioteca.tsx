@@ -7,6 +7,10 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Field, TagInput, VariablePicker } from "@/components/configuracion/shared/FormControls";
 import { TAG_CATEGORY_LABELS, type TagCategory } from "@/data/configs";
 import {
+  useCreateVectorStoreVersion,
+  useVectorStoreVersions,
+} from "@/hooks/useVectorStoreVersions";
+import {
   createTag,
   deleteTag,
   listTags,
@@ -62,15 +66,18 @@ export const Route = createFileRoute("/biblioteca")({
   component: BibliotecaPage,
 });
 
-/* ─── Biblioteca global (backlog #3) ─────────────────────
-   Global, config-independent reference data - NOT tied to any segment or
-   configuration version, unlike SegmentKnowledgeBaseSection's local
-   taxonomies/modusOperandi/flags. Segments "importan de biblioteca"
-   (snapshot-copy, see that component) rather than referencing these rows
-   live, so editing here never retroactively changes an already-built
-   config. Own top-level route (not a configuración tab) because it's
-   reference data multiple configs pull from, not a per-config setting -
-   see AppSidebar.tsx for the nav entry and useRole.ts for admin-only
+/* ─── Biblioteca global (backlog #3, "Repositorio de Conocimiento"
+   in Wave 6) ──────────────────────────────────────────────
+   Global, config-independent reference data - the "conocimiento" tab below
+   is the one live-editable copy of taxonomías/modus operandi/flags/casos
+   similares. Agents no longer snapshot-copy this into a per-segment config
+   (that per-segment "Base de conocimiento" concept was removed, item 8/9);
+   instead this content is versioned (see data/vectorStoreVersions.ts,
+   useVectorStoreVersions.ts) and an agent's vector-store tool just pins to
+   a version id, so editing here never changes what an already-built config
+   searches against. Own top-level route (not a configuración tab) because
+   it's reference data multiple configs pull from, not a per-config setting
+   - see AppSidebar.tsx for the nav entry and useRole.ts for admin-only
    visibility. */
 
 const FLAG_TYPE_STYLES: Record<FlagTypeValue, string> = {
@@ -89,7 +96,7 @@ const EVENT_CATALOG_OPTIONS: TagCategory[] = ["integration_point", "triggered_ru
 
 type BibliotecaTab = "conocimiento" | "eventos" | "canales" | "listas" | "datasets";
 const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
-  { key: "conocimiento", label: "Conocimiento de fraude" },
+  { key: "conocimiento", label: "Repositorio de Conocimiento" },
   { key: "eventos", label: "Catálogos de eventos" },
   { key: "canales", label: "Canales" },
   { key: "listas", label: "Listas negras/blancas" },
@@ -132,6 +139,13 @@ function BibliotecaPage() {
     queryClient.invalidateQueries({ queryKey: ["libraryFlags"] });
     queryClient.invalidateQueries({ queryKey: ["librarySimilarCases"] });
   };
+
+  // --- Vector Store versions (Wave 6, item 9) ---------------------------------
+  // Frozen snapshots of the live content above - see
+  // data/vectorStoreVersions.ts for why this has no real backend endpoint.
+  const { versions: vectorStoreVersions } = useVectorStoreVersions();
+  const createVectorStoreVersion = useCreateVectorStoreVersion();
+  const [newVersionLabel, setNewVersionLabel] = useState("");
 
   // --- Channels ---------------------------------------------------------------
   // Same query key configuracion.tsx's SegmentoTab uses, so saving a channel
@@ -562,6 +576,61 @@ function BibliotecaPage() {
 
         {activeTab === "conocimiento" && (
           <>
+            {/* Vector Store versions */}
+            <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+                <div>
+                  <h2 className="text-[14px] font-semibold text-text-primary">
+                    Versiones del Vector Store
+                  </h2>
+                  <p className="text-[12px] text-text-secondary mt-0.5">
+                    Cada versión congela una copia de las taxonomías, modus operandi, flags y casos
+                    similares de este momento. Los agentes pueden anclar su herramienta de vector
+                    store a una versión específica en vez de siempre buscar sobre el contenido más
+                    reciente.
+                  </p>
+                </div>
+              </div>
+              <div className="p-6 space-y-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {vectorStoreVersions.map((v) => (
+                    <span
+                      key={v.id}
+                      className="px-2.5 py-1 rounded-full bg-surface border border-border text-text-secondary text-[12px]"
+                      title={new Date(v.createdAt).toLocaleString()}
+                    >
+                      {v.label}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newVersionLabel}
+                    onChange={(e) => setNewVersionLabel(e.target.value)}
+                    placeholder={`v${vectorStoreVersions.length + 1}`}
+                    className="w-40 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+                  />
+                  <button
+                    onClick={() => {
+                      createVectorStoreVersion(
+                        newVersionLabel.trim() || `v${vectorStoreVersions.length + 1}`,
+                        {
+                          taxonomies,
+                          modusOperandi,
+                          flags,
+                          similarCases,
+                        },
+                      );
+                      setNewVersionLabel("");
+                    }}
+                    className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
+                  >
+                    <Plus className="h-4 w-4" /> Crear nueva versión
+                  </button>
+                </div>
+              </div>
+            </section>
+
             {/* Taxonomías */}
             <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
               <div className="flex items-center justify-between px-6 py-4 border-b border-border">
