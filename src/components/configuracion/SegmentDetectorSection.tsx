@@ -20,11 +20,12 @@ import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
    immediately followed by its own adversarial critique - that step reuses
    SegmentAdversarialSection directly (generalized to take a `tools` prop),
    wired in SegmentAgentSection.tsx, no separate component needed. Same
-   vector-store/built-in tool categories as Clasificación, plus two
-   detector-specific tools: an XGBoost model (own inline model-version
-   picker, same query/filter/select as SegmentModelSection.tsx - inlined
-   here rather than extracted since this is the only consumer today) and
-   free-form pandas queries over the alert's transaction-history dataframe. */
+   vector-store/built-in tool categories + maxThoughtIterations as
+   Clasificación, plus detector-specific tools: an XGBoost model (own
+   inline model-version picker - the standalone "Modelo" subtab was
+   removed, this is now the only place it's picked - plus its scoring
+   thresholds and SHAP toggle) and free-form pandas queries over the
+   alert's transaction-history dataframe. */
 
 export function SegmentDetectorSection({
   value,
@@ -137,21 +138,79 @@ export function SegmentDetectorSection({
               />
             </div>
             {value.useXgboostModel && (
-              <Field label="Modelo" hint="Solo se listan modelos con estado Listo.">
-                <select
-                  value={value.xgboostModelId ?? ""}
-                  onChange={(e) => onChange({ ...value, xgboostModelId: e.target.value || null })}
-                  disabled={disabled}
-                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
-                >
-                  <option value="">Sin modelo asignado</option>
-                  {readyModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.tag}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <>
+                <Field label="Modelo" hint="Solo se listan modelos con estado Listo.">
+                  <select
+                    value={value.xgboostModelId ?? ""}
+                    onChange={(e) => onChange({ ...value, xgboostModelId: e.target.value || null })}
+                    disabled={disabled}
+                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
+                  >
+                    <option value="">Sin modelo asignado</option>
+                    {readyModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.tag}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field
+                    label="Umbral de fraude"
+                    hint="Score igual o mayor a este valor se clasifica directamente como clase fraude."
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={value.xgboostFraudThreshold}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        onChange({ ...value, xgboostFraudThreshold: Number(e.target.value) })
+                      }
+                      className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary disabled:opacity-50"
+                    />
+                  </Field>
+                  <Field
+                    label="Banda de incertidumbre"
+                    hint="Score entre este valor y el umbral de fraude se envía al agente para explorar. Por debajo se descarta."
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={value.xgboostUncertaintyThreshold}
+                      disabled={disabled}
+                      onChange={(e) =>
+                        onChange({
+                          ...value,
+                          xgboostUncertaintyThreshold: Number(e.target.value),
+                        })
+                      }
+                      className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary disabled:opacity-50"
+                    />
+                  </Field>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <p className="text-[13px] font-medium text-text-primary">SHAP</p>
+                    <p className="text-[12px] text-text-secondary mt-0.5">
+                      Calcula explicaciones SHAP de la predicción del modelo (vía el servicio MCP).
+                    </p>
+                  </div>
+                  <Switch
+                    checked={value.xgboostShapEnabled}
+                    onCheckedChange={(checked) =>
+                      onChange({ ...value, xgboostShapEnabled: checked })
+                    }
+                    disabled={disabled}
+                  />
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -204,6 +263,25 @@ export function SegmentDetectorSection({
               />
             </div>
           </Field>
+
+          <div className="pt-2 border-t border-border mt-5">
+            <Field
+              label="Máximo de iteraciones de pensamiento"
+              hint="Cuántos ciclos de razonamiento con herramientas puede hacer el agente antes de responder."
+            >
+              <input
+                type="number"
+                min={1}
+                max={15}
+                value={value.maxThoughtIterations}
+                disabled={disabled}
+                onChange={(e) =>
+                  onChange({ ...value, maxThoughtIterations: Number(e.target.value) })
+                }
+                className="w-24 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary disabled:opacity-50"
+              />
+            </Field>
+          </div>
         </div>
       </section>
     </div>

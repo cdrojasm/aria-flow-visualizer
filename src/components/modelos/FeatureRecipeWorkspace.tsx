@@ -8,8 +8,8 @@ import {
   FlaskConical,
   Download,
   CircleAlert,
-  AlertTriangle,
 } from "lucide-react";
+import { WarningAlert } from "@/components/configuracion/shared/FormControls";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { getDatasetRows } from "@/lib/api/datasets.functions";
 import {
@@ -27,9 +27,10 @@ import {
   saveFeatureTemplate,
   deleteFeatureTemplate,
 } from "@/lib/api/feature-recipes.functions";
-const input = "w-full rounded-md border border-border bg-background px-3 py-2 text-sm";
+const input =
+  "w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] focus:outline-none focus:border-primary";
 const button =
-  "rounded-md border border-border px-3 py-2 text-sm hover:bg-primary/5 disabled:opacity-40";
+  "rounded-md border border-border px-3 py-2 text-[12px] hover:bg-primary/5 disabled:opacity-40";
 const panel = "rounded-xl border border-border bg-card p-4 space-y-4";
 const uid = () => crypto.randomUUID();
 const show = (v: unknown) =>
@@ -354,8 +355,8 @@ function defaultStep(operation: string): RecipeStep {
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1 text-sm">
-      <span className="text-text-secondary">{label}</span>
+    <label className="block space-y-1">
+      <span className="block text-[12px] font-medium text-text-secondary">{label}</span>
       {children}
     </label>
   );
@@ -915,13 +916,10 @@ export function FeatureRecipeWorkspace({
             Mapea variables, transforma transacciones y calcula señales del historial.
           </p>
         </div>
-        <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-[11px] text-text-primary">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
-          <p>
-            <span className="font-medium">Mapeos activos:</span>{" "}
-            {value.recipes.filter((r) => r.enabled).length} · versión 1
-          </p>
-        </div>
+        <WarningAlert>
+          <span className="font-medium">Mapeos activos:</span>{" "}
+          {value.recipes.filter((r) => r.enabled).length} · versión 1
+        </WarningAlert>
       </div>
       <SectionTabs
         label="Ingeniería de características"
@@ -1423,11 +1421,11 @@ export function FeatureRecipeWorkspace({
                         </button>
                       </div>
                       {stepSkipsWhenInputMissing(recipe, i, capabilities) && (
-                        <p className="text-xs text-warning">
+                        <WarningAlert>
                           Este paso se saltará si el valor de entrada llega ausente o nulo — agrega
                           un paso "Reemplazar ausentes" antes para que la transformación se ejecute
                           siempre.
-                        </p>
+                        </WarningAlert>
                       )}
                       <label className="flex gap-2 text-xs">
                         <input

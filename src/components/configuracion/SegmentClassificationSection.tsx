@@ -85,24 +85,6 @@ export function SegmentClassificationSection({
               })}
             </div>
           </Field>
-          <div className="pt-2 border-t border-border">
-            <Field
-              label="Máximo de iteraciones de pensamiento"
-              hint="Cuántos ciclos de razonamiento con herramientas puede hacer el agente antes de responder."
-            >
-              <input
-                type="number"
-                min={1}
-                max={15}
-                value={value.maxThoughtIterations}
-                disabled={disabled}
-                onChange={(e) =>
-                  onChange({ ...value, maxThoughtIterations: Number(e.target.value) })
-                }
-                className="w-24 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary disabled:opacity-50"
-              />
-            </Field>
-          </div>
         </div>
       </section>
 
@@ -153,6 +135,25 @@ export function SegmentClassificationSection({
               />
             </div>
           </Field>
+
+          <div className="pt-2 border-t border-border mt-5">
+            <Field
+              label="Máximo de iteraciones de pensamiento"
+              hint="Cuántos ciclos de razonamiento con herramientas puede hacer el agente antes de responder."
+            >
+              <input
+                type="number"
+                min={1}
+                max={15}
+                value={value.maxThoughtIterations}
+                disabled={disabled}
+                onChange={(e) =>
+                  onChange({ ...value, maxThoughtIterations: Number(e.target.value) })
+                }
+                className="w-24 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary disabled:opacity-50"
+              />
+            </Field>
+          </div>
         </div>
       </section>
     </div>

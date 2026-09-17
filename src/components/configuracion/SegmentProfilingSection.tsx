@@ -1,4 +1,4 @@
-import { useRef, type MutableRefObject } from "react";
+import { useRef } from "react";
 
 import { FeatureRecipeWorkspace } from "@/components/modelos/FeatureRecipeWorkspace";
 import {
@@ -112,30 +112,22 @@ function ProfilingStrategyCard({
 }) {
   const mainPromptRef = useRef<HTMLTextAreaElement>(null);
   const mainPromptSelection = useRef<{ start: number; end: number } | null>(null);
-  const categorizationPromptRef = useRef<HTMLTextAreaElement>(null);
-  const categorizationPromptSelection = useRef<{ start: number; end: number } | null>(null);
 
   // Patches the prompt text and its promptVars list in ONE onUpdate call -
   // two separate onUpdate calls in the same tick would each close over the
   // same pre-update `strategy`/`value.strategies` and the second would
   // clobber the first (stale-closure double setState).
-  const insertToken = (
-    el: HTMLTextAreaElement | null,
-    selection: { start: number; end: number } | null,
-    selectionRef: MutableRefObject<{ start: number; end: number } | null>,
-    promptField: "mainPrompt" | "categorizationPrompt",
-    varsField: "mainPromptVars" | "categorizationPromptVars",
-    variable: string,
-  ) => {
-    const { next, cursor } = spliceToken(strategy[promptField], selection, `{${variable}}`);
-    onUpdate({
-      [promptField]: next,
-      [varsField]: [...strategy[varsField], variable],
-    } as Partial<ProfilingStrategy>);
-    selectionRef.current = { start: cursor, end: cursor };
+  const insertToken = (variable: string) => {
+    const { next, cursor } = spliceToken(
+      strategy.mainPrompt,
+      mainPromptSelection.current,
+      `{${variable}}`,
+    );
+    onUpdate({ mainPrompt: next, mainPromptVars: [...strategy.mainPromptVars, variable] });
+    mainPromptSelection.current = { start: cursor, end: cursor };
     requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(cursor, cursor);
+      mainPromptRef.current?.focus();
+      mainPromptRef.current?.setSelectionRange(cursor, cursor);
     });
   };
 
@@ -147,7 +139,7 @@ function ProfilingStrategyCard({
         </h3>
       </div>
       <div className="p-6 space-y-5">
-        <Field label="Prompt principal">
+        <Field label="Prompt">
           <div className="flex items-center gap-1 bg-surface rounded-lg border border-border p-1 w-fit mb-2">
             {MAIN_PROMPT_MODE_OPTIONS.map((o) => (
               <button
@@ -206,82 +198,10 @@ function ProfilingStrategyCard({
               onChange={(v) => onUpdate({ mainPromptVars: v })}
               pool={pool}
               prompt={strategy.mainPrompt}
-              onInsert={(v) =>
-                insertToken(
-                  mainPromptRef.current,
-                  mainPromptSelection.current,
-                  mainPromptSelection,
-                  "mainPrompt",
-                  "mainPromptVars",
-                  v,
-                )
-              }
+              onInsert={insertToken}
             />
           </div>
         </Field>
-
-        <fieldset
-          disabled={disabled || strategy.mainPromptMode === "fstring"}
-          className={`contents ${strategy.mainPromptMode === "fstring" ? "opacity-60" : ""}`}
-        >
-          <Field
-            label="Prompt de categorización (LLM)"
-            hint={
-              strategy.mainPromptMode === "fstring"
-                ? "Deshabilitado: el prompt principal de esta estrategia es f-string (sin LLM), así que no hay modelo corriendo que categorice/cuantice nada."
-                : "Sub-prompt siempre ejecutado a través de un LLM para categorizar/cuantizar valores."
-            }
-          >
-            <textarea
-              ref={categorizationPromptRef}
-              value={strategy.categorizationPrompt}
-              onChange={(e) => onUpdate({ categorizationPrompt: e.target.value })}
-              onBlur={(e) =>
-                onUpdate({
-                  categorizationPromptVars: variablesInPrompt(e.target.value).filter((variable) =>
-                    pool.includes(variable),
-                  ),
-                })
-              }
-              onSelect={(e) => {
-                categorizationPromptSelection.current = {
-                  start: e.currentTarget.selectionStart,
-                  end: e.currentTarget.selectionEnd,
-                };
-              }}
-              onFocus={(e) => {
-                categorizationPromptSelection.current = {
-                  start: e.currentTarget.selectionStart,
-                  end: e.currentTarget.selectionEnd,
-                };
-              }}
-              rows={3}
-              placeholder="Ej: Dado el historial transaccional, clasifica el riesgo del usuario como bajo, medio o alto."
-              className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none disabled:opacity-50"
-            />
-            <div className="mt-2">
-              <p className="text-[11px] font-medium text-text-secondary mb-1.5">
-                Variables usadas en este prompt
-              </p>
-              <VariablePicker
-                value={strategy.categorizationPromptVars}
-                onChange={(v) => onUpdate({ categorizationPromptVars: v })}
-                pool={pool}
-                prompt={strategy.categorizationPrompt}
-                onInsert={(v) =>
-                  insertToken(
-                    categorizationPromptRef.current,
-                    categorizationPromptSelection.current,
-                    categorizationPromptSelection,
-                    "categorizationPrompt",
-                    "categorizationPromptVars",
-                    v,
-                  )
-                }
-              />
-            </div>
-          </Field>
-        </fieldset>
       </div>
     </section>
   );

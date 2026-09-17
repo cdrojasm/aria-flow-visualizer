@@ -113,15 +113,15 @@ export type SegmentMonitoringConfig = {
 export type ProfilingStrategyKey = "usuario" | "transaccion" | "transaccional";
 // Whether mainPrompt is used as a literal f-string (placeholders
 // substituted directly, no LLM call) or as an actual prompt sent to an
-// LLM. categorizationPrompt has no such switch - it is always LLM-executed.
+// LLM - mutually exclusive, exactly one prompt input per strategy (the
+// separate always-LLM "categorization" sub-prompt was removed, it just
+// duplicated this same toggle in different UI).
 export type ProfilingPromptMode = "fstring" | "llm";
 export type ProfilingStrategy = {
   key: ProfilingStrategyKey;
   mainPrompt: string;
   mainPromptVars: string[];
   mainPromptMode: ProfilingPromptMode;
-  categorizationPrompt: string;
-  categorizationPromptVars: string[];
   usePandasHistoryMcp: boolean;
 };
 export type ProfilingConfig = {
@@ -163,8 +163,6 @@ export const defaultProfilingStrategy = (key: ProfilingStrategyKey): ProfilingSt
   mainPrompt: "",
   mainPromptVars: [],
   mainPromptMode: "fstring",
-  categorizationPrompt: "",
-  categorizationPromptVars: [],
   usePandasHistoryMcp: false,
 });
 
@@ -237,9 +235,9 @@ export type ClassificationConfig = {
   prompt: string;
   promptVars: string[];
   // "iteraciones de pensamiento" - max ReAct-style tool-call loops before
-  // the agent must answer. Only Clasificación and Adversarial (Detector)
-  // carry this field (see DetectorAdversarialConfig) - not Detector itself,
-  // not Adversarial (Clasificación).
+  // the agent must answer. Clasificación, Detector and Adversarial
+  // (Detector) all carry this field (see DetectorConfig/
+  // DetectorAdversarialConfig) - Adversarial (Clasificación) does not.
   maxThoughtIterations: number;
 };
 
@@ -269,9 +267,12 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
 /* ─── Detector + Adversarial (Detector) (Wave 6) ─────────
    Runs before Clasificación in the agent pipeline, immediately followed by
    its own adversarial critique step - mirrors Clasificación/Adversarial's
-   shape (same tool categories + prompt), plus tool-specific extras: an
-   XGBoost model toggle (own model-version selector, same pattern as the
-   "Modelo" subtab) and a free-form pandas query tool over the alert's
+   shape (same tool categories + prompt + maxThoughtIterations), plus
+   tool-specific extras: an XGBoost model toggle (own inline model-version
+   selector - the standalone "Modelo" subtab/SegmentModelSection.tsx was
+   removed, this is now the only place a segment's model is picked), its
+   scoring thresholds (xgboostFraudThreshold / xgboostUncertaintyThreshold)
+   and SHAP toggle, and a free-form pandas query tool over the alert's
    transaction-history dataframe. DetectorAdversarialConfig intentionally
    has the exact same fields as AdversarialConfig (item 7: "los mismos
    parámetros que el de clasificación") plus maxThoughtIterations. */
@@ -283,8 +284,16 @@ export type DetectorConfig = {
   enablePandasHistoryTool: boolean;
   useXgboostModel: boolean;
   xgboostModelId: string | null;
+  // Score >= xgboostFraudThreshold: clasifica directo como clase fraude.
+  // Score en [xgboostUncertaintyThreshold, xgboostFraudThreshold): banda de
+  // incertidumbre, se envía al agente para explorar más a fondo. Score
+  // < xgboostUncertaintyThreshold: se descarta sin pasar por el agente.
+  xgboostFraudThreshold: number;
+  xgboostUncertaintyThreshold: number;
+  xgboostShapEnabled: boolean;
   prompt: string;
   promptVars: string[];
+  maxThoughtIterations: number;
 };
 
 export type DetectorAdversarialConfig = AdversarialConfig & {
@@ -298,8 +307,12 @@ export const defaultDetectorConfig = (): DetectorConfig => ({
   enablePandasHistoryTool: false,
   useXgboostModel: false,
   xgboostModelId: null,
+  xgboostFraudThreshold: 0.8,
+  xgboostUncertaintyThreshold: 0.4,
+  xgboostShapEnabled: false,
   prompt: "",
   promptVars: [],
+  maxThoughtIterations: 5,
 });
 
 export const defaultDetectorAdversarialConfig = (): DetectorAdversarialConfig => ({
@@ -412,8 +425,10 @@ export type SegmentAgentConfig = {
   executor: ExecutorConfig;
   activeFields: string[];
   // Trained model (models.functions.ts ModelResponse.id) this segment's
-  // agent scores alerts with - set from the "Modelo" subtab, see
-  // SegmentModelSection.tsx.
+  // agent scores alerts with. The standalone "Modelo" subtab that used to
+  // set this was removed (redundant with DetectorConfig.xgboostModelId,
+  // which is now the only model picker) - kept here only for wire-format
+  // compatibility with the backend's AgentSettings.active_model_id.
   activeModelId: string | null;
 };
 

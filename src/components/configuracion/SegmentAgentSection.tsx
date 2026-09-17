@@ -6,7 +6,6 @@ import { SegmentAnalystSection } from "./SegmentAnalystSection";
 import { SegmentClassificationSection } from "./SegmentClassificationSection";
 import { SegmentDetectorSection } from "./SegmentDetectorSection";
 import { SegmentExecutorSection } from "./SegmentExecutorSection";
-import { SegmentModelSection } from "./SegmentModelSection";
 import { SegmentProfilingSection } from "./SegmentProfilingSection";
 import { SegmentDeterministicSection } from "./SegmentDeterministicSection";
 import { SegmentStageJsonInspector } from "./SegmentStageJsonInspector";
@@ -19,8 +18,7 @@ type AgentSubTab =
   | "classification"
   | "adversarial"
   | "analyst"
-  | "executor"
-  | "modelo";
+  | "executor";
 
 const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = [
   {
@@ -42,7 +40,7 @@ const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = 
   },
   {
     key: "detectorAdversarial",
-    label: "Adversarial",
+    label: "Adversarial (detector)",
     description: "Contrasta la detección para cuestionar y reforzar el resultado.",
   },
   {
@@ -52,7 +50,7 @@ const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = 
   },
   {
     key: "adversarial",
-    label: "Adversarial",
+    label: "Adversarial (clasificador)",
     description: "Contrasta la clasificación para cuestionar y reforzar el resultado.",
   },
   {
@@ -65,11 +63,6 @@ const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = 
     label: "Ejecutor",
     description:
       "Define la marcación ARIC, la llamada al voicebot, la documentación final y el escalado al analista.",
-  },
-  {
-    key: "modelo",
-    label: "Modelo",
-    description: "Selecciona el modelo entrenado que se usará para puntuar alertas.",
   },
 ];
 
@@ -125,9 +118,7 @@ export function SegmentAgentSection({
                 ? value.adversarial
                 : subtab === "analyst"
                   ? value.analyst
-                  : subtab === "executor"
-                    ? value.executor
-                    : value.activeModelId;
+                  : value.executor;
 
   return (
     <div className="space-y-4">
@@ -230,13 +221,6 @@ export function SegmentAgentSection({
           value={value.executor}
           onChange={(executor) => onChange({ executor })}
           extraVariables={enrichmentVariables}
-          disabled={disabled}
-        />
-      )}
-      {subtab === "modelo" && (
-        <SegmentModelSection
-          value={value.activeModelId}
-          onChange={(activeModelId) => onChange({ activeModelId })}
           disabled={disabled}
         />
       )}

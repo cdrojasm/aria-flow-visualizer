@@ -80,8 +80,6 @@ export type ApiProfilingStrategy = {
   main_prompt: string;
   main_prompt_vars: string[];
   main_prompt_mode: "fstring" | "llm";
-  categorization_prompt: string;
-  categorization_prompt_vars: string[];
   use_pandas_history_mcp: boolean;
 };
 export type ApiProfilingConfig = {
@@ -126,8 +124,12 @@ export type ApiDetectorConfig = {
   enable_pandas_history_tool: boolean;
   use_xgboost_model: boolean;
   xgboost_model_id: string | null;
+  xgboost_fraud_threshold: number;
+  xgboost_uncertainty_threshold: number;
+  xgboost_shap_enabled: boolean;
   prompt: string;
   prompt_vars: string[];
+  max_thought_iterations: number;
 };
 export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
   max_thought_iterations: number;

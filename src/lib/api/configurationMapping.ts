@@ -113,8 +113,6 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       main_prompt: s.mainPrompt,
       main_prompt_vars: s.mainPromptVars,
       main_prompt_mode: s.mainPromptMode,
-      categorization_prompt: s.categorizationPrompt,
-      categorization_prompt_vars: s.categorizationPromptVars,
       // The pandas-history MCP control was retired from Perfilamiento.
       // Always disable legacy saved values when the configuration is saved.
       use_pandas_history_mcp: false,
@@ -127,8 +125,12 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     enable_pandas_history_tool: a.detector.enablePandasHistoryTool,
     use_xgboost_model: a.detector.useXgboostModel,
     xgboost_model_id: a.detector.xgboostModelId,
+    xgboost_fraud_threshold: a.detector.xgboostFraudThreshold,
+    xgboost_uncertainty_threshold: a.detector.xgboostUncertaintyThreshold,
+    xgboost_shap_enabled: a.detector.xgboostShapEnabled,
     prompt: a.detector.prompt,
     prompt_vars: a.detector.promptVars,
+    max_thought_iterations: a.detector.maxThoughtIterations,
   };
   const detectorAdversarial: ApiDetectorAdversarialConfig = {
     prompt: a.detectorAdversarial.prompt,
@@ -232,8 +234,6 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         mainPrompt: s.main_prompt,
         mainPromptVars: s.main_prompt_vars,
         mainPromptMode: s.main_prompt_mode,
-        categorizationPrompt: s.categorization_prompt,
-        categorizationPromptVars: s.categorization_prompt_vars,
         usePandasHistoryMcp: false,
       })),
     },
@@ -247,8 +247,17 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
           enablePandasHistoryTool: a.detector.enable_pandas_history_tool,
           useXgboostModel: a.detector.use_xgboost_model,
           xgboostModelId: a.detector.xgboost_model_id,
+          xgboostFraudThreshold:
+            a.detector.xgboost_fraud_threshold ?? defaults.detector.xgboostFraudThreshold,
+          xgboostUncertaintyThreshold:
+            a.detector.xgboost_uncertainty_threshold ??
+            defaults.detector.xgboostUncertaintyThreshold,
+          xgboostShapEnabled:
+            a.detector.xgboost_shap_enabled ?? defaults.detector.xgboostShapEnabled,
           prompt: a.detector.prompt,
           promptVars: a.detector.prompt_vars,
+          maxThoughtIterations:
+            a.detector.max_thought_iterations ?? defaults.detector.maxThoughtIterations,
         }
       : defaults.detector,
     detectorAdversarial: a.detector_adversarial
