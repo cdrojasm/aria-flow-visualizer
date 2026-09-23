@@ -31,6 +31,7 @@ export function SegmentoTab({
   disabled,
   channelsOnly = false,
   allowChannelManagement = false,
+  allowProcessingToggle = true,
 }: {
   value: Record<SegmentCode, SegmentSettings>;
   onChange: (segments: Record<SegmentCode, SegmentSettings>) => void;
@@ -41,6 +42,8 @@ export function SegmentoTab({
   channelsOnly?: boolean;
   /** Only Manager and Release Manager own membership of a configuration. */
   allowChannelManagement?: boolean;
+  /** Only Manager and Release Manager can enable processing for a channel. */
+  allowProcessingToggle?: boolean;
 }) {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [removingCode, setRemovingCode] = useState<string | null>(null);
@@ -133,7 +136,9 @@ export function SegmentoTab({
                 <p className="text-[12px] text-text-secondary mt-0.5">
                   {channelsOnly
                     ? "Habilita o deshabilita el procesamiento para este canal."
-                    : "Enciende el procesamiento de este segmento y define, con condiciones AND/OR, qué eventos maneja."}
+                    : allowProcessingToggle
+                      ? "Enciende el procesamiento de este segmento y define, con condiciones AND/OR, qué eventos maneja."
+                      : "Define, con condiciones AND/OR, qué eventos maneja. El procesamiento lo habilita o deshabilita un Manager o Release Manager."}
                 </p>
               </div>
             </div>
@@ -141,7 +146,13 @@ export function SegmentoTab({
               <Switch
                 checked={value[code].enabled}
                 onCheckedChange={(enabled) => updateSegment(code, { enabled })}
-                disabled={disabled}
+                disabled={disabled || !allowProcessingToggle}
+                aria-label={`Procesamiento para ${channelLabels[code] ?? code}`}
+                title={
+                  !allowProcessingToggle
+                    ? "Sólo un Manager o Release Manager puede habilitar o deshabilitar el procesamiento."
+                    : undefined
+                }
               />
               {!disabled && !channelsOnly && allowChannelManagement && (
                 <button
