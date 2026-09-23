@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy refresh-github-token run down logs shell
+.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store
 
 .DEFAULT_GOAL := help
 
@@ -55,6 +55,15 @@ down: ## Stop app
 
 logs: ## Tail app logs
 	docker compose logs -f web
+
+test-web-prepare: ## Install the locked npm test tooling after a Bun install
+	npm ci --legacy-peer-deps
+
+test-web-component-vector-store: test-web-prepare ## Run Vector Store component tests
+	npm run test:web:component
+
+test-e2e-vector-store: test-web-prepare ## Run Vector Store browser workflow tests
+	npm run test:e2e -- vector-store
 
 shell: ## Shell into running app container
 	docker compose exec web sh
