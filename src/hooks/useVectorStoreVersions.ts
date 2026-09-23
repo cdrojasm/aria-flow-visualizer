@@ -3,15 +3,20 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VectorStoreVersion } from "@/data/vectorStoreVersions";
 import {
   addVectorStoreDocument, createVectorStoreInstance, listVectorStoreDocuments,
-  listVectorStoreInstances, removeVectorStoreDocument, type VectorStoreDocumentRelation,
-  previewVectorStoreDocument, type VectorStoreInstanceResponse,
+  listVectorStoreInstances, promoteVectorStoreInstance, removeVectorStoreDocument,
+  type VectorStoreDocumentRelation, previewVectorStoreDocument, type VectorStoreInstanceResponse,
 } from "@/lib/api/vectorStoreInstances.functions";
 
 const QUERY_KEY = ["vectorStoreVersions"];
 const documentsKey = (instanceId: string) => ["vectorStoreDocuments", instanceId];
 
 function toVersion(response: VectorStoreInstanceResponse): VectorStoreVersion {
-  return { id: response.id, version: response.version, name: response.name, description: response.description, createdAt: response.created_at, createdBy: response.created_by, updatedAt: response.updated_at, updatedBy: response.updated_by, documentKeys: [] };
+  return {
+    id: response.id, version: response.version, name: response.name, description: response.description,
+    createdAt: response.created_at, createdBy: response.created_by, updatedAt: response.updated_at, updatedBy: response.updated_by,
+    promotedVersion: response.promoted_version, promotedAt: response.promoted_at, promotedBy: response.promoted_by,
+    documentKeys: [],
+  };
 }
 
 export function useVectorStoreVersions() {
@@ -30,6 +35,15 @@ export function useCreateVectorStoreVersion() {
     const created = await createVectorStoreInstance(input);
     await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
     return created.id;
+  };
+}
+
+export function usePromoteVectorStoreInstance() {
+  const queryClient = useQueryClient();
+  return async (instanceId: string) => {
+    const promoted = await promoteVectorStoreInstance(instanceId);
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    return promoted;
   };
 }
 
