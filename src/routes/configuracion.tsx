@@ -27,6 +27,7 @@ import {
   CalendarClock,
   Download,
   DollarSign,
+  ShieldCheck,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -685,6 +686,18 @@ function ConfiguracionPage() {
       : undefined;
   const canRequestDeploy =
     isChannelManager && !!selectedSavedVersion?.ever_tested && !selectedSavedVersion.active;
+  // "Probar configuración" step of the Borrador → Guardar → Probar →
+  // Desplegar cycle (see ConfigurationVersionGuide) — a real button next to
+  // Guardar/Desplegar's, not just the passive "Ir a Testing" links below.
+  // Available to every editor role (manager/channel_manager/release_manager
+  // alike): any saved, not-yet-tested, not-yet-live version can be sent to
+  // Testing pre-targeted via URL params.
+  const canProbarConfiguracion =
+    canEditConfiguration &&
+    !isDraftView &&
+    !!selectedSavedVersion &&
+    !selectedSavedVersion.ever_tested &&
+    !selectedSavedVersion.active;
   const willOverwrite =
     !unsaved &&
     selectedDraft?.basedOnVersion != null &&
@@ -1317,6 +1330,15 @@ function ConfiguracionPage() {
                       : "Crear versión"}
               </button>
             </div>
+          )}
+          {canProbarConfiguracion && (
+            <Link
+              to="/testing"
+              search={{ configurationId: selectedConfig.id, version: selectedSavedVersion!.version }}
+              className={`${actionButtonClass} border border-primary text-primary hover:bg-primary/5`}
+            >
+              <ShieldCheck className="h-4 w-4" /> Probar configuración
+            </Link>
           )}
           {canRequestDeploy && (
             <button
@@ -2342,6 +2364,7 @@ function ConfiguracionPage() {
               disabled={locked}
               channelsOnly={!isChannelManager && !isReleaseManager}
               allowChannelManagement={canManageChannelMembership}
+              allowProcessingToggle={isManager || isReleaseManager}
             />
           </fieldset>
         )}
@@ -2892,7 +2915,11 @@ function ConfiguracionPage() {
                   <p className="text-[12px] text-text-primary">
                     Esta configuración no ha sido probada y no puede desplegarse hasta satisfacer
                     esta condición — corre al menos un test en Testing.{" "}
-                    <Link to="/testing" className="underline font-medium">
+                    <Link
+                      to="/testing"
+                      search={{ configurationId: deployTarget.configId, version: deployTarget.version }}
+                      className="underline font-medium"
+                    >
                       Ir a Testing
                     </Link>
                   </p>

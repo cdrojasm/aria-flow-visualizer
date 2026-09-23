@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Loader2,
@@ -25,7 +25,27 @@ import {
 } from "@/lib/api/testing.functions";
 import { listConfigurations } from "@/lib/api/configurations.functions";
 
+// Deep-link params for the "Probar configuración" button in Configuración
+// (src/routes/configuracion.tsx): configurationId+version identify the
+// exact saved version to pre-select in NewTestRunModal, opened
+// automatically when present — see TestingPage's mount effect below.
 export const Route = createFileRoute("/testing/")({
+  // Optional keys (not `key: value | undefined`) so plain `<Link to="/testing">`
+  // elsewhere keeps working without a `search` prop.
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { configurationId?: string; version?: number } => {
+    const configurationId =
+      typeof search.configurationId === "string" ? search.configurationId : undefined;
+    const raw = search.version;
+    const version =
+      typeof raw === "number" && Number.isFinite(raw)
+        ? raw
+        : typeof raw === "string" && raw.trim() !== "" && Number.isFinite(Number(raw))
+          ? Number(raw)
+          : undefined;
+    return { configurationId, version };
+  },
   head: () => ({
     meta: [
       { title: "ARIA - Agente prevención de Fraude" },
@@ -63,6 +83,7 @@ function truncateText(text: string, max = TRUNCATE_MAX_CHARS): string {
 function TestingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { configurationId: deepLinkConfigurationId, version: deepLinkVersion } = Route.useSearch();
 
   const [showNewRunModal, setShowNewRunModal] = useState(false);
   const [order, setOrder] = useState<"asc" | "desc">("desc");
@@ -71,6 +92,13 @@ function TestingPage() {
   const [datasetFilter, setDatasetFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<TestRunResponse["status"] | "">("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Deep link from Configuración's "Probar configuración" button: open the
+  // modal pre-targeted at that exact version instead of making the user
+  // reopen it and hunt for the version they just created.
+  useEffect(() => {
+    if (deepLinkConfigurationId) setShowNewRunModal(true);
+  }, [deepLinkConfigurationId]);
 
   const configurationsQuery = useQuery({
     queryKey: ["configurations"],
@@ -169,7 +197,12 @@ function TestingPage() {
           </button>
         </header>
 
-        <NewTestRunModal open={showNewRunModal} onClose={() => setShowNewRunModal(false)} />
+        <NewTestRunModal
+          open={showNewRunModal}
+          onClose={() => setShowNewRunModal(false)}
+          initialConfigurationId={deepLinkConfigurationId ?? null}
+          initialConfigVersion={deepLinkVersion ?? null}
+        />
 
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">

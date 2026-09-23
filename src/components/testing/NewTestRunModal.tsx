@@ -49,7 +49,21 @@ type PersistedConfigSelection = {
   selectedConfigVersion: number | null;
 };
 
-export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewTestRunModal({
+  open,
+  onClose,
+  initialConfigurationId = null,
+  initialConfigVersion = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  // Deep-link pre-fill (from /testing?configurationId=...&version=...) — set
+  // by "Probar configuración" in Configuración. Takes priority over the
+  // persisted last-used pick below: it names the exact version the user
+  // just created and wants tested, not whatever they tested last time.
+  initialConfigurationId?: string | null;
+  initialConfigVersion?: number | null;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -69,8 +83,15 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [configSelectionHydrated, setConfigSelectionHydrated] = useState(false);
 
-  // Restore the last-used configuración/versión once on mount.
+  // Restore the last-used configuración/versión once on mount - unless a
+  // deep link named an exact one, which wins over the persisted pick.
   useEffect(() => {
+    if (initialConfigurationId) {
+      setSelectedConfigurationId(initialConfigurationId);
+      setSelectedConfigVersion(initialConfigVersion);
+      setConfigSelectionHydrated(true);
+      return;
+    }
     try {
       const raw = localStorage.getItem(CONFIG_SELECTION_STORAGE_KEY);
       if (raw) {
@@ -87,6 +108,7 @@ export function NewTestRunModal({ open, onClose }: { open: boolean; onClose: () 
     } finally {
       setConfigSelectionHydrated(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist on every change, once past the restore above (otherwise this
