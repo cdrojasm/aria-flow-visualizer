@@ -23,6 +23,7 @@ import {
   type SegmentMonitoringConfig,
   type SegmentSettings,
   defaultSegmentAgent,
+  defaultAlertParserConfig,
   defaultSegments,
 } from "@/data/configs";
 
@@ -101,6 +102,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       values: rule.values,
       score: rule.score,
       decision: rule.decision,
+      aric_action: rule.aricAction,
     })),
   };
   const profiling: ApiProfilingConfig = {
@@ -119,9 +121,12 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     })),
   };
   const detector: ApiDetectorConfig = {
-    vector_store_tools: a.detector.vectorStoreTools,
-    vector_store_version_id: a.detector.vectorStoreVersionId,
-    built_in_tools: a.detector.builtInTools,
+    vector_store_enabled: a.detector.vectorStoreEnabled,
+    vector_store_instance_ids: a.detector.vectorStoreInstanceIds,
+    watchlist_enabled: a.detector.watchlistEnabled,
+    watchlist_ids: a.detector.watchlistIds,
+    watchlist_compare_field: a.detector.watchlistCompareField,
+    calculator_enabled: a.detector.calculatorEnabled,
     enable_pandas_history_tool: a.detector.enablePandasHistoryTool,
     use_xgboost_model: a.detector.useXgboostModel,
     xgboost_model_id: a.detector.xgboostModelId,
@@ -131,8 +136,15 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     prompt: a.detector.prompt,
     prompt_vars: a.detector.promptVars,
     max_thought_iterations: a.detector.maxThoughtIterations,
+    output_labels: a.detector.outputLabels,
   };
   const detectorAdversarial: ApiDetectorAdversarialConfig = {
+    vector_store_enabled: a.detectorAdversarial.vectorStoreEnabled,
+    vector_store_instance_ids: a.detectorAdversarial.vectorStoreInstanceIds,
+    watchlist_enabled: a.detectorAdversarial.watchlistEnabled,
+    watchlist_ids: a.detectorAdversarial.watchlistIds,
+    watchlist_compare_field: a.detectorAdversarial.watchlistCompareField,
+    calculator_enabled: a.detectorAdversarial.calculatorEnabled,
     prompt: a.detectorAdversarial.prompt,
     prompt_vars: a.detectorAdversarial.promptVars,
     max_cycles: a.detectorAdversarial.maxCycles,
@@ -140,14 +152,24 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     max_thought_iterations: a.detectorAdversarial.maxThoughtIterations,
   };
   const classification: ApiClassificationConfig = {
-    vector_store_tools: a.classification.vectorStoreTools,
-    vector_store_version_id: a.classification.vectorStoreVersionId,
-    built_in_tools: a.classification.builtInTools,
+    vector_store_enabled: a.classification.vectorStoreEnabled,
+    vector_store_instance_ids: a.classification.vectorStoreInstanceIds,
+    watchlist_enabled: a.classification.watchlistEnabled,
+    watchlist_ids: a.classification.watchlistIds,
+    watchlist_compare_field: a.classification.watchlistCompareField,
+    calculator_enabled: a.classification.calculatorEnabled,
     prompt: a.classification.prompt,
     prompt_vars: a.classification.promptVars,
     max_thought_iterations: a.classification.maxThoughtIterations,
+    output_labels: a.classification.outputLabels,
   };
   const adversarial: ApiAdversarialConfig = {
+    vector_store_enabled: a.adversarial.vectorStoreEnabled,
+    vector_store_instance_ids: a.adversarial.vectorStoreInstanceIds,
+    watchlist_enabled: a.adversarial.watchlistEnabled,
+    watchlist_ids: a.adversarial.watchlistIds,
+    watchlist_compare_field: a.adversarial.watchlistCompareField,
+    calculator_enabled: a.adversarial.calculatorEnabled,
     prompt: a.adversarial.prompt,
     prompt_vars: a.adversarial.promptVars,
     max_cycles: a.adversarial.maxCycles,
@@ -191,6 +213,14 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     },
   };
   return {
+    parser: {
+      fields: a.parser.fields.map((field) => ({
+        id: field.id,
+        source_field: field.sourceField,
+        alias: field.alias,
+        type: field.type,
+      })),
+    },
     deterministic,
     profiling,
     rubrics: a.rubrics.map((rubric) => ({
@@ -220,11 +250,24 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
   // configuration contract.
   const defaults = defaultSegmentAgent();
   return {
+    parser: a.parser
+      ? {
+          fields: a.parser.fields.map((field) => ({
+            id: field.id,
+            sourceField: field.source_field,
+            alias: field.alias,
+            type: field.type,
+          })),
+        }
+      : defaults.parser,
     deterministic: a.deterministic
       ? {
           alertFilter: filterGroupFromApi(a.deterministic.alert_filter),
           fieldEnrichment: a.deterministic.field_enrichment,
-          rules: a.deterministic.rules,
+          rules: a.deterministic.rules.map((rule) => ({
+            ...rule,
+            aricAction: rule.aric_action ?? "soft_block",
+          })),
         }
       : defaults.deterministic,
     profiling: {
@@ -240,10 +283,12 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
     rubrics: a.rubrics ?? [],
     detector: a.detector
       ? {
-          vectorStoreTools: a.detector
-            .vector_store_tools as SegmentAgentConfig["detector"]["vectorStoreTools"],
-          vectorStoreVersionId: a.detector.vector_store_version_id,
-          builtInTools: a.detector.built_in_tools as SegmentAgentConfig["detector"]["builtInTools"],
+          vectorStoreEnabled: a.detector.vector_store_enabled,
+          vectorStoreInstanceIds: a.detector.vector_store_instance_ids ?? [],
+          watchlistEnabled: a.detector.watchlist_enabled,
+          watchlistIds: a.detector.watchlist_ids ?? [],
+          watchlistCompareField: a.detector.watchlist_compare_field ?? null,
+          calculatorEnabled: a.detector.calculator_enabled,
           enablePandasHistoryTool: a.detector.enable_pandas_history_tool,
           useXgboostModel: a.detector.use_xgboost_model,
           xgboostModelId: a.detector.xgboost_model_id,
@@ -258,10 +303,17 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
           promptVars: a.detector.prompt_vars,
           maxThoughtIterations:
             a.detector.max_thought_iterations ?? defaults.detector.maxThoughtIterations,
+          outputLabels: a.detector.output_labels ?? defaults.detector.outputLabels,
         }
       : defaults.detector,
     detectorAdversarial: a.detector_adversarial
       ? {
+          vectorStoreEnabled: a.detector_adversarial.vector_store_enabled,
+          vectorStoreInstanceIds: a.detector_adversarial.vector_store_instance_ids ?? [],
+          watchlistEnabled: a.detector_adversarial.watchlist_enabled,
+          watchlistIds: a.detector_adversarial.watchlist_ids ?? [],
+          watchlistCompareField: a.detector_adversarial.watchlist_compare_field ?? null,
+          calculatorEnabled: a.detector_adversarial.calculator_enabled,
           prompt: a.detector_adversarial.prompt,
           promptVars: a.detector_adversarial.prompt_vars,
           maxCycles: a.detector_adversarial.max_cycles,
@@ -270,16 +322,24 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         }
       : defaults.detectorAdversarial,
     classification: {
-      vectorStoreTools: a.classification
-        .vector_store_tools as SegmentAgentConfig["classification"]["vectorStoreTools"],
-      vectorStoreVersionId: a.classification.vector_store_version_id ?? null,
-      builtInTools: a.classification
-        .built_in_tools as SegmentAgentConfig["classification"]["builtInTools"],
+      vectorStoreEnabled: a.classification.vector_store_enabled,
+      vectorStoreInstanceIds: a.classification.vector_store_instance_ids ?? [],
+      watchlistEnabled: a.classification.watchlist_enabled,
+      watchlistIds: a.classification.watchlist_ids ?? [],
+      watchlistCompareField: a.classification.watchlist_compare_field ?? null,
+      calculatorEnabled: a.classification.calculator_enabled,
       prompt: a.classification.prompt,
       promptVars: a.classification.prompt_vars,
       maxThoughtIterations: a.classification.max_thought_iterations ?? 5,
+      outputLabels: a.classification.output_labels ?? defaults.classification.outputLabels,
     },
     adversarial: {
+      vectorStoreEnabled: a.adversarial.vector_store_enabled,
+      vectorStoreInstanceIds: a.adversarial.vector_store_instance_ids ?? [],
+      watchlistEnabled: a.adversarial.watchlist_enabled,
+      watchlistIds: a.adversarial.watchlist_ids ?? [],
+      watchlistCompareField: a.adversarial.watchlist_compare_field ?? null,
+      calculatorEnabled: a.adversarial.calculator_enabled,
       prompt: a.adversarial.prompt,
       promptVars: a.adversarial.prompt_vars,
       maxCycles: a.adversarial.max_cycles,
@@ -358,7 +418,13 @@ export function toCreateConfigurationRequest(
 ): CreateConfigurationRequest {
   const segments: Record<string, ApiSegmentSettings> = {};
   for (const [code, segment] of Object.entries(settings.segments)) {
-    segments[code] = segmentToApi(segment);
+    // The parser runs before a channel is resolved. The API still stores it
+    // under each segment for backwards compatibility, so persist the same
+    // general schema to every channel.
+    segments[code] = segmentToApi({
+      ...segment,
+      agent: { ...segment.agent, parser: settings.alertSchema },
+    });
   }
   return {
     name: opts.name,
@@ -423,6 +489,10 @@ export function settingsFromConfigurationDetail(
   for (const [code, segment] of Object.entries(detail.segments)) {
     segments[code as SegmentCode] = segmentFromApi(segment);
   }
+  const firstSegment = Object.values(detail.segments)[0];
+  const alertSchema = firstSegment
+    ? agentFromApi(firstSegment.agent).parser
+    : defaultAlertParserConfig();
   return {
     agentEnabled: detail.general.agent_enabled,
     migrationWindowEnabled: detail.general.migration_window_enabled,
@@ -463,6 +533,7 @@ export function settingsFromConfigurationDetail(
     experimentTimeoutMinutes: detail.test.experiment_timeout_minutes,
     maxStoredTestRuns: detail.test.max_stored_test_runs,
     testCleanupPolicy: detail.test.test_cleanup_policy,
+    alertSchema,
     segments,
   };
 }

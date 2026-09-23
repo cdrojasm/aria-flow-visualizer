@@ -223,7 +223,7 @@ export function SegmentExecutorSection({
                   >
                     {taxonomies.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.code} — {t.name}
+                        {t.name}
                       </option>
                     ))}
                   </select>

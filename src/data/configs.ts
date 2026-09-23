@@ -50,7 +50,14 @@ export type SimilarCase = {
 };
 
 export type TabKey =
-  "general" | "infra" | "ops" | "test" | "segmento" | "segmentoAgente" | "segmentoEvaluacion";
+  | "general"
+  | "infra"
+  | "ops"
+  | "test"
+  | "segmento"
+  | "schema"
+  | "segmentoAgente"
+  | "segmentoEvaluacion";
 
 /* ─── Segment configuration (Phase 1) ───────────────────
    Two fixed segments (not user-creatable). Each has an on/off toggle and
@@ -138,7 +145,19 @@ export type RuleCondition = {
   score: number;
 };
 export type DeterministicDecision = "risk_suspected" | "risk";
-export type DeterministicRule = RuleCondition & { decision: DeterministicDecision };
+export type AricAction = "soft_block" | "hard_block";
+export type DeterministicRule = RuleCondition & {
+  decision: DeterministicDecision;
+  aricAction: AricAction;
+};
+export type AlertFieldType = "string" | "number" | "boolean" | "date" | "datetime";
+export type AlertParserField = {
+  id: string;
+  sourceField: string;
+  alias: string;
+  type: AlertFieldType;
+};
+export type AlertParserConfig = { fields: AlertParserField[] };
 export type DeterministicConfig = {
   alertFilter: FilterGroup;
   fieldEnrichment: FeatureConfiguration;
@@ -176,62 +195,47 @@ export const defaultDeterministicConfig = (): DeterministicConfig => ({
   fieldEnrichment: emptyConfiguration,
   rules: [],
 });
+export const defaultAlertParserConfig = (): AlertParserConfig => ({ fields: [] });
 
 /* ─── Classification + Adversarial (Phase 4) ────────────
    Mirrors backend's ClassificationConfig/AdversarialConfig. Adversarial
    has no tool picker of its own - it reuses whichever tools Classification
    already has configured (shown read-only in its section). */
 
-export type VectorStoreTool =
-  "taxonomia" | "modus_operandi" | "similar_case" | "red_flag" | "yellow_flag";
-export type BuiltInTool = "blacklist" | "whitelist" | "calculator";
-
-export const VECTOR_STORE_TOOL_LABELS: Record<VectorStoreTool, string> = {
-  taxonomia: "Taxonomías",
-  modus_operandi: "Modus operandi",
-  similar_case: "Casos similares",
-  red_flag: "Red flags",
-  yellow_flag: "Yellow flags",
+/* Tool-picker shape shared by Classification/Adversarial/Detector: a plain
+   enable switch per tool family (item 1/2/3 of the "reemplaza base de
+   conocimiento vector store" request), replacing the old fixed
+   VectorStoreTool/BuiltInTool category pill-toggles. Vector-store search
+   now scopes to specific vector store instances (@/lib/api/
+   vectorStoreInstances.functions, picked by id - see VectorStoreToolField
+   in shared/FormControls.tsx) instead of document-type categories, and
+   blacklist/whitelist are now their own switch (@/lib/api/watchlist.
+   functions, picked by id - see WatchlistToolField) instead of being
+   lumped into "built-in tools" alongside the calculator, which is now just
+   its own switch. Membership direction (watch for presence vs. absence)
+   isn't stored here - it's intrinsic to each selected watchlist's own
+   list_type, read off the watchlist itself (see WatchlistToolField). */
+export type ToolPickerFields = {
+  vectorStoreEnabled: boolean;
+  vectorStoreInstanceIds: string[];
+  watchlistEnabled: boolean;
+  watchlistIds: string[];
+  // Which alert field's value is looked up against the selected
+  // watchlists' elements (e.g. "documento", "correo").
+  watchlistCompareField: string | null;
+  calculatorEnabled: boolean;
 };
 
-export const BUILT_IN_TOOL_LABELS: Record<BuiltInTool, string> = {
-  blacklist: "Lista negra",
-  whitelist: "Lista blanca",
-  calculator: "Calculadora",
-};
+export const defaultToolPickerFields = (): ToolPickerFields => ({
+  vectorStoreEnabled: false,
+  vectorStoreInstanceIds: [],
+  watchlistEnabled: false,
+  watchlistIds: [],
+  watchlistCompareField: null,
+  calculatorEnabled: false,
+});
 
-export const VECTOR_STORE_TOOL_DESCRIPTIONS: Record<VectorStoreTool, string> = {
-  taxonomia:
-    "Busca semánticamente entre las categorías de fraude de la versión del vector store seleccionada (Biblioteca → Repositorio de Conocimiento).",
-  modus_operandi:
-    "Busca casos concretos de modus operandi similares al de la alerta actual, en la versión del vector store seleccionada.",
-  similar_case:
-    "Busca alertas pasadas con características parecidas, ya resueltas, en la versión del vector store seleccionada.",
-  red_flag:
-    "Busca señales de alto riesgo (red flags) que apliquen al comportamiento observado, en la versión del vector store seleccionada.",
-  yellow_flag:
-    "Busca señales de riesgo moderado (yellow flags) que apliquen al comportamiento observado, en la versión del vector store seleccionada.",
-};
-
-export const BUILT_IN_TOOL_DESCRIPTIONS: Record<BuiltInTool, string> = {
-  blacklist: "Consulta si el cliente, cuenta o documento está en la lista negra.",
-  whitelist: "Consulta si el cliente, cuenta o documento está en la lista blanca (confiable).",
-  calculator: "Permite al agente hacer cálculos numéricos exactos en vez de estimarlos.",
-};
-
-export const VECTOR_STORE_TOOLS: VectorStoreTool[] = [
-  "taxonomia",
-  "modus_operandi",
-  "similar_case",
-  "red_flag",
-  "yellow_flag",
-];
-export const BUILT_IN_TOOLS: BuiltInTool[] = ["blacklist", "whitelist", "calculator"];
-
-export type ClassificationConfig = {
-  vectorStoreTools: VectorStoreTool[];
-  vectorStoreVersionId: string | null;
-  builtInTools: BuiltInTool[];
+export type ClassificationConfig = ToolPickerFields & {
   prompt: string;
   promptVars: string[];
   // "iteraciones de pensamiento" - max ReAct-style tool-call loops before
@@ -239,9 +243,10 @@ export type ClassificationConfig = {
   // (Detector) all carry this field (see DetectorConfig/
   // DetectorAdversarialConfig) - Adversarial (Clasificación) does not.
   maxThoughtIterations: number;
+  outputLabels: string[];
 };
 
-export type AdversarialConfig = {
+export type AdversarialConfig = ToolPickerFields & {
   prompt: string;
   promptVars: string[];
   maxCycles: number;
@@ -249,15 +254,15 @@ export type AdversarialConfig = {
 };
 
 export const defaultClassificationConfig = (): ClassificationConfig => ({
-  vectorStoreTools: [],
-  vectorStoreVersionId: null,
-  builtInTools: [],
+  ...defaultToolPickerFields(),
   prompt: "",
   promptVars: [],
   maxThoughtIterations: 5,
+  outputLabels: [],
 });
 
 export const defaultAdversarialConfig = (): AdversarialConfig => ({
+  ...defaultToolPickerFields(),
   prompt: "",
   promptVars: [],
   maxCycles: 1,
@@ -277,10 +282,7 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
    has the exact same fields as AdversarialConfig (item 7: "los mismos
    parámetros que el de clasificación") plus maxThoughtIterations. */
 
-export type DetectorConfig = {
-  vectorStoreTools: VectorStoreTool[];
-  vectorStoreVersionId: string | null;
-  builtInTools: BuiltInTool[];
+export type DetectorConfig = ToolPickerFields & {
   enablePandasHistoryTool: boolean;
   useXgboostModel: boolean;
   xgboostModelId: string | null;
@@ -294,6 +296,7 @@ export type DetectorConfig = {
   prompt: string;
   promptVars: string[];
   maxThoughtIterations: number;
+  outputLabels: string[];
 };
 
 export type DetectorAdversarialConfig = AdversarialConfig & {
@@ -301,9 +304,7 @@ export type DetectorAdversarialConfig = AdversarialConfig & {
 };
 
 export const defaultDetectorConfig = (): DetectorConfig => ({
-  vectorStoreTools: [],
-  vectorStoreVersionId: null,
-  builtInTools: [],
+  ...defaultToolPickerFields(),
   enablePandasHistoryTool: false,
   useXgboostModel: false,
   xgboostModelId: null,
@@ -313,6 +314,7 @@ export const defaultDetectorConfig = (): DetectorConfig => ({
   prompt: "",
   promptVars: [],
   maxThoughtIterations: 5,
+  outputLabels: [],
 });
 
 export const defaultDetectorAdversarialConfig = (): DetectorAdversarialConfig => ({
@@ -414,6 +416,7 @@ export const defaultExecutorConfig = (): ExecutorConfig => ({
 });
 
 export type SegmentAgentConfig = {
+  parser: AlertParserConfig;
   deterministic: DeterministicConfig;
   profiling: ProfilingConfig;
   rubrics: Rubric[];
@@ -470,6 +473,7 @@ export const defaultSegmentMonitoring = (): SegmentMonitoringConfig => ({
 });
 
 export const defaultSegmentAgent = (): SegmentAgentConfig => ({
+  parser: defaultAlertParserConfig(),
   deterministic: defaultDeterministicConfig(),
   profiling: defaultProfilingConfig(),
   rubrics: [],
@@ -588,6 +592,9 @@ export type ConfigSettings = {
   experimentTimeoutMinutes: number;
   maxStoredTestRuns: number;
   testCleanupPolicy: TestCleanupPolicy;
+  // The alert input contract applies before channel routing, so it is shared
+  // by every segment rather than belonging to an individual agent pipeline.
+  alertSchema: AlertParserConfig;
   segments: Record<SegmentCode, SegmentSettings>;
 };
 
@@ -807,6 +814,7 @@ export const defaultSettings = (): ConfigSettings => ({
   experimentTimeoutMinutes: 30,
   maxStoredTestRuns: 20,
   testCleanupPolicy: "oldest",
+  alertSchema: defaultAlertParserConfig(),
   segments: {
     ...defaultSegments(),
     canales_digitales: {
@@ -894,7 +902,7 @@ export const defaultSettings = (): ConfigSettings => ({
         },
         detector: {
           ...defaultDetectorConfig(),
-          vectorStoreTools: ["taxonomia", "modus_operandi"],
+          vectorStoreEnabled: true,
           prompt: "",
           promptVars: ["CoT (cadena de razonamiento)"],
         },
@@ -905,8 +913,8 @@ export const defaultSettings = (): ConfigSettings => ({
         },
         classification: {
           ...defaultClassificationConfig(),
-          vectorStoreTools: ["taxonomia", "modus_operandi", "red_flag"],
-          builtInTools: ["blacklist"],
+          vectorStoreEnabled: true,
+          watchlistEnabled: true,
           prompt: "",
           promptVars: ["CoT (cadena de razonamiento)", "Taxonomía asignada"],
         },

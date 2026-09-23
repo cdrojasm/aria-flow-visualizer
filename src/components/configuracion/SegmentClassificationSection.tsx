@@ -1,14 +1,8 @@
 import { useRef } from "react";
 
-import {
-  BUILT_IN_TOOLS,
-  BUILT_IN_TOOL_DESCRIPTIONS,
-  BUILT_IN_TOOL_LABELS,
-  type BuiltInTool,
-  type ClassificationConfig,
-} from "@/data/configs";
+import { type ClassificationConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { Field, VariablePicker, VectorStoreToolField } from "./shared/FormControls";
+import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
@@ -34,14 +28,6 @@ export function SegmentClassificationSection({
   const { variables } = useVariableCatalog();
   const pool = [...variables, ...extraVariables];
 
-  const toggleBuiltInTool = (tool: BuiltInTool) =>
-    onChange({
-      ...value,
-      builtInTools: value.builtInTools.includes(tool)
-        ? value.builtInTools.filter((t) => t !== tool)
-        : [...value.builtInTools, tool],
-    });
-
   return (
     <div className="space-y-6">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -51,40 +37,8 @@ export function SegmentClassificationSection({
             Qué puede consultar el agente de clasificación al evaluar una alerta.
           </p>
         </div>
-        <div className="p-6 space-y-5">
-          <VectorStoreToolField
-            value={value.vectorStoreTools}
-            onChange={(vectorStoreTools) => onChange({ ...value, vectorStoreTools })}
-            versionId={value.vectorStoreVersionId}
-            onVersionChange={(vectorStoreVersionId) => onChange({ ...value, vectorStoreVersionId })}
-            disabled={disabled}
-          />
-          <Field
-            label="Herramientas básicas"
-            hint="Utilidades adicionales disponibles para el agente."
-          >
-            <div className="flex flex-wrap gap-1.5">
-              {BUILT_IN_TOOLS.map((tool) => {
-                const active = value.builtInTools.includes(tool);
-                return (
-                  <button
-                    key={tool}
-                    type="button"
-                    disabled={disabled}
-                    title={BUILT_IN_TOOL_DESCRIPTIONS[tool]}
-                    onClick={() => toggleBuiltInTool(tool)}
-                    className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
-                      active
-                        ? "bg-primary text-white border-primary"
-                        : "border-border text-text-secondary hover:border-primary hover:text-primary"
-                    }`}
-                  >
-                    {BUILT_IN_TOOL_LABELS[tool]}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
+        <div className="p-6">
+          <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
         </div>
       </section>
 
@@ -136,6 +90,14 @@ export function SegmentClassificationSection({
             </div>
           </Field>
 
+          <div className="pt-2 border-t border-border mt-5">
+            <Field label="Etiquetas de salida" hint="Valores válidos que debe devolver el prompt, separados por coma.">
+              <input value={value.outputLabels.join(", ")} disabled={disabled}
+                onChange={(e) => onChange({ ...value, outputLabels: e.target.value.split(",").map((label) => label.trim()).filter(Boolean) })}
+                placeholder="risk, risk-suspected, no-risk" className="w-full h-9 rounded-md border border-border px-3 text-[13px]" />
+              {value.outputLabels.length === 0 && <p className="mt-2 text-[12px] text-danger">Debes definir etiquetas de salida para validar y reintentar la clasificación.</p>}
+            </Field>
+          </div>
           <div className="pt-2 border-t border-border mt-5">
             <Field
               label="Máximo de iteraciones de pensamiento"

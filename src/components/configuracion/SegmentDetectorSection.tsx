@@ -2,16 +2,10 @@ import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Switch } from "@/components/ui/switch";
-import {
-  BUILT_IN_TOOLS,
-  BUILT_IN_TOOL_DESCRIPTIONS,
-  BUILT_IN_TOOL_LABELS,
-  type BuiltInTool,
-  type DetectorConfig,
-} from "@/data/configs";
+import { type DetectorConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { getModels } from "@/lib/api/models.functions";
-import { Field, VariablePicker, VectorStoreToolField } from "./shared/FormControls";
+import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
@@ -20,8 +14,8 @@ import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
    immediately followed by its own adversarial critique - that step reuses
    SegmentAdversarialSection directly (generalized to take a `tools` prop),
    wired in SegmentAgentSection.tsx, no separate component needed. Same
-   vector-store/built-in tool categories + maxThoughtIterations as
-   Clasificación, plus detector-specific tools: an XGBoost model (own
+   AgentToolsFields tool picker + maxThoughtIterations as Clasificación,
+   plus detector-specific tools: an XGBoost model (own
    inline model-version picker - the standalone "Modelo" subtab was
    removed, this is now the only place it's picked - plus its scoring
    thresholds and SHAP toggle) and free-form pandas queries over the
@@ -45,14 +39,6 @@ export function SegmentDetectorSection({
   const modelsQuery = useQuery({ queryKey: ["models"], queryFn: getModels });
   const readyModels = (modelsQuery.data ?? []).filter((m) => m.status === "READY");
 
-  const toggleBuiltInTool = (tool: BuiltInTool) =>
-    onChange({
-      ...value,
-      builtInTools: value.builtInTools.includes(tool)
-        ? value.builtInTools.filter((t) => t !== tool)
-        : [...value.builtInTools, tool],
-    });
-
   return (
     <div className="space-y-6">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
@@ -63,39 +49,7 @@ export function SegmentDetectorSection({
           </p>
         </div>
         <div className="p-6 space-y-5">
-          <VectorStoreToolField
-            value={value.vectorStoreTools}
-            onChange={(vectorStoreTools) => onChange({ ...value, vectorStoreTools })}
-            versionId={value.vectorStoreVersionId}
-            onVersionChange={(vectorStoreVersionId) => onChange({ ...value, vectorStoreVersionId })}
-            disabled={disabled}
-          />
-          <Field
-            label="Herramientas básicas"
-            hint="Utilidades adicionales disponibles para el agente."
-          >
-            <div className="flex flex-wrap gap-1.5">
-              {BUILT_IN_TOOLS.map((tool) => {
-                const active = value.builtInTools.includes(tool);
-                return (
-                  <button
-                    key={tool}
-                    type="button"
-                    disabled={disabled}
-                    title={BUILT_IN_TOOL_DESCRIPTIONS[tool]}
-                    onClick={() => toggleBuiltInTool(tool)}
-                    className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
-                      active
-                        ? "bg-primary text-white border-primary"
-                        : "border-border text-text-secondary hover:border-primary hover:text-primary"
-                    }`}
-                  >
-                    {BUILT_IN_TOOL_LABELS[tool]}
-                  </button>
-                );
-              })}
-            </div>
-          </Field>
+          <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
 
           <div className="pt-2 border-t border-border flex items-center justify-between">
             <div className="pr-4">
@@ -225,6 +179,13 @@ export function SegmentDetectorSection({
           </p>
         </div>
         <div className="p-6">
+          <Field label="Etiquetas de salida" hint="Valores válidos que debe devolver el detector, separados por coma.">
+            <input value={value.outputLabels.join(", ")} disabled={disabled}
+              onChange={(e) => onChange({ ...value, outputLabels: e.target.value.split(",").map((label) => label.trim()).filter(Boolean) })}
+              placeholder="detected, not-detected" className="w-full h-9 rounded-md border border-border px-3 text-[13px]" />
+            {value.outputLabels.length === 0 && <p className="mt-2 text-[12px] text-danger">Debes definir etiquetas de salida para validar y reintentar la detección.</p>}
+          </Field>
+          <div className="mt-5">
           <Field label="Prompt">
             <PromptEditor
               ref={promptRef}
@@ -263,6 +224,7 @@ export function SegmentDetectorSection({
               />
             </div>
           </Field>
+          </div>
 
           <div className="pt-2 border-t border-border mt-5">
             <Field

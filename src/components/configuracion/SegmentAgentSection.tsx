@@ -178,7 +178,6 @@ export function SegmentAgentSection({
       {subtab === "detectorAdversarial" && (
         <SegmentAdversarialSection
           value={detectorAdversarial}
-          tools={detector}
           onChange={(detectorAdversarial) =>
             onChange({
               detectorAdversarial: {
@@ -203,7 +202,6 @@ export function SegmentAgentSection({
       {subtab === "adversarial" && (
         <SegmentAdversarialSection
           value={value.adversarial}
-          tools={value.classification}
           onChange={(adversarial) => onChange({ adversarial })}
           extraVariables={enrichmentVariables}
           disabled={disabled}

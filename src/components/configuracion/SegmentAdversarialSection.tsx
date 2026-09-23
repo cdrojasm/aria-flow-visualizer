@@ -1,15 +1,9 @@
 import { useRef } from "react";
 
 import { Switch } from "@/components/ui/switch";
-import {
-  BUILT_IN_TOOL_LABELS,
-  VECTOR_STORE_TOOL_LABELS,
-  type AdversarialConfig,
-  type BuiltInTool,
-  type VectorStoreTool,
-} from "@/data/configs";
+import { type AdversarialConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { Field, VariablePicker } from "./shared/FormControls";
+import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
@@ -28,14 +22,12 @@ import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
 export function SegmentAdversarialSection({
   value,
-  tools,
   onChange,
   extraVariables,
   disabled,
   showMaxThoughtIterations,
 }: {
   value: AdversarialConfig & { maxThoughtIterations?: number };
-  tools: { vectorStoreTools: VectorStoreTool[]; builtInTools: BuiltInTool[] };
   onChange: (value: AdversarialConfig & { maxThoughtIterations?: number }) => void;
   extraVariables: string[];
   disabled?: boolean;
@@ -44,42 +36,18 @@ export function SegmentAdversarialSection({
   const promptRef = useRef<PromptEditorHandle>(null);
   const { variables } = useVariableCatalog();
   const pool = [...variables, ...extraVariables];
-  const hasTools = tools.vectorStoreTools.length > 0 || tools.builtInTools.length > 0;
 
   return (
     <div className="space-y-6">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
         <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-[14px] font-semibold text-text-primary">Herramientas disponibles</h2>
+          <h2 className="text-[14px] font-semibold text-text-primary">Herramientas del agente</h2>
           <p className="text-[12px] text-text-secondary mt-0.5">
-            El agente adversarial reutiliza las herramientas y el CoT ya configurados en su agente
-            asociado — no tiene selección propia.
+            Selecciona las fuentes y utilidades que el adversarial puede usar para cuestionar el resultado.
           </p>
         </div>
         <div className="p-6">
-          {!hasTools && (
-            <p className="text-[12px] text-text-secondary">
-              Sin herramientas configuradas todavía.
-            </p>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            {tools.vectorStoreTools.map((tool) => (
-              <span
-                key={tool}
-                className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-surface border border-border text-text-secondary"
-              >
-                {VECTOR_STORE_TOOL_LABELS[tool]}
-              </span>
-            ))}
-            {tools.builtInTools.map((tool) => (
-              <span
-                key={tool}
-                className="px-3 py-1.5 rounded-full text-[12px] font-medium bg-surface border border-border text-text-secondary"
-              >
-                {BUILT_IN_TOOL_LABELS[tool]}
-              </span>
-            ))}
-          </div>
+          <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
         </div>
       </section>
 

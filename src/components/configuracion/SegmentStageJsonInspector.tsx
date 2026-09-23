@@ -1,6 +1,7 @@
 import { ChevronDown } from "lucide-react";
 
 type Stage =
+  | "parser"
   | "deterministic"
   | "profiling"
   | "detector"
@@ -34,11 +35,20 @@ const outputFor = (stage: Stage, value: unknown) => {
   const config = asRecord(value);
 
   switch (stage) {
+    case "parser":
+      return {
+        normalizedFields: asRecords(config.fields).map((field) => ({
+          source: field.sourceField,
+          alias: field.alias,
+          type: field.type,
+        })),
+      };
     case "deterministic":
       return {
         decisions: asRecords(config.rules).map((rule) => ({
           variable: rule.variable,
           decision: rule.decision,
+          aricAction: rule.aricAction,
         })),
       };
     case "profiling":
@@ -52,9 +62,11 @@ const outputFor = (stage: Stage, value: unknown) => {
     case "detector":
       return {
         detection: "resultado_de_deteccion",
+        outputLabels: asList(config.outputLabels),
         tools: [
-          ...asList(config.vectorStoreTools),
-          ...asList(config.builtInTools),
+          ...(config.vectorStoreEnabled ? ["vector_store"] : []),
+          ...(config.watchlistEnabled ? ["watchlist"] : []),
+          ...(config.calculatorEnabled ? ["calculator"] : []),
           ...(config.useXgboostModel ? ["xgboost_model"] : []),
           ...(config.enablePandasHistoryTool ? ["pandas_history"] : []),
         ],
@@ -64,11 +76,16 @@ const outputFor = (stage: Stage, value: unknown) => {
         validation: "retroalimentacion_adversarial_detector",
         cycles: config.maxCycles ?? 0,
         maxThoughtIterations: config.maxThoughtIterations ?? 5,
+        outputLabels: asList(config.outputLabels),
       };
     case "classification":
       return {
         classification: "resultado_de_clasificacion",
-        tools: [...asList(config.vectorStoreTools), ...asList(config.builtInTools)],
+        tools: [
+          ...(config.vectorStoreEnabled ? ["vector_store"] : []),
+          ...(config.watchlistEnabled ? ["watchlist"] : []),
+          ...(config.calculatorEnabled ? ["calculator"] : []),
+        ],
         maxThoughtIterations: config.maxThoughtIterations ?? 5,
       };
     case "adversarial":

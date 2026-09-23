@@ -95,7 +95,17 @@ export type ApiRuleCondition = {
   values: string[];
   score: number;
 };
-export type ApiDeterministicRule = ApiRuleCondition & { decision: "risk_suspected" | "risk" };
+export type ApiDeterministicRule = ApiRuleCondition & {
+  decision: "risk_suspected" | "risk";
+  aric_action: "soft_block" | "hard_block";
+};
+export type ApiAlertParserField = {
+  id: string;
+  source_field: string;
+  alias: string;
+  type: "string" | "number" | "boolean" | "date" | "datetime";
+};
+export type ApiAlertParserConfig = { fields: ApiAlertParserField[] };
 export type ApiDeterministicConfig = {
   alert_filter: ApiFilterGroup;
   field_enrichment: FeatureConfiguration;
@@ -103,24 +113,33 @@ export type ApiDeterministicConfig = {
 };
 export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition[] };
 
-export type ApiClassificationConfig = {
-  vector_store_tools: string[];
-  vector_store_version_id: string | null;
-  built_in_tools: string[];
+// Shared tool-picker fields (item 1/2/3 of the "reemplaza base de
+// conocimiento vector store" request - see ToolPickerFields in
+// @/data/configs and ClassificationConfig in the backend's
+// configuration_port.py, which this mirrors 1:1). Membership direction for
+// a selected watchlist isn't carried here - it's read off the watchlist
+// itself (its list_type).
+type ApiToolPickerFields = {
+  vector_store_enabled: boolean;
+  vector_store_instance_ids: string[];
+  watchlist_enabled: boolean;
+  watchlist_ids: string[];
+  watchlist_compare_field: string | null;
+  calculator_enabled: boolean;
+};
+export type ApiClassificationConfig = ApiToolPickerFields & {
   prompt: string;
   prompt_vars: string[];
   max_thought_iterations: number;
+  output_labels: string[];
 };
-export type ApiAdversarialConfig = {
+export type ApiAdversarialConfig = ApiToolPickerFields & {
   prompt: string;
   prompt_vars: string[];
   max_cycles: number;
   feed_feedback_to_classification: boolean;
 };
-export type ApiDetectorConfig = {
-  vector_store_tools: string[];
-  vector_store_version_id: string | null;
-  built_in_tools: string[];
+export type ApiDetectorConfig = ApiToolPickerFields & {
   enable_pandas_history_tool: boolean;
   use_xgboost_model: boolean;
   xgboost_model_id: string | null;
@@ -130,6 +149,7 @@ export type ApiDetectorConfig = {
   prompt: string;
   prompt_vars: string[];
   max_thought_iterations: number;
+  output_labels: string[];
 };
 export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
   max_thought_iterations: number;
@@ -167,6 +187,7 @@ export type ApiExecutorConfig = {
 };
 
 export type ApiAgentSettings = {
+  parser: ApiAlertParserConfig;
   deterministic: ApiDeterministicConfig;
   profiling: ApiProfilingConfig;
   rubrics: ApiRubric[];
@@ -227,6 +248,9 @@ export type ConfigurationSummaryResponse = {
   // pointing at a version where this is false overwrites it in place
   // instead of minting a new version.
   ever_activated: boolean;
+  // Sticky - true after this version has completed a test run. The backend
+  // requires it before accepting a promotion request.
+  ever_tested: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -251,6 +275,27 @@ export type TestConfigurationResponse = {
   changes: ConfigurationChangeResponse[];
   warnings: string[];
 };
+
+export type ConfigurationDeployRequest = {
+  id: string;
+  target_configuration_id: string;
+  target_version: number;
+  current_configuration_id: string | null;
+  current_version: number | null;
+  title: string;
+  message: string;
+  changes: ConfigurationChangeResponse[];
+  requested_by: string;
+  requested_at: string;
+  status: "pending" | "approved";
+  approved_by: string | null;
+  approved_at: string | null;
+};
+
+export type ConfigurationDeployRequestPreview = Pick<
+  ConfigurationDeployRequest,
+  "target_configuration_id" | "target_version" | "current_configuration_id" | "current_version" | "changes"
+>;
 
 // --- Client functions -------------------------------------------------------
 
@@ -320,4 +365,46 @@ export function activateConfiguration({
     `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}/activate`,
     { method: "POST" },
   );
+}
+
+export function previewConfigurationDeployRequest({
+  data,
+}: {
+  data: { configurationId: string; version: number };
+}): Promise<ConfigurationDeployRequestPreview> {
+  const params = new URLSearchParams({
+    target_configuration_id: data.configurationId,
+    target_version: String(data.version),
+  });
+  return apiFetch(`/api/v0/configuration-deploy-requests/preview?${params}`);
+}
+
+export function createConfigurationDeployRequest({
+  data,
+}: {
+  data: { configurationId: string; version: number; title: string; message: string };
+}): Promise<ConfigurationDeployRequest> {
+  return apiFetch("/api/v0/configuration-deploy-requests", {
+    method: "POST",
+    body: JSON.stringify({
+      target_configuration_id: data.configurationId,
+      target_version: data.version,
+      title: data.title,
+      message: data.message,
+    }),
+  });
+}
+
+export function listConfigurationDeployRequests(): Promise<ConfigurationDeployRequest[]> {
+  return apiFetch("/api/v0/configuration-deploy-requests");
+}
+
+export function approveConfigurationDeployRequest({
+  data,
+}: {
+  data: { requestId: string };
+}): Promise<ConfigurationDeployRequest> {
+  return apiFetch(`/api/v0/configuration-deploy-requests/${encodeURIComponent(data.requestId)}/approve`, {
+    method: "POST",
+  });
 }

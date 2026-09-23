@@ -1,16 +1,16 @@
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Plus, Settings, Trash2, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
+import { Switch } from "@/components/ui/switch";
 import {
-  VECTOR_STORE_TOOLS,
-  VECTOR_STORE_TOOL_DESCRIPTIONS,
-  VECTOR_STORE_TOOL_LABELS,
   type DistributionValue,
   type SamplingCriterion,
-  type VectorStoreTool,
+  type ToolPickerFields,
 } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { useVectorStoreVersions } from "@/hooks/useVectorStoreVersions";
+import { listWatchlists, type WatchlistType } from "@/lib/api/watchlist.functions";
 import { VariableCatalogManager } from "../VariableCatalogManager";
 
 /* ─── Shared form controls, extracted verbatim from configuracion.tsx ──
@@ -33,6 +33,34 @@ export function Field({
       <label className="block text-[12px] font-medium text-text-primary mb-1">{label}</label>
       {hint && <p className="text-[11px] text-text-secondary mb-1.5">{hint}</p>}
       {children}
+    </div>
+  );
+}
+
+// A label + description + Switch row - the enable/disable pattern used by
+// every agent tool toggle (vector store, watchlist, calculator, XGBoost
+// model, pandas history, ...). Extracted so new tool switches don't
+// re-hand-roll this markup each time.
+export function SwitchField({
+  label,
+  hint,
+  checked,
+  onCheckedChange,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div className="pr-4">
+        <p className="text-[13px] font-medium text-text-primary">{label}</p>
+        <p className="text-[12px] text-text-secondary mt-0.5">{hint}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
   );
 }
@@ -393,74 +421,256 @@ export function SamplingDistributionEditor({
   );
 }
 
-/* ─── Vector store tool toggle + version selector (Wave 6) ──
-   Shared by SegmentClassificationSection and SegmentDetectorSection - the
-   same category pill-toggle group as before, plus a version <select> that
-   only appears once at least one category is active (item 9: "cuando uno
-   de los agentes active la herramienta vector store, debe poder
-   seleccionar entre las versiones de la misma"). */
+/* ─── Vector store tool: enable switch + instance picker (Wave 7) ──
+   Replaces the old fixed-category pill-toggle + single "version" <select>
+   (a global vector store's versions) with an enable switch (same pattern
+   as Detector's XGBoost model toggle) followed by a multi-select of named
+   vector store instances (@/lib/api/vectorStoreInstances.functions - each
+   one a curated, independently-versioned document set, picked by id
+   instead of by document-type category). */
 
-export function VectorStoreToolField({
-  value,
-  onChange,
-  versionId,
-  onVersionChange,
+function VectorStoreToolField({
+  enabled,
+  onEnabledChange,
+  instanceIds,
+  onInstanceIdsChange,
   disabled,
 }: {
-  value: VectorStoreTool[];
-  onChange: (v: VectorStoreTool[]) => void;
-  versionId: string | null;
-  onVersionChange: (id: string | null) => void;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  instanceIds: string[];
+  onInstanceIdsChange: (ids: string[]) => void;
   disabled?: boolean;
 }) {
-  const { versions } = useVectorStoreVersions();
-  const toggle = (tool: VectorStoreTool) =>
-    onChange(value.includes(tool) ? value.filter((t) => t !== tool) : [...value, tool]);
+  const { versions: instances } = useVectorStoreVersions();
+  const toggle = (id: string) =>
+    onInstanceIdsChange(
+      instanceIds.includes(id) ? instanceIds.filter((i) => i !== id) : [...instanceIds, id],
+    );
 
   return (
-    <Field
-      label="Base de conocimiento (vector store)"
-      hint="Categorías que el agente puede buscar semánticamente."
-    >
-      <div className="flex flex-wrap gap-1.5">
-        {VECTOR_STORE_TOOLS.map((tool) => {
-          const active = value.includes(tool);
-          return (
-            <button
-              key={tool}
-              type="button"
-              disabled={disabled}
-              title={VECTOR_STORE_TOOL_DESCRIPTIONS[tool]}
-              onClick={() => toggle(tool)}
-              className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
-                active
-                  ? "bg-primary text-white border-primary"
-                  : "border-border text-text-secondary hover:border-primary hover:text-primary"
-              }`}
-            >
-              {VECTOR_STORE_TOOL_LABELS[tool]}
-            </button>
-          );
-        })}
-      </div>
-      {value.length > 0 && (
-        <div className="flex items-center gap-2 mt-2">
-          <span className="text-[11px] text-text-secondary">Versión</span>
-          <select
-            value={versionId ?? ""}
-            onChange={(e) => onVersionChange(e.target.value || null)}
-            disabled={disabled}
-            className="h-8 rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
-          >
-            <option value="">Usa la versión más reciente</option>
-            {[...versions].reverse().map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.label}
-              </option>
-            ))}
-          </select>
-        </div>
+    <div className="space-y-3">
+      <SwitchField
+        label="Base de conocimiento (vector store)"
+        hint="Permite al agente buscar semánticamente en una o más instancias del vector store."
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          onEnabledChange(checked);
+          if (!checked) onInstanceIdsChange([]);
+        }}
+        disabled={disabled}
+      />
+      {enabled && (
+        <Field label="Instancias" hint="Vector stores que el agente puede consultar.">
+          <div className="flex flex-wrap gap-1.5">
+            {instances.map((instance) => {
+              const active = instanceIds.includes(instance.id);
+              return (
+                <button
+                  key={instance.id}
+                  type="button"
+                  disabled={disabled}
+                  title={instance.description}
+                  onClick={() => toggle(instance.id)}
+                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
+                    active
+                      ? "bg-primary text-white border-primary"
+                      : "border-border text-text-secondary hover:border-primary hover:text-primary"
+                  }`}
+                >
+                  {`v${instance.version} · ${instance.name}`}
+                </button>
+              );
+            })}
+            {instances.length === 0 && (
+              <p className="text-[11px] text-text-secondary">
+                Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
+              </p>
+            )}
+          </div>
+        </Field>
       )}
-    </Field>
+    </div>
+  );
+}
+
+/* ─── Watchlist tool: enable switch + list picker + compare field ──
+   Blacklist/whitelist, split out of the old flat "built-in tools" pill
+   group into their own tool (item 2: "agrega un activador con switch, y
+   luego de activar, permite agregar al usuario las listas disponibles").
+   Selected lists show whether their nature makes them watch for
+   membership (blacklist) or its absence (whitelist) - derived from each
+   Watchlist's own list_type, not a separate field. */
+
+const WATCHLIST_NATURE_LABEL: Record<WatchlistType, string> = {
+  blacklist: "Vigila pertenencia",
+  whitelist: "Vigila no pertenencia",
+};
+const WATCHLIST_NATURE_STYLE: Record<WatchlistType, string> = {
+  blacklist: "bg-danger/10 text-danger border-danger/30",
+  whitelist: "bg-success/10 text-success border-success/30",
+};
+
+function WatchlistToolField({
+  enabled,
+  onEnabledChange,
+  watchlistIds,
+  onWatchlistIdsChange,
+  compareField,
+  onCompareFieldChange,
+  pool,
+  disabled,
+}: {
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  watchlistIds: string[];
+  onWatchlistIdsChange: (ids: string[]) => void;
+  compareField: string | null;
+  onCompareFieldChange: (field: string | null) => void;
+  pool: string[];
+  disabled?: boolean;
+}) {
+  const watchlistsQuery = useQuery({
+    queryKey: ["watchlists", "active"],
+    queryFn: () => listWatchlists({ data: { activeOnly: true } }),
+  });
+  const watchlists = watchlistsQuery.data ?? [];
+  const selected = watchlists.filter((w) => watchlistIds.includes(w.id));
+  const toggle = (id: string) =>
+    onWatchlistIdsChange(
+      watchlistIds.includes(id) ? watchlistIds.filter((i) => i !== id) : [...watchlistIds, id],
+    );
+
+  return (
+    <div className="space-y-3">
+      <SwitchField
+        label="Listas negras y blancas"
+        hint="Permite al agente consultar si un valor de la alerta pertenece a alguna lista."
+        checked={enabled}
+        onCheckedChange={(checked) => {
+          onEnabledChange(checked);
+          if (!checked) {
+            onWatchlistIdsChange([]);
+            onCompareFieldChange(null);
+          }
+        }}
+        disabled={disabled}
+      />
+      {enabled && (
+        <>
+          <Field label="Listas" hint="Listas que el agente puede consultar.">
+            <div className="flex flex-wrap gap-1.5">
+              {watchlists.map((w) => {
+                const active = watchlistIds.includes(w.id);
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggle(w.id)}
+                    className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
+                      active
+                        ? "bg-primary text-white border-primary"
+                        : "border-border text-text-secondary hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    {w.name}
+                  </button>
+                );
+              })}
+              {watchlists.length === 0 && (
+                <p className="text-[11px] text-text-secondary">
+                  Sin listas disponibles - créalas en Biblioteca → Listas negras y blancas.
+                </p>
+              )}
+            </div>
+            {selected.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {selected.map((w) => (
+                  <div key={w.id} className="flex items-center gap-2 text-[11px]">
+                    <span className="text-text-secondary">{w.name}</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded border font-medium ${WATCHLIST_NATURE_STYLE[w.list_type]}`}
+                    >
+                      {WATCHLIST_NATURE_LABEL[w.list_type]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Field>
+          <Field
+            label="Campo de comparación"
+            hint="Campo de la alerta cuyo valor se busca en las listas seleccionadas."
+          >
+            <select
+              value={compareField ?? ""}
+              onChange={(e) => onCompareFieldChange(e.target.value || null)}
+              disabled={disabled}
+              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
+            >
+              <option value="">Sin campo asignado</option>
+              {pool.map((variable) => (
+                <option key={variable} value={variable}>
+                  {variable}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── Agent tool picker (Wave 7) ──────────────────────────
+   Combines the three tool switches above (vector store, watchlist,
+   calculator) into the one block shared verbatim by every agent subtab
+   that has a tool picker: Detector, Adversarial (detector), Clasificación,
+   Adversarial (clasificador) - item 4: "aplica estos cambios para los
+   agentes de las subtabs ... que utilicen estas herramientas". */
+
+export function AgentToolsFields({
+  value,
+  onChange,
+  pool,
+  disabled,
+}: {
+  value: ToolPickerFields;
+  onChange: (patch: Partial<ToolPickerFields>) => void;
+  pool: string[];
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-5">
+      <VectorStoreToolField
+        enabled={value.vectorStoreEnabled}
+        onEnabledChange={(vectorStoreEnabled) => onChange({ vectorStoreEnabled })}
+        instanceIds={value.vectorStoreInstanceIds}
+        onInstanceIdsChange={(vectorStoreInstanceIds) => onChange({ vectorStoreInstanceIds })}
+        disabled={disabled}
+      />
+      <div className="pt-2 border-t border-border">
+        <WatchlistToolField
+          enabled={value.watchlistEnabled}
+          onEnabledChange={(watchlistEnabled) => onChange({ watchlistEnabled })}
+          watchlistIds={value.watchlistIds}
+          onWatchlistIdsChange={(watchlistIds) => onChange({ watchlistIds })}
+          compareField={value.watchlistCompareField}
+          onCompareFieldChange={(watchlistCompareField) => onChange({ watchlistCompareField })}
+          pool={pool}
+          disabled={disabled}
+        />
+      </div>
+      <div className="pt-2 border-t border-border">
+        <SwitchField
+          label="Calculadora"
+          hint="Permite al agente hacer cálculos numéricos exactos en vez de estimarlos."
+          checked={value.calculatorEnabled}
+          onCheckedChange={(calculatorEnabled) => onChange({ calculatorEnabled })}
+          disabled={disabled}
+        />
+      </div>
+    </div>
   );
 }

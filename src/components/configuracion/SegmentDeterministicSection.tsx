@@ -1,4 +1,4 @@
-import type { DeterministicConfig, DeterministicDecision, DeterministicRule } from "@/data/configs";
+import type { AricAction, DeterministicConfig, DeterministicDecision, DeterministicRule } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { RuleConditionEditor } from "./SegmentRubricsSection";
 
@@ -34,7 +34,9 @@ export function SegmentDeterministicSection({
                   updateRules(
                     next.length
                       ? rules.map((item) =>
-                          item.id === rule.id ? { ...next[0], decision: item.decision } : item,
+                          item.id === rule.id
+                            ? { ...next[0], decision: item.decision, aricAction: item.aricAction }
+                            : item,
                         )
                       : rules.filter((item) => item.id !== rule.id),
                   )
@@ -61,6 +63,23 @@ export function SegmentDeterministicSection({
                 <option value="risk_suspected">Marcar como riesgo sospechoso</option>
                 <option value="risk">Marcar como riesgo</option>
               </select>
+              <select
+                value={rule.aricAction}
+                disabled={disabled}
+                onChange={(event) =>
+                  updateRules(
+                    rules.map((item) =>
+                      item.id === rule.id
+                        ? { ...item, aricAction: event.target.value as AricAction }
+                        : item,
+                    ),
+                  )
+                }
+                className="ml-2 h-8 rounded-md border border-border bg-background px-2 text-[12px] focus:outline-none focus:border-primary"
+              >
+                <option value="soft_block">ARIC: bloqueo suave</option>
+                <option value="hard_block">ARIC: bloqueo duro</option>
+              </select>
             </div>
           ))}
           <button
@@ -76,6 +95,7 @@ export function SegmentDeterministicSection({
                   values: [""],
                   score: 0,
                   decision: "risk_suspected",
+                  aricAction: "soft_block",
                 },
               ])
             }

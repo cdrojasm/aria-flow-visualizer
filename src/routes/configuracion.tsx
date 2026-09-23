@@ -20,6 +20,9 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Rocket,
+  Send,
+  ClipboardList,
+  CheckCircle2,
   Zap,
   CalendarClock,
   Download,
@@ -39,6 +42,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfigurationVersionGuide } from "@/components/configuracion/ConfigurationVersionGuide";
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
+import { SegmentParserSection } from "@/components/configuracion/SegmentParserSection";
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
@@ -46,6 +50,7 @@ import { ResolutionMethodCatalogManager } from "@/components/configuracion/Resol
 import {
   PROFILE_COLORS,
   defaultSettings,
+  defaultSegmentAgent,
   buildSegmentsFromChannels,
   RESOLUTION_TAG_LABELS,
   type TabKey,
@@ -69,6 +74,10 @@ import {
   createConfiguration,
   activateConfiguration,
   testConfiguration,
+  previewConfigurationDeployRequest,
+  createConfigurationDeployRequest,
+  listConfigurationDeployRequests,
+  approveConfigurationDeployRequest,
   type CreateConfigurationRequest,
   type TestConfigurationResponse,
 } from "@/lib/api/configurations.functions";
@@ -87,6 +96,7 @@ import {
 } from "@/lib/api/resolutionMethod.functions";
 import { listTestRuns } from "@/lib/api/testing.functions";
 import { useApiHealth } from "@/hooks/useApiHealth";
+import { useRole } from "@/hooks/useRole";
 
 export const Route = createFileRoute("/configuracion")({
   head: () => ({
@@ -103,15 +113,30 @@ export const Route = createFileRoute("/configuracion")({
 
 /* ─── Static data ────────────────────────────────────── */
 
-const TAB_META: { key: TabKey; label: string }[] = [
+const GENERAL_TAB_META: { key: TabKey; label: string }[] = [
   { key: "general", label: "General" },
   { key: "infra", label: "Infraestructura" },
   { key: "ops", label: "Operación" },
   { key: "test", label: "Test" },
   { key: "segmento", label: "Segmento" },
+  { key: "schema", label: "Esquema" },
+];
+
+const SEGMENT_CONFIGURATION_TAB_META: { key: TabKey; label: string }[] = [
+  { key: "segmento", label: "Segmento" },
   { key: "segmentoAgente", label: "Agente" },
   { key: "segmentoEvaluacion", label: "Evaluación" },
 ];
+
+const RELEASE_TAB_META: { key: TabKey; label: string }[] = [
+  ...GENERAL_TAB_META,
+  { key: "segmentoAgente", label: "Agente" },
+  { key: "segmentoEvaluacion", label: "Evaluación" },
+];
+
+// Used only for restoring draft metadata and labels; rendering always chooses
+// exactly one of the role-scoped collections above.
+const TAB_META = [...GENERAL_TAB_META, ...SEGMENT_CONFIGURATION_TAB_META.filter((tab) => tab.key !== "segmento")];
 
 const CHANGE_SECTION_LABELS: Record<string, string> = {
   general: "General",
@@ -142,7 +167,7 @@ const NEW_CONFIG_NONE_BASE_ID = "__none__";
 // old draft). Bump this suffix on any future breaking ConfigSettings change;
 // an old key is simply never read again and hydration falls back to
 // defaults, same as "no draft yet".
-const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState.v3";
+const CONFIGURACION_STORAGE_KEY = "aria.configuracion.editorState.v4";
 
 const formatDatetimeLocal = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -218,7 +243,51 @@ type PersistedConfiguracionState = {
   localConfigs: { id: string; name: string; description: string }[];
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+// Recursively checks that every key present in `expected` also exists in
+// `actual` (missing entirely, not just falsy - a saved `null`/`0`/`""` is a
+// real value, an absent key is not). Catches a localStorage draft saved by
+// an older build whose ConfigSettings shape has since gained fields (e.g.
+// detector.outputLabels, adversarial.builtInTools - see the Wave 6/7
+// detector-adversarial split) - restoring one of those as-is doesn't error
+// here, it errors later when e.g. SegmentDetectorSection does
+// `value.outputLabels.join(...)` on the now-missing field. Only existence
+// is checked, not deep type/value correctness - this is a crash guard, not
+// a schema migration.
+const hasExpectedShape = (expected: unknown, actual: unknown): boolean => {
+  if (Array.isArray(expected)) return Array.isArray(actual);
+  if (isPlainObject(expected)) {
+    if (!isPlainObject(actual)) return false;
+    return Object.keys(expected).every(
+      (key) => key in actual && hasExpectedShape(expected[key], actual[key]),
+    );
+  }
+  return actual !== undefined;
+};
+
+// Only the per-segment `agent` (the actual detector/classification/
+// adversarial/... pipeline config) is checked - that's what the Segment*
+// components read without defaults, so it's the only part that crashes on
+// a stale shape. Segment codes come from the channel catalog and can
+// legitimately differ per draft, so the segments map itself isn't compared
+// key-for-key against a template.
+const isDraftShapeValid = (draft: DraftState): boolean => {
+  const agentTemplate = defaultSegmentAgent();
+  return Object.values(draft.workingCopy.segments ?? {}).every((segment) =>
+    hasExpectedShape(agentTemplate, segment.agent),
+  );
+};
+
 function ConfiguracionPage() {
+  const { role } = useRole();
+  const isChannelManager = role === "channel_manager";
+  const isReleaseManager = role === "release_manager";
+  const isManager = role === "manager";
+  const isDeployApprover = isManager || isReleaseManager;
+  const canManageChannelMembership = role === "manager" || isReleaseManager;
+  const canEditConfiguration = role === "manager" || isChannelManager || isReleaseManager;
   const queryClient = useQueryClient();
   const { healthy: apiHealthy, checked: apiChecked } = useApiHealth();
   const apiDown = apiChecked && !apiHealthy;
@@ -244,6 +313,11 @@ function ConfiguracionPage() {
     queryKey: ["testRuns", "desc"],
     queryFn: () => listTestRuns({ data: { order: "desc" } }),
   });
+  const deployRequestsQuery = useQuery({
+    queryKey: ["configurationDeployRequests"],
+    queryFn: () => listConfigurationDeployRequests(),
+    enabled: isDeployApprover,
+  });
   const hasSucceededTestRun = (testRunsQuery.data ?? []).some((run) => run.status === "SUCCEEDED");
   // Same resolution-method catalog AnalystPlaybook uses (see
   // SegmentAnalystSection.tsx) - shortage behavior picks from it too now,
@@ -267,6 +341,15 @@ function ConfiguracionPage() {
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<number | "draft">("draft");
   const [activeTab, setActiveTab] = useState<TabKey>("general");
+
+  // A persisted segment-specific tab must not be visible to a role that only
+  // has access to general configuration.
+  useEffect(() => {
+    if (!isChannelManager && (activeTab === "segmentoAgente" || activeTab === "segmentoEvaluacion"))
+      setActiveTab("general");
+    if (isChannelManager && (activeTab === "general" || activeTab === "infra" || activeTab === "ops" || activeTab === "test" || activeTab === "schema"))
+      setActiveTab("segmento");
+  }, [activeTab, isChannelManager]);
 
   const [localConfigs, setLocalConfigs] = useState<
     { id: string; name: string; description: string }[]
@@ -292,6 +375,13 @@ function ConfiguracionPage() {
   const [scheduledDeploys, setScheduledDeploys] = useState<
     Record<string, { version: number; hour: string }>
   >({});
+  const [deployRequestTarget, setDeployRequestTarget] = useState<{
+    configId: string;
+    version: number;
+  } | null>(null);
+  const [deployRequestTitle, setDeployRequestTitle] = useState("");
+  const [deployRequestMessage, setDeployRequestMessage] = useState("");
+  const [deployRequestError, setDeployRequestError] = useState<string | null>(null);
   // Set when saveVersion's POST comes back 409 — the lineage moved on since
   // this draft was seeded. Cleared by reloadLatestVersion or a new save attempt.
   const [versionConflict, setVersionConflict] = useState(false);
@@ -300,6 +390,7 @@ function ConfiguracionPage() {
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [pendingSave, setPendingSave] = useState<PendingSave | null>(null);
+  const [saveConfirmText, setSaveConfirmText] = useState("");
   const [savePreviewLoading, setSavePreviewLoading] = useState(false);
   const [savePreviewError, setSavePreviewError] = useState<string | null>(null);
   // Confirm-before-discard for startNewVersionFrom below — a native
@@ -370,7 +461,28 @@ function ConfiguracionPage() {
       const raw = localStorage.getItem(CONFIGURACION_STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<PersistedConfiguracionState>;
-        if (parsed.drafts && typeof parsed.drafts === "object") setDrafts(parsed.drafts);
+        if (parsed.drafts && typeof parsed.drafts === "object") {
+          // Drop drafts saved by an older build whose ConfigSettings shape
+          // has since gained fields (see hasExpectedShape above) instead of
+          // restoring them as-is and crashing the first Segment* tab that
+          // reads a now-missing field. The next persist effect run writes
+          // this filtered map back, so the stale entry doesn't linger.
+          const cleaned = Object.fromEntries(
+            Object.entries(parsed.drafts).filter(([, draft]) => {
+              try {
+                return isDraftShapeValid(draft);
+              } catch {
+                return false;
+              }
+            }),
+          );
+          if (Object.keys(cleaned).length !== Object.keys(parsed.drafts).length) {
+            console.warn(
+              "[configuracion] Descartando borrador(es) local(es) con un esquema de configuración desactualizado.",
+            );
+          }
+          setDrafts(cleaned);
+        }
         if (Array.isArray(parsed.localConfigs)) setLocalConfigs(parsed.localConfigs);
         if (parsed.activeTab && TAB_META.some((t) => t.key === parsed.activeTab))
           setActiveTab(parsed.activeTab);
@@ -567,6 +679,12 @@ function ConfiguracionPage() {
       )
     );
   };
+  const selectedSavedVersion =
+    !isDraftView && typeof selectedVersion === "number"
+      ? backendVersions.find((version) => version.version === selectedVersion)
+      : undefined;
+  const canRequestDeploy =
+    isChannelManager && !!selectedSavedVersion?.ever_tested && !selectedSavedVersion.active;
   const willOverwrite =
     !unsaved &&
     selectedDraft?.basedOnVersion != null &&
@@ -725,6 +843,13 @@ function ConfiguracionPage() {
     mutationFn: (payload: { configurationId: string; version: number }) =>
       activateConfiguration({ data: payload }),
   });
+  const createDeployRequestMutation = useMutation({
+    mutationFn: (payload: { configurationId: string; version: number; title: string; message: string }) =>
+      createConfigurationDeployRequest({ data: payload }),
+  });
+  const approveDeployRequestMutation = useMutation({
+    mutationFn: (requestId: string) => approveConfigurationDeployRequest({ data: { requestId } }),
+  });
 
   // Saves the draft as a new version — does NOT touch production. Going
   // live is a separate, explicit step via openDeploy/confirmDeploy below
@@ -764,6 +889,7 @@ function ConfiguracionPage() {
     try {
       const preview = await testConfiguration({ data: request, signal: controller.signal });
       if (!preview.valid) throw new Error("La configuración propuesta no superó la validación.");
+      setSaveConfirmText("");
       setPendingSave({ forceNewVersion, request, preview });
     } catch (err) {
       if (err instanceof Error && err.message.includes("409")) {
@@ -823,12 +949,13 @@ function ConfiguracionPage() {
   };
 
   const confirmSave = async () => {
-    if (!pendingSave || saving) return;
+    if (!pendingSave || saving || saveConfirmText !== "CONFIRMAR") return;
     if (
       pendingSave.request.general.migration_window_enabled &&
       !isMigrationDatetimeValid(pendingSave.request.general.migration_window_datetime)
     ) {
       setPendingSave(null);
+      setSaveConfirmText("");
       setSavePreviewError(
         "La fecha y hora de migración debe ser al menos 30 minutos posterior a la hora actual.",
       );
@@ -838,6 +965,7 @@ function ConfiguracionPage() {
     try {
       await saveVersion(pendingSave.request);
       setPendingSave(null);
+      setSaveConfirmText("");
     } catch (error) {
       setSavePreviewError(
         error instanceof Error ? error.message : "No se pudieron guardar los cambios.",
@@ -866,6 +994,52 @@ function ConfiguracionPage() {
     setDeployTarget({ configId, version });
     setDeployMode("immediate");
     setDeployConfirmText("");
+  };
+  const openDeployRequest = (configId: string, version: number) => {
+    setDeployRequestTarget({ configId, version });
+    setDeployRequestTitle("");
+    setDeployRequestMessage("");
+    setDeployRequestError(null);
+  };
+  const closeDeployRequest = () => {
+    if (createDeployRequestMutation.isPending) return;
+    setDeployRequestTarget(null);
+    setDeployRequestError(null);
+  };
+  const deployRequestPreviewQuery = useQuery({
+    queryKey: ["configurationDeployRequestPreview", deployRequestTarget?.configId, deployRequestTarget?.version],
+    queryFn: () =>
+      previewConfigurationDeployRequest({
+        data: { configurationId: deployRequestTarget!.configId, version: deployRequestTarget!.version },
+      }),
+    enabled: !!deployRequestTarget,
+  });
+  const submitDeployRequest = async () => {
+    if (!deployRequestTarget || !deployRequestTitle.trim() || !deployRequestMessage.trim()) return;
+    try {
+      await createDeployRequestMutation.mutateAsync({
+        configurationId: deployRequestTarget.configId,
+        version: deployRequestTarget.version,
+        title: deployRequestTitle.trim(),
+        message: deployRequestMessage.trim(),
+      });
+      setDeployRequestTarget(null);
+      setDeployRequestError(null);
+    } catch (error) {
+      setDeployRequestError(error instanceof Error ? error.message : "No se pudo crear la solicitud.");
+    }
+  };
+  const approveDeployRequest = async (requestId: string) => {
+    try {
+      await approveDeployRequestMutation.mutateAsync(requestId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["configurationDeployRequests"] }),
+        queryClient.invalidateQueries({ queryKey: ["activeConfiguration"] }),
+        queryClient.invalidateQueries({ queryKey: ["configurations"] }),
+      ]);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "No se pudo aprobar la solicitud.");
+    }
   };
   const closeDeploy = () => {
     setDeployTarget(null);
@@ -1099,7 +1273,7 @@ function ConfiguracionPage() {
                           : "Sin cambios pendientes"}
             </p>
           </div>
-          {isDraftView && (
+          {canEditConfiguration && isDraftView && (
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -1144,6 +1318,15 @@ function ConfiguracionPage() {
               </button>
             </div>
           )}
+          {canRequestDeploy && (
+            <button
+              type="button"
+              onClick={() => openDeployRequest(selectedConfig.id, selectedVersion as number)}
+              className={`${actionButtonClass} bg-primary text-white hover:bg-primary/90`}
+            >
+              <Send className="h-4 w-4" /> Solicitar despliegue
+            </button>
+          )}
         </div>
       }
     >
@@ -1157,7 +1340,7 @@ function ConfiguracionPage() {
         </header>
 
         {/* Sticky historical-version banner — always visible above the picker while browsing an old version */}
-        {readOnlyHistorical && (
+        {(isChannelManager || isReleaseManager || isManager) && readOnlyHistorical && (
           <div className="sticky top-0 z-20 -mx-8 px-8 py-2 bg-background/95 backdrop-blur border-b border-border">
             {settingsLoading ? (
               <div className="flex items-center gap-2.5 bg-text-secondary/10 border border-border rounded-lg px-4 py-2.5">
@@ -1200,7 +1383,8 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {/* Config + version selector */}
+        {/* Segment configuration is visible only to Channel and Release Managers. */}
+        {(isChannelManager || isReleaseManager || isManager) && (
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -1209,7 +1393,7 @@ function ConfiguracionPage() {
               </h2>
               <ConfigurationVersionGuide />
             </div>
-            <button
+            {isChannelManager && <button
               onClick={() =>
                 setNewConfigForm({
                   name: "",
@@ -1220,7 +1404,7 @@ function ConfiguracionPage() {
               className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline"
             >
               <Plus className="h-3.5 w-3.5" /> Nueva configuración
-            </button>
+            </button>}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="self-start border border-border rounded-lg overflow-hidden">
@@ -1391,7 +1575,7 @@ function ConfiguracionPage() {
                               <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success">
                                 <Radio className="h-3.5 w-3.5" /> Producción
                               </span>
-                            ) : (
+                            ) : !isChannelManager ? (
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1402,7 +1586,7 @@ function ConfiguracionPage() {
                               >
                                 <Rocket className="h-3.5 w-3.5" /> Desplegar
                               </button>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                         {v.testRun && (
@@ -1454,12 +1638,72 @@ function ConfiguracionPage() {
             </div>
           </div>
         </section>
+        )}
+
+        {isDeployApprover && (
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
+                  Solicitudes de despliegue
+                </h2>
+                <p className="text-[12px] text-text-secondary mt-1">
+                  Aprueba una solicitud para promover exactamente la versión solicitada a producción.
+                </p>
+              </div>
+              <ClipboardList className="h-5 w-5 text-primary" />
+            </div>
+            {deployRequestsQuery.isLoading ? (
+              <p className="text-[13px] text-text-secondary">Cargando solicitudes…</p>
+            ) : deployRequestsQuery.isError ? (
+              <p className="text-[13px] text-danger">No se pudieron cargar las solicitudes.</p>
+            ) : (deployRequestsQuery.data ?? []).length === 0 ? (
+              <p className="rounded-lg border border-dashed border-border px-4 py-5 text-[13px] text-text-secondary">
+                No hay solicitudes de despliegue.
+              </p>
+            ) : (
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {deployRequestsQuery.data?.map((request) => (
+                  <div key={request.id} className="p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[13px] font-semibold text-text-primary">{request.title}</p>
+                        <p className="mt-1 text-[12px] text-text-secondary">{request.message}</p>
+                        <p className="mt-2 text-[11px] text-text-secondary">
+                          {request.requested_by} solicita {request.target_configuration_id}:v{request.target_version}
+                          {request.current_configuration_id
+                            ? ` · producción actual ${request.current_configuration_id}:v${request.current_version}`
+                            : ""}
+                          {` · ${request.changes.length} cambios`}
+                        </p>
+                      </div>
+                      {request.status === "pending" ? (
+                        <button
+                          type="button"
+                          disabled={approveDeployRequestMutation.isPending}
+                          onClick={() => void approveDeployRequest(request.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Aprobar y desplegar
+                        </button>
+                      ) : (
+                        <span className="text-[11px] font-medium text-success">
+                          Aprobada por {request.approved_by ?? "—"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Dirty-draft reminder for when the user has wandered off to a
             different version/config while a draft is still pending — once
             they're actually in the draft view, this same information shows
             up in the save-confirmation modal instead of duplicating it here. */}
-        {!unsaved && !isDraftView && selectedConfig.dirtyTabs.length > 0 && (
+        {isChannelManager && !unsaved && !isDraftView && selectedConfig.dirtyTabs.length > 0 && (
           <div className="flex items-center gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
             <Pencil className="h-4 w-4 text-warning shrink-0" />
             <p className="text-[12px] text-text-primary">
@@ -1486,7 +1730,7 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {versionConflict && (
+        {isChannelManager && versionConflict && (
           <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
             <p className="text-[12px] text-text-primary">
@@ -1503,7 +1747,7 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {savePreviewError && (
+        {isChannelManager && savePreviewError && (
           <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
             <p className="text-[12px] text-text-primary">{savePreviewError}</p>
@@ -1516,7 +1760,7 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {scheduledDeploys[selectedConfig.id] && (
+        {isChannelManager && scheduledDeploys[selectedConfig.id] && (
           <div className="flex items-center gap-2.5 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2.5">
             <CalendarClock className="h-4 w-4 text-primary shrink-0" />
             <p className="text-[12px] text-text-primary">
@@ -1542,7 +1786,7 @@ function ConfiguracionPage() {
         {/* Tabs */}
         <SectionTabs
           label="Secciones de configuración"
-          items={TAB_META.map((tab) => ({
+          items={(isChannelManager ? SEGMENT_CONFIGURATION_TAB_META : isReleaseManager ? RELEASE_TAB_META : GENERAL_TAB_META).map((tab) => ({
             ...tab,
             dirty: selectedConfig.dirtyTabs.includes(tab.key),
           }))}
@@ -2096,11 +2340,23 @@ function ConfiguracionPage() {
               onChange={(segments) => patchSettings("segmento", { segments })}
               channels={channels}
               disabled={locked}
+              channelsOnly={!isChannelManager && !isReleaseManager}
+              allowChannelManagement={canManageChannelMembership}
             />
           </fieldset>
         )}
 
-        {activeTab === "segmentoAgente" && (
+        {(isReleaseManager || isManager) && activeTab === "schema" && (
+          <fieldset disabled={locked} className="contents">
+            <SegmentParserSection
+              value={settings.alertSchema}
+              onChange={(alertSchema) => patchSettings("schema", { alertSchema })}
+              disabled={locked}
+            />
+          </fieldset>
+        )}
+
+        {(isChannelManager || isReleaseManager) && activeTab === "segmentoAgente" && (
           <SegmentAgentTab
             value={settings.segments}
             onChange={(code, patch) => patchSegment("segmentoAgente", code, patch)}
@@ -2109,7 +2365,7 @@ function ConfiguracionPage() {
           />
         )}
 
-        {activeTab === "segmentoEvaluacion" && (
+        {(isChannelManager || isReleaseManager) && activeTab === "segmentoEvaluacion" && (
           <SegmentEvaluationTab
             value={settings.segments}
             onChange={(code, patch) => patchSegment("segmentoEvaluacion", code, patch)}
@@ -2152,6 +2408,66 @@ function ConfiguracionPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {deployRequestTarget && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" onClick={closeDeployRequest}>
+          <div className="w-full max-w-2xl rounded-xl border border-border bg-card shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div className="flex items-center gap-2">
+                <Send className="h-4 w-4 text-primary" />
+                <h3 className="text-[14px] font-semibold text-text-primary">Solicitar despliegue</h3>
+              </div>
+              <button type="button" onClick={closeDeployRequest} className="text-text-secondary hover:text-text-primary">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              <p className="text-[12px] text-text-secondary">
+                Solicitarás promover <span className="font-medium text-text-primary">{selectedConfig.name}:v{deployRequestTarget.version}</span>. Un Manager o Release Manager deberá aprobarla.
+              </p>
+              {deployRequestPreviewQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-[12px] text-text-secondary"><Loader2 className="h-4 w-4 animate-spin" /> Detectando cambios…</div>
+              ) : deployRequestPreviewQuery.isError ? (
+                <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+                  No se pudieron detectar los cambios. Esta versión debe haber pasado un test antes de solicitar el despliegue.
+                </p>
+              ) : (
+                <div>
+                  <h4 className="mb-2 text-[12px] font-semibold text-text-primary">
+                    Cambios frente a producción ({deployRequestPreviewQuery.data?.changes.length ?? 0})
+                  </h4>
+                  <div className="max-h-40 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {(deployRequestPreviewQuery.data?.changes ?? []).map((change) => (
+                      <div key={change.path} className="px-3 py-2 text-[11px]">
+                        <p className="font-medium text-text-primary">{formatChangePath(change.path)}</p>
+                        <p className="mt-0.5 text-text-secondary break-all">{formatChangeValue(change.previous)} → <span className="text-primary">{formatChangeValue(change.proposed)}</span></p>
+                      </div>
+                    ))}
+                    {(deployRequestPreviewQuery.data?.changes ?? []).length === 0 && (
+                      <p className="px-3 py-2 text-[11px] text-text-secondary">No hay diferencias con la configuración en producción.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-primary" htmlFor="deploy-request-title">Título <span className="text-danger">*</span></label>
+                <input id="deploy-request-title" value={deployRequestTitle} onChange={(event) => setDeployRequestTitle(event.target.value)} className="h-9 w-full rounded-md border border-border bg-background px-3 text-[13px] focus:border-primary focus:outline-none" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[12px] font-medium text-text-primary" htmlFor="deploy-request-message">Mensaje <span className="text-danger">*</span></label>
+                <textarea id="deploy-request-message" value={deployRequestMessage} onChange={(event) => setDeployRequestMessage(event.target.value)} rows={3} className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] focus:border-primary focus:outline-none" />
+              </div>
+              {deployRequestError && <p className="text-[12px] text-danger">{deployRequestError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
+              <button type="button" onClick={closeDeployRequest} className="rounded-md border border-border px-4 py-2 text-[13px] hover:bg-surface">Cancelar</button>
+              <button type="button" disabled={createDeployRequestMutation.isPending || deployRequestPreviewQuery.isLoading || deployRequestPreviewQuery.isError || !deployRequestTitle.trim() || !deployRequestMessage.trim()} onClick={() => void submitDeployRequest()} className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
+                {createDeployRequestMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Enviar solicitud
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Save confirmation modal — populated by POST /configuration/test. */}
       {pendingSave && (
         <div className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4">
@@ -2167,7 +2483,7 @@ function ConfiguracionPage() {
                 </h3>
               </div>
               <button
-                onClick={() => setPendingSave(null)}
+                onClick={() => { setPendingSave(null); setSaveConfirmText(""); }}
                 disabled={saving || createMutation.isPending}
                 className="text-text-secondary hover:text-text-primary disabled:opacity-50"
               >
@@ -2247,10 +2563,24 @@ function ConfiguracionPage() {
                   </div>
                 )}
               </div>
+              <div>
+                <label htmlFor="save-confirmation" className="block text-[12px] font-medium text-text-primary mb-1.5">
+                  Escribe <span className="font-semibold">CONFIRMAR</span> para guardar
+                </label>
+                <input
+                  id="save-confirmation"
+                  value={saveConfirmText}
+                  onChange={(event) => setSaveConfirmText(event.target.value.toUpperCase())}
+                  onPaste={(event) => event.preventDefault()}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="w-full h-9 rounded-md border border-border bg-background px-3 text-[13px] focus:outline-none focus:border-primary"
+                />
+              </div>
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
               <button
-                onClick={() => setPendingSave(null)}
+                onClick={() => { setPendingSave(null); setSaveConfirmText(""); }}
                 disabled={saving || createMutation.isPending}
                 className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface disabled:opacity-50"
               >
@@ -2258,7 +2588,7 @@ function ConfiguracionPage() {
               </button>
               <button
                 onClick={confirmSave}
-                disabled={saving || createMutation.isPending}
+                disabled={saving || createMutation.isPending || saveConfirmText !== "CONFIRMAR"}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {createMutation.isPending ? (
