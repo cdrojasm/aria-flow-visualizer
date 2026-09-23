@@ -11,27 +11,21 @@
    useVectorStoreVersions.ts), same "no real persistence, demonstrates the
    interaction" spirit as the rest of this mock. */
 
-import type {
-  FlagLibraryEntry,
-  ModusOperandiLibraryEntry,
-  SimilarCaseLibraryEntry,
-  TaxonomyLibraryEntry,
-} from "@/lib/api/knowledgeLibrary.functions";
-import {
-  initialFlags,
-  initialModusOperandi,
-  initialSimilarCases,
-  initialTaxonomies,
-} from "./configs";
-
 export type VectorStoreVersion = {
   id: string;
-  label: string;
+  /** Human-readable name; `id` is the immutable internal identifier. */
+  name: string;
+  description: string;
+  version: number;
   createdAt: string;
-  taxonomies: TaxonomyLibraryEntry[];
-  modusOperandi: ModusOperandiLibraryEntry[];
-  flags: FlagLibraryEntry[];
-  similarCases: SimilarCaseLibraryEntry[];
+  createdBy: string;
+  updatedAt: string | null;
+  updatedBy: string | null;
+  /** Only relations live here. The source document is never copied/deleted. */
+  documentKeys: string[];
+  /** Compatibility data for agent configuration prompts; relationships remain
+   * the source of truth for the vector-store document index. */
+  taxonomies?: TaxonomyLibraryEntry[];
 };
 
 const SEED_TIMESTAMP = "2026-01-01T00:00:00.000Z";
@@ -39,42 +33,20 @@ const SEED_TIMESTAMP = "2026-01-01T00:00:00.000Z";
 export const INITIAL_VECTOR_STORE_VERSIONS: VectorStoreVersion[] = [
   {
     id: "vsv-1",
-    label: "v1",
+    name: "Versión inicial",
+    description: "Instancia inicial de la base de conocimiento.",
+    version: 1,
     createdAt: SEED_TIMESTAMP,
-    taxonomies: initialTaxonomies.map((t) => ({
-      ...t,
-      created_at: SEED_TIMESTAMP,
-      updated_at: SEED_TIMESTAMP,
-    })),
-    modusOperandi: initialModusOperandi.map((m) => ({
-      id: m.id,
-      title: m.title,
-      narrative: m.narrative,
-      taxonomy_library_id: m.taxonomyId,
-      evolved_variables: m.evolvedVariables,
-      active: m.active,
-      created_at: SEED_TIMESTAMP,
-      updated_at: SEED_TIMESTAMP,
-    })),
-    flags: initialFlags.map((f) => ({
-      id: f.id,
-      flag_type: f.flagType,
-      name: f.name,
-      description: f.description,
-      evolved_variables: f.evolvedVariables,
-      modus_operandi_library_ids: f.modusOperandiIds,
-      active: true,
-      created_at: SEED_TIMESTAMP,
-      updated_at: SEED_TIMESTAMP,
-    })),
-    similarCases: initialSimilarCases.map((s) => ({
-      id: s.id,
-      text: s.text,
-      modus_operandi_library_id: s.modusOperandiId,
-      taxonomy_library_id: s.taxonomyId,
-      active: true,
+    createdBy: "Sistema",
+    updatedAt: null,
+    updatedBy: null,
+    documentKeys: [],
+    taxonomies: initialTaxonomies.map((taxonomy) => ({
+      ...taxonomy,
       created_at: SEED_TIMESTAMP,
       updated_at: SEED_TIMESTAMP,
     })),
   },
 ];
+import type { TaxonomyLibraryEntry } from "@/lib/api/knowledgeLibrary.functions";
+import { initialTaxonomies } from "./configs";
