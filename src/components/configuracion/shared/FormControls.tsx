@@ -432,62 +432,65 @@ export function SamplingDistributionEditor({
 function VectorStoreToolField({
   enabled,
   onEnabledChange,
-  instanceIds,
-  onInstanceIdsChange,
+  instanceId,
+  onInstanceIdChange,
   disabled,
 }: {
   enabled: boolean;
   onEnabledChange: (enabled: boolean) => void;
-  instanceIds: string[];
-  onInstanceIdsChange: (ids: string[]) => void;
+  instanceId: string | null;
+  onInstanceIdChange: (id: string | null) => void;
   disabled?: boolean;
 }) {
+  // One vector store per stage, not several - a stage's tool loop searches
+  // exactly one vector_store_id (see backend's ClassificationConfig
+  // .vector_store_instance_id). Several stages may point at the same
+  // instance; that's sharing, not multi-selection.
   const { versions: instances } = useVectorStoreVersions();
-  const toggle = (id: string) =>
-    onInstanceIdsChange(
-      instanceIds.includes(id) ? instanceIds.filter((i) => i !== id) : [...instanceIds, id],
-    );
+  const selected = instances.find((i) => i.id === instanceId);
 
   return (
     <div className="space-y-3">
       <SwitchField
         label="Base de conocimiento (vector store)"
-        hint="Permite al agente buscar semánticamente en una o más instancias del vector store."
+        hint="Permite al agente buscar semánticamente en una instancia del vector store."
         checked={enabled}
         onCheckedChange={(checked) => {
           onEnabledChange(checked);
-          if (!checked) onInstanceIdsChange([]);
+          if (!checked) onInstanceIdChange(null);
         }}
         disabled={disabled}
       />
       {enabled && (
-        <Field label="Instancias" hint="Vector stores que el agente puede consultar.">
-          <div className="flex flex-wrap gap-1.5">
-            {instances.map((instance) => {
-              const active = instanceIds.includes(instance.id);
-              return (
-                <button
-                  key={instance.id}
-                  type="button"
-                  disabled={disabled}
-                  title={instance.description}
-                  onClick={() => toggle(instance.id)}
-                  className={`px-3 py-1.5 rounded-full text-[12px] font-medium border transition-colors disabled:opacity-50 ${
-                    active
-                      ? "bg-primary text-white border-primary"
-                      : "border-border text-text-secondary hover:border-primary hover:text-primary"
-                  }`}
-                >
-                  {`v${instance.version} · ${instance.name}`}
-                </button>
-              );
-            })}
-            {instances.length === 0 && (
-              <p className="text-[11px] text-text-secondary">
-                Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
-              </p>
-            )}
-          </div>
+        <Field
+          label="Instancia"
+          hint="Vector store que el agente puede consultar - debe estar promovida para que la búsqueda real encuentre algo."
+        >
+          <select
+            value={instanceId ?? ""}
+            onChange={(e) => onInstanceIdChange(e.target.value || null)}
+            disabled={disabled}
+            className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
+          >
+            <option value="">Sin instancia asignada</option>
+            {instances.map((instance) => (
+              <option key={instance.id} value={instance.id}>
+                {`v${instance.version} · ${instance.name}`}
+                {instance.promotedVersion == null ? " (sin promover)" : ""}
+              </option>
+            ))}
+          </select>
+          {instances.length === 0 && (
+            <p className="mt-1.5 text-[11px] text-text-secondary">
+              Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
+            </p>
+          )}
+          {selected && selected.promotedVersion == null && (
+            <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              Esta instancia todavía no se ha promovido a producción (Biblioteca → Repositorio de
+              Conocimiento) - la búsqueda real no encontrará resultados hasta que se promueva.
+            </p>
+          )}
         </Field>
       )}
     </div>
@@ -646,8 +649,8 @@ export function AgentToolsFields({
       <VectorStoreToolField
         enabled={value.vectorStoreEnabled}
         onEnabledChange={(vectorStoreEnabled) => onChange({ vectorStoreEnabled })}
-        instanceIds={value.vectorStoreInstanceIds}
-        onInstanceIdsChange={(vectorStoreInstanceIds) => onChange({ vectorStoreInstanceIds })}
+        instanceId={value.vectorStoreInstanceId}
+        onInstanceIdChange={(vectorStoreInstanceId) => onChange({ vectorStoreInstanceId })}
         disabled={disabled}
       />
       <div className="pt-2 border-t border-border">

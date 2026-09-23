@@ -217,7 +217,10 @@ export const defaultAlertParserConfig = (): AlertParserConfig => ({ fields: [] }
    list_type, read off the watchlist itself (see WatchlistToolField). */
 export type ToolPickerFields = {
   vectorStoreEnabled: boolean;
-  vectorStoreInstanceIds: string[];
+  // One vector store per stage, not several - see VectorStoreToolField in
+  // shared/FormControls.tsx (a single-select, not the old multi-chip
+  // picker) and ApiToolPickerFields.vector_store_instance_id's note.
+  vectorStoreInstanceId: string | null;
   watchlistEnabled: boolean;
   watchlistIds: string[];
   // Which alert field's value is looked up against the selected
@@ -228,7 +231,7 @@ export type ToolPickerFields = {
 
 export const defaultToolPickerFields = (): ToolPickerFields => ({
   vectorStoreEnabled: false,
-  vectorStoreInstanceIds: [],
+  vectorStoreInstanceId: null,
   watchlistEnabled: false,
   watchlistIds: [],
   watchlistCompareField: null,
@@ -347,6 +350,16 @@ export type AnalystPlaybook = {
   // stays in sync with the picked entry's fixed tag, see
   // ResolutionMethodCatalogManager.
   resolutionMethodId?: string;
+  // ModusOperandiLibraryEntry.id this playbook is written for - resolved at
+  // analyst-review time by matching the alert against this segment's
+  // Clasificación vector_store_instance_id (backend's
+  // ResolveAnalystPlaybookUseCase). Advisory only: extra context for the
+  // analyst LLM alongside the classification-keyed playbook catalog
+  // (Biblioteca), doesn't override its decision. See
+  // SegmentAnalystSection's modus operandi picker - only lists entries
+  // that are actually members of the segment's selected vector store, since
+  // a playbook pointing at one that isn't can never resolve.
+  modusOperandiId?: string;
 };
 
 export type VoicebotCategoryPrompt = {

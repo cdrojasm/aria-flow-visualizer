@@ -122,7 +122,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
   };
   const detector: ApiDetectorConfig = {
     vector_store_enabled: a.detector.vectorStoreEnabled,
-    vector_store_instance_ids: a.detector.vectorStoreInstanceIds,
+    vector_store_instance_id: a.detector.vectorStoreInstanceId,
     watchlist_enabled: a.detector.watchlistEnabled,
     watchlist_ids: a.detector.watchlistIds,
     watchlist_compare_field: a.detector.watchlistCompareField,
@@ -140,7 +140,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
   };
   const detectorAdversarial: ApiDetectorAdversarialConfig = {
     vector_store_enabled: a.detectorAdversarial.vectorStoreEnabled,
-    vector_store_instance_ids: a.detectorAdversarial.vectorStoreInstanceIds,
+    vector_store_instance_id: a.detectorAdversarial.vectorStoreInstanceId,
     watchlist_enabled: a.detectorAdversarial.watchlistEnabled,
     watchlist_ids: a.detectorAdversarial.watchlistIds,
     watchlist_compare_field: a.detectorAdversarial.watchlistCompareField,
@@ -153,7 +153,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
   };
   const classification: ApiClassificationConfig = {
     vector_store_enabled: a.classification.vectorStoreEnabled,
-    vector_store_instance_ids: a.classification.vectorStoreInstanceIds,
+    vector_store_instance_id: a.classification.vectorStoreInstanceId,
     watchlist_enabled: a.classification.watchlistEnabled,
     watchlist_ids: a.classification.watchlistIds,
     watchlist_compare_field: a.classification.watchlistCompareField,
@@ -165,7 +165,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
   };
   const adversarial: ApiAdversarialConfig = {
     vector_store_enabled: a.adversarial.vectorStoreEnabled,
-    vector_store_instance_ids: a.adversarial.vectorStoreInstanceIds,
+    vector_store_instance_id: a.adversarial.vectorStoreInstanceId,
     watchlist_enabled: a.adversarial.watchlistEnabled,
     watchlist_ids: a.adversarial.watchlistIds,
     watchlist_compare_field: a.adversarial.watchlistCompareField,
@@ -182,6 +182,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
       strategy: p.strategy,
       resolution_tag: p.resolutionTag,
       resolution_method_id: p.resolutionMethodId,
+      modus_operandi_id: p.modusOperandiId,
     })),
   };
   const voicebotCall: ApiVoicebotConfig = {
@@ -284,7 +285,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
     detector: a.detector
       ? {
           vectorStoreEnabled: a.detector.vector_store_enabled,
-          vectorStoreInstanceIds: a.detector.vector_store_instance_ids ?? [],
+          vectorStoreInstanceId: a.detector.vector_store_instance_id ?? null,
           watchlistEnabled: a.detector.watchlist_enabled,
           watchlistIds: a.detector.watchlist_ids ?? [],
           watchlistCompareField: a.detector.watchlist_compare_field ?? null,
@@ -309,7 +310,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
     detectorAdversarial: a.detector_adversarial
       ? {
           vectorStoreEnabled: a.detector_adversarial.vector_store_enabled,
-          vectorStoreInstanceIds: a.detector_adversarial.vector_store_instance_ids ?? [],
+          vectorStoreInstanceId: a.detector_adversarial.vector_store_instance_id ?? null,
           watchlistEnabled: a.detector_adversarial.watchlist_enabled,
           watchlistIds: a.detector_adversarial.watchlist_ids ?? [],
           watchlistCompareField: a.detector_adversarial.watchlist_compare_field ?? null,
@@ -323,7 +324,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
       : defaults.detectorAdversarial,
     classification: {
       vectorStoreEnabled: a.classification.vector_store_enabled,
-      vectorStoreInstanceIds: a.classification.vector_store_instance_ids ?? [],
+      vectorStoreInstanceId: a.classification.vector_store_instance_id ?? null,
       watchlistEnabled: a.classification.watchlist_enabled,
       watchlistIds: a.classification.watchlist_ids ?? [],
       watchlistCompareField: a.classification.watchlist_compare_field ?? null,
@@ -335,7 +336,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
     },
     adversarial: {
       vectorStoreEnabled: a.adversarial.vector_store_enabled,
-      vectorStoreInstanceIds: a.adversarial.vector_store_instance_ids ?? [],
+      vectorStoreInstanceId: a.adversarial.vector_store_instance_id ?? null,
       watchlistEnabled: a.adversarial.watchlist_enabled,
       watchlistIds: a.adversarial.watchlist_ids ?? [],
       watchlistCompareField: a.adversarial.watchlist_compare_field ?? null,
@@ -352,6 +353,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         strategy: p.strategy,
         resolutionTag: p.resolution_tag,
         resolutionMethodId: p.resolution_method_id ?? undefined,
+        modusOperandiId: p.modus_operandi_id ?? undefined,
       })),
     },
     executor: a.executor

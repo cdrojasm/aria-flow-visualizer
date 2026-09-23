@@ -121,7 +121,10 @@ export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition
 // itself (its list_type).
 type ApiToolPickerFields = {
   vector_store_enabled: boolean;
-  vector_store_instance_ids: string[];
+  // One vector store per stage, not a list - a stage's tool loop searches
+  // exactly one vector_store_id. Several stages may point at the same one;
+  // that's sharing, not multi-selection.
+  vector_store_instance_id: string | null;
   watchlist_enabled: boolean;
   watchlist_ids: string[];
   watchlist_compare_field: string | null;
@@ -161,6 +164,12 @@ export type ApiAnalystPlaybook = {
   strategy: string;
   resolution_tag: ApiResolutionTag;
   resolution_method_id?: string | null;
+  // ModusOperandiDocument.library_id this playbook is written for -
+  // resolved at analyst-review time by matching the alert against this
+  // stage's vector_store_instance_id (see ClassificationConfig above).
+  // Advisory only: extra context for the analyst LLM, doesn't override its
+  // decision.
+  modus_operandi_id?: string | null;
 };
 export type ApiVoicebotCategoryPrompt = { id: string; taxonomy_id: string; prompt: string };
 export type ApiVoicebotConfig = {
