@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { defaultSegmentAgent, type SegmentAgentConfig } from "@/data/configs";
+import { Badge } from "@/components/ui/badge";
 import { SegmentAdversarialSection } from "./SegmentAdversarialSection";
 import { SegmentAnalystSection } from "./SegmentAnalystSection";
 import { SegmentClassificationSection } from "./SegmentClassificationSection";
@@ -20,7 +21,17 @@ type AgentSubTab =
   | "analyst"
   | "executor";
 
-const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = [
+// warningNote flags a subtab whose config is saved correctly but that the
+// Celery alert-review workflow (alert_review_workflow.py's LINEAR_STEPS)
+// does not read yet - keeps channel managers from assuming these fields
+// change how a real alert is processed until the backend work lands.
+// Remove each entry's note once its backend wiring ships.
+const SUBTAB_META: {
+  key: AgentSubTab;
+  label: string;
+  description: string;
+  warningNote?: string;
+}[] = [
   {
     key: "deterministic",
     label: "Determinístico",
@@ -31,12 +42,16 @@ const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = 
     label: "Perfilamiento",
     description:
       "Ingeniería de características → cadena de perfilamiento → rúbricas. Configura las señales, construye el contexto de la alerta y define cómo se evalúa el riesgo.",
+    warningNote:
+      "Las Rúbricas de esta pestaña se guardan pero ningún paso del motor de ejecución las calcula todavía.",
   },
   {
     key: "detector",
     label: "Detector",
     description:
       "Define las herramientas (incluido el modelo XGBoost) y el prompt para detectar alertas que ameritan una investigación más profunda.",
+    warningNote:
+      "El modelo XGBoost todavía no está conectado (Modelo XGBoost / umbrales / SHAP) — el resto de esta pestaña (herramientas, prompt, etiquetas de salida) sí se ejecuta.",
   },
   {
     key: "detectorAdversarial",
@@ -57,6 +72,8 @@ const SUBTAB_META: { key: AgentSubTab; label: string; description: string }[] = 
     key: "analyst",
     label: "Analista",
     description: "Configura los playbooks disponibles para la revisión humana.",
+    warningNote:
+      "Un playbook con modus operandi asignado se usa como contexto adicional para el analista (no reemplaza su decisión) - un playbook sin modus operandi asignado se guarda pero el motor de ejecución todavía no lo usa; sigue resolviendo el playbook por defecto desde el catálogo global (Biblioteca).",
   },
   {
     key: "executor",
@@ -129,13 +146,19 @@ export function SegmentAgentSection({
               key={t.key}
               type="button"
               onClick={() => setSubtab(t.key)}
-              className={`px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors ${
                 subtab === t.key
                   ? "bg-primary text-white"
                   : "text-text-secondary hover:text-text-primary"
               }`}
             >
               {t.label}
+              {t.warningNote && (
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-amber-400"
+                  title="Aún no conectado al motor de ejecución"
+                />
+              )}
             </button>
           ))}
         </div>
@@ -144,6 +167,14 @@ export function SegmentAgentSection({
       <div className="px-1">
         <h2 className="text-[15px] font-semibold text-text-primary">{activeSubtab.label}</h2>
         <p className="mt-0.5 text-[12px] text-text-secondary">{activeSubtab.description}</p>
+        {activeSubtab.warningNote && (
+          <Badge
+            variant="outline"
+            className="mt-2 block w-fit whitespace-normal border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300"
+          >
+            ⚠️ {activeSubtab.warningNote}
+          </Badge>
+        )}
       </div>
 
       {subtab === "deterministic" && (
@@ -211,6 +242,10 @@ export function SegmentAgentSection({
         <SegmentAnalystSection
           value={value.analyst}
           onChange={(analyst) => onChange({ analyst })}
+          // Modus operandi resolution reuses whichever vector store
+          // Clasificación already searches - same reuse pattern as
+          // Adversarial's tools (see backend's ResolveAnalystPlaybookUseCase).
+          vectorStoreInstanceId={value.classification.vectorStoreInstanceId}
           disabled={disabled}
         />
       )}

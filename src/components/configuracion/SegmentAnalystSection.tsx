@@ -8,7 +8,9 @@ import {
   type AnalystPlaybook,
   type ResolutionTag,
 } from "@/data/configs";
+import { listModusOperandiLibraryEntries } from "@/lib/api/knowledgeLibrary.functions";
 import { listResolutionMethods } from "@/lib/api/resolutionMethod.functions";
+import { listVectorStoreDocuments } from "@/lib/api/vectorStoreInstances.functions";
 import { MarcacionCatalogManager } from "./MarcacionCatalogManager";
 import { ResolutionMethodCatalogManager } from "./ResolutionMethodCatalogManager";
 import { Field } from "./shared/FormControls";
@@ -22,15 +24,25 @@ import { Field } from "./shared/FormControls";
    the category itself is separate runtime-assignable reference data
    (managed catalog, see MarcacionCatalogManager), not a field on the
    playbook. Voicebot moved out to ExecutorConfig/SegmentExecutorSection
-   (Wave 6, item 5) - this section is now playbooks only. */
+   (Wave 6, item 5) - this section is now playbooks only.
+
+   A playbook can optionally point at a specific modus operandi
+   (modusOperandiId) - the backend's ResolveAnalystPlaybookUseCase matches
+   the alert against it via this segment's Clasificación
+   vector_store_instance_id (see vectorStoreInstanceId prop) and feeds the
+   match to the analyst LLM as extra context. Only modus operandi that are
+   actually members of that vector store instance are offered here - one
+   that isn't can never resolve, so listing it would be a footgun. */
 
 export function SegmentAnalystSection({
   value,
   onChange,
+  vectorStoreInstanceId,
   disabled,
 }: {
   value: AnalystConfig;
   onChange: (value: AnalystConfig) => void;
+  vectorStoreInstanceId?: string | null;
   disabled?: boolean;
 }) {
   const [editing, setEditing] = useState<AnalystPlaybook | null>(null);
@@ -50,6 +62,26 @@ export function SegmentAnalystSection({
   const resolutionMethodLabel = (p: AnalystPlaybook) =>
     resolutionMethods.find((m) => m.id === p.resolutionMethodId)?.value ??
     RESOLUTION_TAG_LABELS[p.resolutionTag];
+
+  const modusOperandiEntriesQuery = useQuery({
+    queryKey: ["libraryModusOperandi", "active"],
+    queryFn: () => listModusOperandiLibraryEntries({ data: { activeOnly: true } }),
+  });
+  const modusOperandiEntries = modusOperandiEntriesQuery.data ?? [];
+  const vectorStoreDocumentsQuery = useQuery({
+    queryKey: ["vectorStoreDocuments", vectorStoreInstanceId ?? ""],
+    queryFn: () => listVectorStoreDocuments(vectorStoreInstanceId!),
+    enabled: !!vectorStoreInstanceId,
+  });
+  const modusOperandiOptions = (vectorStoreDocumentsQuery.data ?? [])
+    .filter((relation) => relation.asset_type === "modus_operandi")
+    .map((relation) => modusOperandiEntries.find((entry) => entry.id === relation.asset_id))
+    .filter((entry) => entry != null);
+  const modusOperandiLabel = (p: AnalystPlaybook) =>
+    p.modusOperandiId
+      ? (modusOperandiEntries.find((entry) => entry.id === p.modusOperandiId)?.title ??
+        p.modusOperandiId)
+      : null;
 
   const openCreate = () => {
     setEditing({ id: "", name: "", strategy: "", resolutionTag: "scale_to_analyst" });
@@ -112,9 +144,19 @@ export function SegmentAnalystSection({
               <div className="min-w-0">
                 <p className="text-[13px] font-medium text-text-primary">{p.name}</p>
                 <p className="text-[12px] text-text-secondary mt-0.5">{p.strategy}</p>
-                <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px]">
-                  {resolutionMethodLabel(p)}
-                </span>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <span className="inline-block px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px]">
+                    {resolutionMethodLabel(p)}
+                  </span>
+                  {modusOperandiLabel(p) && (
+                    <span
+                      title="Contexto adicional para el analista cuando la alerta coincide con este modus operandi."
+                      className="inline-block px-2 py-0.5 rounded-full bg-surface border border-border text-text-secondary text-[11px]"
+                    >
+                      MO: {modusOperandiLabel(p)}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 <button
@@ -210,6 +252,36 @@ export function SegmentAnalystSection({
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field
+                label="Modus operandi (opcional)"
+                hint={
+                  vectorStoreInstanceId
+                    ? "Si la alerta coincide semánticamente con este modus operandi, este playbook se agrega como contexto adicional para el analista - no reemplaza su decisión."
+                    : "Configura una instancia de vector store en Clasificación para poder asignar un modus operandi a este playbook."
+                }
+              >
+                <select
+                  value={editing.modusOperandiId ?? ""}
+                  onChange={(e) =>
+                    setEditing({ ...editing, modusOperandiId: e.target.value || undefined })
+                  }
+                  disabled={!vectorStoreInstanceId}
+                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
+                >
+                  <option value="">Sin modus operandi asignado</option>
+                  {modusOperandiOptions.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.title}
+                    </option>
+                  ))}
+                </select>
+                {vectorStoreInstanceId && modusOperandiOptions.length === 0 && (
+                  <p className="mt-1.5 text-[11px] text-text-secondary">
+                    Esta instancia de vector store no tiene modus operandi asociados todavía -
+                    agrégalos en Biblioteca → Repositorio de Conocimiento.
+                  </p>
+                )}
               </Field>
             </div>
             <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
