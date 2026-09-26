@@ -6,6 +6,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect, useState } from "react";
 import { DatasetSummaryTab } from "./DatasetSummaryTab";
 import { DatasetRowsTab } from "./DatasetRowsTab";
 import { DatasetMappingTab } from "./DatasetMappingTab";
@@ -19,6 +20,21 @@ export function DatasetDetailDrawer({
   open: boolean;
   onClose: () => void;
 }) {
+  const [activeTab, setActiveTab] = useState("summary");
+
+  useEffect(() => {
+    if (!datasetName || typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(`datasetDetailTab.${datasetName}`);
+    setActiveTab(saved === "rows" || saved === "mapping" ? saved : "summary");
+  }, [datasetName]);
+
+  function selectTab(tab: string) {
+    setActiveTab(tab);
+    if (datasetName && typeof window !== "undefined") {
+      window.localStorage.setItem(`datasetDetailTab.${datasetName}`, tab);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto overflow-x-hidden">
@@ -35,7 +51,7 @@ export function DatasetDetailDrawer({
             item, blowing the dialog out horizontally instead of the
             table's own overflow-x-auto handling it. */}
         {datasetName && (
-          <Tabs defaultValue="summary" className="min-w-0">
+          <Tabs value={activeTab} onValueChange={selectTab} className="min-w-0">
             <TabsList>
               <TabsTrigger value="summary">Resumen</TabsTrigger>
               <TabsTrigger value="rows">Filas</TabsTrigger>

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Eye, Loader2, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
@@ -14,6 +14,7 @@ import { CreateEmptyDatasetModal } from "@/components/datasets/CreateEmptyDatase
 import { ExtractDatasetModal } from "@/components/datasets/ExtractDatasetModal";
 import { UploadDatasetModal } from "@/components/datasets/UploadDatasetModal";
 import { DatasetDetailDrawer } from "@/components/datasets/DatasetDetailDrawer";
+import { AsyncOperationProgressCard } from "@/components/async/AsyncOperationProgressCard";
 
 /* ─── Biblioteca → Datasets, the canonical dataset management surface ───
    Same "global catalog" footing as WatchlistManager.tsx: metadata-only
@@ -39,18 +40,47 @@ export function DatasetLibraryManager() {
   const [analyzingName, setAnalyzingName] = useState<string | null>(null);
   const [downloadingName, setDownloadingName] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDeletionNames, setPendingDeletionNames] = useState<Set<string>>(new Set());
+  const [trackedOperationIds, setTrackedOperationIds] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const visibleDatasets = datasets.filter((dataset) => !pendingDeletionNames.has(dataset.name));
+  const pageCount = Math.max(1, Math.ceil(visibleDatasets.length / pageSize));
+  const pageDatasets = visibleDatasets.slice((page - 1) * pageSize, page * pageSize);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
+  function trackOperation(operationId: string | null) {
+    if (!operationId) return;
+    setTrackedOperationIds((current) =>
+      current.includes(operationId) ? current : [...current, operationId],
+    );
+  }
 
   const deleteMutation = useMutation({
     mutationFn: (name: string) => deleteDataset({ data: { name } }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      if (response.async_operation_id) {
+        trackOperation(response.async_operation_id);
+        setPendingDeletionNames((current) => new Set(current).add(response.name));
+      }
       invalidate();
       setDeletingDataset(null);
+    },
+    onError: () => {
+      setDeleteError(
+        "No se pudo iniciar la eliminación. El dataset no fue borrado; inténtalo de nuevo.",
+      );
     },
   });
 
   const analyzeMutation = useMutation({
     mutationFn: (name: string) => analyzeDatasetOnDemand({ data: { name } }),
-    onSuccess: (_res, name) => {
+    onSuccess: (response, name) => {
+      trackOperation(response.async_operation_id);
       queryClient.invalidateQueries({ queryKey: ["datasetSummary", name] });
       setAnalyzingName(null);
     },
@@ -102,7 +132,28 @@ export function DatasetLibraryManager() {
         </div>
       </div>
 
+      {trackedOperationIds.length > 0 && (
+        <div className="px-6 py-4 border-b border-border space-y-2">
+          <p className="text-[12px] font-medium text-text-primary">Procesos en segundo plano</p>
+          {trackedOperationIds.map((id) => (
+            <AsyncOperationProgressCard
+              key={id}
+              operationId={id}
+              title="Proceso de dataset"
+              onCompleted={() => {
+                setTrackedOperationIds((current) =>
+                  current.filter((candidate) => candidate !== id),
+                );
+                invalidate();
+                queryClient.invalidateQueries({ queryKey: ["datasetSummary"] });
+              }}
+            />
+          ))}
+        </div>
+      )}
+
       {downloadError && <p className="px-6 pt-3 text-[12px] text-danger">{downloadError}</p>}
+      {deleteError && <p className="px-6 pt-3 text-[12px] text-danger">{deleteError}</p>}
 
       <table className="w-full text-[13px]">
         <thead>
@@ -128,7 +179,7 @@ export function DatasetLibraryManager() {
             </tr>
           )}
           {datasetsQuery.isSuccess &&
-            datasets.map((d) => (
+            pageDatasets.map((d) => (
               <tr
                 key={d.name}
                 className="border-b border-border last:border-0 hover:bg-surface align-top"
@@ -184,7 +235,7 @@ export function DatasetLibraryManager() {
                 </td>
               </tr>
             ))}
-          {datasetsQuery.isSuccess && datasets.length === 0 && (
+          {datasetsQuery.isSuccess && visibleDatasets.length === 0 && (
             <tr>
               <td colSpan={3} className="px-6 py-8 text-center text-text-secondary">
                 Sin datasets todavía.
@@ -193,8 +244,36 @@ export function DatasetLibraryManager() {
           )}
         </tbody>
       </table>
+      {visibleDatasets.length > pageSize && (
+        <div className="flex items-center justify-between px-6 py-3 border-t border-border text-[12px] text-text-secondary">
+          <span>
+            Mostrando {(page - 1) * pageSize + 1}–
+            {Math.min(page * pageSize, visibleDatasets.length)} de {visibleDatasets.length} datasets
+          </span>
+          <div className="flex gap-2">
+            <button
+              className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              disabled={page === 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              Anterior
+            </button>
+            <button
+              className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              disabled={page === pageCount}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
 
-      <UploadDatasetModal open={showUpload} onClose={() => setShowUpload(false)} />
+      <UploadDatasetModal
+        open={showUpload}
+        onClose={() => setShowUpload(false)}
+        onUploaded={trackOperation}
+      />
       <CreateEmptyDatasetModal open={showCreateEmpty} onClose={() => setShowCreateEmpty(false)} />
       <ExtractDatasetModal open={showExtract} onClose={() => setShowExtract(false)} />
       <DatasetDetailDrawer
@@ -209,7 +288,10 @@ export function DatasetLibraryManager() {
         itemName={`dataset "${deletingDataset?.name ?? ""}"`}
         consequence={`Se borran también sus datos de análisis y sus ${(deletingDataset?.row_count ?? 0).toLocaleString("es-CO")} filas. Esta acción no se puede deshacer.`}
         pending={deleteMutation.isPending}
-        onConfirm={() => deletingDataset && deleteMutation.mutate(deletingDataset.name)}
+        onConfirm={() => {
+          setDeleteError(null);
+          if (deletingDataset) deleteMutation.mutate(deletingDataset.name);
+        }}
       />
     </section>
   );

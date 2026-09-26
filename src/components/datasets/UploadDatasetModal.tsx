@@ -1,5 +1,6 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Progress } from "@/components/ui/progress";
 
 import {
   Dialog,
@@ -10,26 +11,44 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Field } from "@/components/configuracion/shared/FormControls";
-import { uploadDataset } from "@/lib/api/datasets.functions";
+import { getDatasets, uploadDataset } from "@/lib/api/datasets.functions";
 
-export function UploadDatasetModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function UploadDatasetModal({ open, onClose, onUploaded }: {
+  open: boolean;
+  onClose: () => void;
+  onUploaded?: (operationId: string | null) => void;
+}) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null);
+  const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: getDatasets, enabled: open });
+  const datasetName = file?.name.replace(/\.csv$/i, "") ?? "";
+  const duplicateName = !!datasetName && (datasetsQuery.data ?? []).some(
+    (dataset) => dataset.name.localeCompare(datasetName, undefined, { sensitivity: "accent" }) === 0,
+  );
 
   const uploadMutation = useMutation({
     mutationFn: () => {
       const form = new FormData();
       form.append("file", file!);
-      return uploadDataset({ data: form });
+      return uploadDataset({
+        data: form,
+        onProgress: (loaded, total) => setUploadPercent(Math.round((loaded / total) * 100)),
+      });
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ["datasets"] });
+      onUploaded?.(response.async_operation_id);
       reset();
+      setUploadPercent(null);
       onClose();
     },
   });
 
-  const reset = () => setFile(null);
+  const reset = () => {
+    setFile(null);
+    setUploadPercent(null);
+  };
 
   return (
     <Dialog
@@ -54,13 +73,35 @@ export function UploadDatasetModal({ open, onClose }: { open: boolean; onClose: 
           <input
             type="file"
             accept=".csv"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              uploadMutation.reset();
+              setFile(e.target.files?.[0] ?? null);
+            }}
             className="w-full text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-border file:text-[12px] file:bg-surface"
           />
         </Field>
 
+        {duplicateName && (
+          <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-warning">
+            Ya existe un dataset llamado <strong>{datasetName}</strong>. Cambia el nombre del
+            archivo antes de subirlo.
+          </div>
+        )}
+
         {uploadMutation.isError && (
-          <p className="text-[12px] text-danger">{(uploadMutation.error as Error).message}</p>
+          <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+            {(uploadMutation.error as Error).message.includes("409")
+              ? "Ese nombre de dataset ya está en uso. Renombra el archivo e inténtalo de nuevo."
+              : "No se pudo subir el dataset. Verifica el archivo e inténtalo nuevamente."}
+          </div>
+        )}
+        {uploadMutation.isPending && uploadPercent !== null && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[12px] text-text-secondary">
+              <span>Subiendo archivo…</span><span>{uploadPercent}%</span>
+            </div>
+            <Progress value={uploadPercent} />
+          </div>
         )}
 
         <DialogFooter>
@@ -76,11 +117,11 @@ export function UploadDatasetModal({ open, onClose }: { open: boolean; onClose: 
           </button>
           <button
             type="button"
-            disabled={!file || uploadMutation.isPending}
+            disabled={!file || duplicateName || uploadMutation.isPending}
             onClick={() => uploadMutation.mutate()}
             className="px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white disabled:opacity-50"
           >
-            {uploadMutation.isPending ? "Subiendo…" : "Subir dataset"}
+            {uploadMutation.isPending ? (uploadPercent === 100 ? "Iniciando procesamiento…" : "Subiendo…") : "Subir dataset"}
           </button>
         </DialogFooter>
       </DialogContent>

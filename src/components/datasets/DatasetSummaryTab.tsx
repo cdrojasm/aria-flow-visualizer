@@ -1,13 +1,41 @@
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
+import { AsyncOperationProgressCard } from "@/components/async/AsyncOperationProgressCard";
 import {
   analyzeDatasetOnDemand,
   getDatasetSummary,
   type DatasetOrigin,
 } from "@/lib/api/datasets.functions";
+
+const MARK_FIELD_DATALIST_ID = "dataset-summary-mark-fields";
+
+type MarkForm = {
+  firstMarkField: string;
+  secondMarkField: string;
+  firstMarkTimeField: string;
+  secondMarkTimeField: string;
+  // Comma-separated in the UI (e.g. "risk, risk-suspected") - split into
+  // positive_values before hitting the API.
+  positiveValues: string;
+};
+
+const EMPTY_MARK_FORM: MarkForm = {
+  firstMarkField: "",
+  secondMarkField: "",
+  firstMarkTimeField: "",
+  secondMarkTimeField: "",
+  positiveValues: "",
+};
+
+function splitPositiveValues(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
+}
 
 // Above this many columns, the "Columnas" list collapses behind a "ver
 // más" toggle instead of growing the card indefinitely - row-level
@@ -41,6 +69,9 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
   const queryClient = useQueryClient();
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
   const [columnsExpanded, setColumnsExpanded] = useState(false);
+  const [markForm, setMarkForm] = useState<MarkForm>(EMPTY_MARK_FORM);
+  const [markingOperationId, setMarkingOperationId] = useState<string | null>(null);
+  const [markingOperationError, setMarkingOperationError] = useState<string | null>(null);
 
   const summaryQuery = useQuery({
     queryKey: ["datasetSummary", datasetName],
@@ -53,6 +84,45 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
       queryClient.invalidateQueries({ queryKey: ["datasetSummary", datasetName] });
     },
   });
+
+  // Separate from summaryQuery: this hits the same GET /summary endpoint
+  // but with the 5 mark-field params, and only the analyst explicitly asks
+  // for it (button click) - it shouldn't run on every auto-refresh tick or
+  // block the always-on distributions above.
+  const markingMutation = useMutation({
+    mutationFn: (form: MarkForm) =>
+      getDatasetSummary({
+        data: {
+          name: datasetName,
+          first_mark_field: form.firstMarkField,
+          second_mark_field: form.secondMarkField,
+          first_mark_time_field: form.firstMarkTimeField,
+          second_mark_time_field: form.secondMarkTimeField,
+          positive_values: splitPositiveValues(form.positiveValues),
+        },
+      }),
+    onMutate: () => {
+      setMarkingOperationId(null);
+      setMarkingOperationError(null);
+    },
+    onSuccess: (result) => {
+      if ("async_operation_id" in result) {
+        setMarkingOperationId(result.async_operation_id);
+      }
+    },
+  });
+
+  const markFormComplete =
+    markForm.firstMarkField.trim().length > 0 &&
+    markForm.secondMarkField.trim().length > 0 &&
+    markForm.firstMarkTimeField.trim().length > 0 &&
+    markForm.secondMarkTimeField.trim().length > 0 &&
+    splitPositiveValues(markForm.positiveValues).length > 0;
+  const mutationMarkingResult =
+    markingMutation.data && !("async_operation_id" in markingMutation.data)
+      ? markingMutation.data.fraud_marking_analysis
+      : null;
+  const markingInProgress = markingMutation.isPending || markingOperationId !== null;
 
   const isProcessing =
     summaryQuery.data?.status === "PENDING" || summaryQuery.data?.status === "PROCESSING";
@@ -80,6 +150,7 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
   }
   if (!summaryQuery.data) return null;
   const s = summaryQuery.data;
+  const markingResult = mutationMarkingResult ?? s.fraud_marking_analysis;
 
   return (
     <div className="space-y-4">
@@ -236,6 +307,241 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {s.total_rows > 0 && (
+        <div className="border border-border rounded-lg p-3 space-y-3">
+          <div>
+            <p className="text-[11px] font-semibold text-text-secondary uppercase tracking-wider">
+              Falsos positivos y maduración del fraude
+            </p>
+            <p className="text-[12px] text-text-secondary mt-1">
+              Compara la primera marca de una fila contra la segunda (final/confirmada) para contar
+              falsos positivos, falsos negativos y filas correctamente marcadas, y mide cuánto tardó
+              cada fila en madurar de la primera a la segunda marca. Los 5 campos son obligatorios
+              en conjunto. Si un caso pasa de una marca positiva a otra (ej. "risk-suspected" →
+              "risk") no cuenta como falso positivo/negativo — solo es una escalación dentro de la
+              misma clase positiva, no una remarcación.
+            </p>
+          </div>
+
+          {!markingResult && (
+            <>
+              <datalist id={MARK_FIELD_DATALIST_ID}>
+                {s.available_fields.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="space-y-1">
+                  <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Campo de la primera marca
+                  </span>
+                  <input
+                    type="text"
+                    list={MARK_FIELD_DATALIST_ID}
+                    value={markForm.firstMarkField}
+                    onChange={(e) => setMarkForm((f) => ({ ...f, firstMarkField: e.target.value }))}
+                    placeholder="ej. razon_marcacion"
+                    className="w-full text-[12px] rounded-md border border-border bg-background px-2 py-1.5 font-mono"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Campo de la segunda marca
+                  </span>
+                  <input
+                    type="text"
+                    list={MARK_FIELD_DATALIST_ID}
+                    value={markForm.secondMarkField}
+                    onChange={(e) =>
+                      setMarkForm((f) => ({ ...f, secondMarkField: e.target.value }))
+                    }
+                    placeholder="ej. marcacion_final"
+                    className="w-full text-[12px] rounded-md border border-border bg-background px-2 py-1.5 font-mono"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Campo de fecha/hora de la primera marca
+                  </span>
+                  <input
+                    type="text"
+                    list={MARK_FIELD_DATALIST_ID}
+                    value={markForm.firstMarkTimeField}
+                    onChange={(e) =>
+                      setMarkForm((f) => ({ ...f, firstMarkTimeField: e.target.value }))
+                    }
+                    placeholder="ej. fecha_primer_marcacion"
+                    className="w-full text-[12px] rounded-md border border-border bg-background px-2 py-1.5 font-mono"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Campo de fecha/hora de la segunda marca
+                  </span>
+                  <input
+                    type="text"
+                    list={MARK_FIELD_DATALIST_ID}
+                    value={markForm.secondMarkTimeField}
+                    onChange={(e) =>
+                      setMarkForm((f) => ({ ...f, secondMarkTimeField: e.target.value }))
+                    }
+                    placeholder="ej. fecha_ultima_marcacion"
+                    className="w-full text-[12px] rounded-md border border-border bg-background px-2 py-1.5 font-mono"
+                  />
+                </label>
+                <label className="space-y-1 sm:col-span-2">
+                  <span className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Valores positivos (significan "marcado como fraude", separados por coma)
+                  </span>
+                  <input
+                    type="text"
+                    value={markForm.positiveValues}
+                    onChange={(e) => setMarkForm((f) => ({ ...f, positiveValues: e.target.value }))}
+                    placeholder="ej. risk, risk-suspected"
+                    className="w-full text-[12px] rounded-md border border-border bg-background px-2 py-1.5 font-mono"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => markingMutation.mutate(markForm)}
+                disabled={!markFormComplete || markingInProgress}
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-white bg-primary rounded-md px-3 py-1.5 disabled:opacity-40"
+              >
+                {markingInProgress ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Search className="h-3.5 w-3.5" />
+                )}
+                Analizar
+              </button>
+
+              {markingMutation.isError && (
+                <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+                  No se pudo calcular el perfil. El dataset permanece disponible; inténtalo de nuevo
+                  o revisa los campos seleccionados.
+                </div>
+              )}
+            </>
+          )}
+
+          {markingOperationError && (
+            <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+              El análisis no pudo completarse: {markingOperationError}
+            </div>
+          )}
+
+          {markingOperationId && (
+            <AsyncOperationProgressCard
+              operationId={markingOperationId}
+              title="Análisis de marcación"
+              onCompleted={() => {
+                setMarkingOperationId(null);
+                markingMutation.mutate(markForm);
+              }}
+              onFailed={(error) => {
+                setMarkingOperationId(null);
+                setMarkingOperationError(
+                  error ?? "Error desconocido del proceso en segundo plano.",
+                );
+              }}
+            />
+          )}
+
+          {markingResult && (
+            <div className="space-y-3 pt-1">
+              <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-[12px] text-success">
+                Resultado almacenado para esta combinación de campos. Se reutilizará hasta que
+                cambies los valores de análisis.
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="border border-border rounded-lg p-2.5">
+                  <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Falsos positivos
+                  </p>
+                  <p className="text-[16px] font-semibold text-danger tabular-nums">
+                    {markingResult.false_positives}
+                  </p>
+                </div>
+                <div className="border border-border rounded-lg p-2.5">
+                  <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Falsos negativos
+                  </p>
+                  <p className="text-[16px] font-semibold text-danger tabular-nums">
+                    {markingResult.false_negatives}
+                  </p>
+                </div>
+                <div className="border border-border rounded-lg p-2.5">
+                  <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Correctamente marcadas
+                  </p>
+                  <p className="text-[16px] font-semibold text-success tabular-nums">
+                    {markingResult.properly_marked}
+                  </p>
+                </div>
+                <div className="border border-border rounded-lg p-2.5">
+                  <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                    Evaluadas / omitidas
+                  </p>
+                  <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                    {markingResult.evaluated_rows} / {markingResult.skipped_rows}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-2">
+                  Perfil de maduración del fraude (días entre 1ª y 2ª marca, n=
+                  {markingResult.maturation.sample_size})
+                </p>
+                {markingResult.maturation.sample_size === 0 ? (
+                  <p className="text-[12px] text-text-secondary">
+                    Ninguna fila tuvo ambas fechas de marca parseables.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="border border-border rounded-lg p-2.5">
+                      <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                        Promedio
+                      </p>
+                      <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                        {markingResult.maturation.avg_days} días
+                      </p>
+                    </div>
+                    <div className="border border-border rounded-lg p-2.5">
+                      <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                        Mínimo
+                      </p>
+                      <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                        {markingResult.maturation.min_days} días
+                      </p>
+                    </div>
+                    <div className="border border-border rounded-lg p-2.5">
+                      <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                        Máximo
+                      </p>
+                      <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                        {markingResult.maturation.max_days} días
+                      </p>
+                    </div>
+                    <div className="border border-border rounded-lg p-2.5">
+                      <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                        P95
+                      </p>
+                      <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                        {markingResult.maturation.p95_days} días
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

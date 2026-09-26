@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE } from "./client";
+import { accessToken, apiFetch, API_BASE } from "./client";
 
 // Client functions wrapping the backend's full datasets API (../backend,
 // base path /api/v0/datasets — see backend's
@@ -15,6 +15,26 @@ export type DatasetRecord = { name: string; row_count: number };
 
 export type FieldDistribution = { value: string; count: number; percentage: number };
 
+export type FraudMaturationProfile = {
+  sample_size: number;
+  avg_days: number | null;
+  min_days: number | null;
+  max_days: number | null;
+  p95_days: number | null;
+};
+
+// Only present when getDatasetSummary is called with all 5 mark-field
+// params below - see backend's analyze_fraud_marking.py.
+export type FraudMarkingAnalysisResponse = {
+  dataset_name: string;
+  evaluated_rows: number;
+  skipped_rows: number;
+  false_positives: number;
+  false_negatives: number;
+  properly_marked: number;
+  maturation: FraudMaturationProfile;
+};
+
 export type DatasetSummaryResponse = {
   dataset_name: string;
   status: DatasetStatus;
@@ -27,9 +47,27 @@ export type DatasetSummaryResponse = {
   origin: DatasetOrigin;
   source_dataset_names: string[];
   extraction_filter: Record<string, string> | null;
+  fraud_marking_analysis: FraudMarkingAnalysisResponse | null;
+};
+
+export type FraudMarkingAnalysisQueuedResponse = {
+  dataset_name: string;
+  status: "PENDING";
+  async_operation_id: string;
 };
 
 export type DatasetRowsResponse = { rows: Record<string, unknown>[]; total: number };
+export type DatasetOperationResponse = {
+  name: string;
+  status: DatasetStatus;
+  async_operation_id: string | null;
+};
+
+export type DeleteDatasetOperationResponse = {
+  name: string;
+  deleted: boolean;
+  async_operation_id: string | null;
+};
 
 export type AlertFieldMappingResponse = {
   dataset_name: string;
@@ -43,31 +81,91 @@ export function getDatasets(): Promise<DatasetRecord[]> {
 
 export async function uploadDataset({
   data,
+  onProgress,
 }: {
   data: FormData;
-}): Promise<{ name: string; status: DatasetStatus }> {
-  // Multipart body: must NOT go through apiFetch, which forces a JSON
-  // Content-Type — the browser needs to set its own multipart boundary.
-  const res = await fetch(`${API_BASE}/api/v0/datasets`, { method: "POST", body: data });
-  if (!res.ok) {
-    throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<{ name: string; status: DatasetStatus }>;
+  onProgress?: (uploadedBytes: number, totalBytes: number) => void;
+}): Promise<DatasetOperationResponse> {
+  // XMLHttpRequest exposes upload.onprogress; fetch deliberately does not
+  // expose multipart upload progress in browsers. Do not set Content-Type -
+  // the browser supplies the required multipart boundary.
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${API_BASE}/api/v0/datasets`);
+    const token = accessToken();
+    if (token) request.setRequestHeader("Authorization", `Bearer ${token}`);
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded, event.total);
+    };
+    request.onerror = () => reject(new Error("No se pudo conectar al subir el dataset"));
+    request.onload = () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve(JSON.parse(request.responseText) as DatasetOperationResponse);
+      } else {
+        reject(new Error(`/api/v0/datasets -> ${request.status}: ${request.responseText}`));
+      }
+    };
+    request.send(data);
+  });
 }
+
+type DatasetSummaryRequest = { name: string };
+type FraudMarkingAnalysisRequest = DatasetSummaryRequest & {
+  first_mark_field: string;
+  second_mark_field: string;
+  first_mark_time_field: string;
+  second_mark_time_field: string;
+  positive_values: string[];
+};
 
 export function getDatasetSummary({
   data,
 }: {
-  data: { name: string };
-}): Promise<DatasetSummaryResponse> {
-  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`);
+  data: FraudMarkingAnalysisRequest;
+}): Promise<DatasetSummaryResponse | FraudMarkingAnalysisQueuedResponse>;
+export function getDatasetSummary({
+  data,
+}: {
+  data: DatasetSummaryRequest;
+}): Promise<DatasetSummaryResponse>;
+export function getDatasetSummary({
+  data,
+}: {
+  data: DatasetSummaryRequest & {
+    // All 5 optional and all-or-nothing (backend 400s on a partial set) -
+    // when provided, the response's fraud_marking_analysis is populated.
+    // positive_values: every mark value that means "flagged as fraud" -
+    // a row moving between two of these (e.g. "risk-suspected" -> "risk")
+    // is not counted as a false positive/negative, just an escalation
+    // within the positive class.
+    first_mark_field?: string;
+    second_mark_field?: string;
+    first_mark_time_field?: string;
+    second_mark_time_field?: string;
+    positive_values?: string[];
+  };
+}): Promise<DatasetSummaryResponse | FraudMarkingAnalysisQueuedResponse> {
+  const params = new URLSearchParams();
+  if (data.first_mark_field) params.set("first_mark_field", data.first_mark_field);
+  if (data.second_mark_field) params.set("second_mark_field", data.second_mark_field);
+  if (data.first_mark_time_field) params.set("first_mark_time_field", data.first_mark_time_field);
+  if (data.second_mark_time_field) {
+    params.set("second_mark_time_field", data.second_mark_time_field);
+  }
+  // Repeated query param, not comma-joined - matches the backend's
+  // list[str] Query param and keeps a comma inside a mark value safe.
+  for (const value of data.positive_values ?? []) {
+    if (value) params.append("positive_values", value);
+  }
+  const qs = params.toString();
+  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary${qs ? `?${qs}` : ""}`);
 }
 
 export function deleteDataset({
   data,
 }: {
   data: { name: string };
-}): Promise<{ name: string; deleted: boolean }> {
+}): Promise<DeleteDatasetOperationResponse> {
   return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}`, { method: "DELETE" });
 }
 
@@ -75,7 +173,7 @@ export function createEmptyDataset({
   data,
 }: {
   data: { name: string; fields: string[] };
-}): Promise<{ name: string; status: DatasetStatus }> {
+}): Promise<DatasetOperationResponse> {
   return apiFetch("/api/v0/datasets/empty", { method: "POST", body: JSON.stringify(data) });
 }
 
@@ -119,7 +217,7 @@ export function analyzeDatasetOnDemand({
   data,
 }: {
   data: { name: string };
-}): Promise<{ name: string; status: DatasetStatus }> {
+}): Promise<DatasetOperationResponse> {
   return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/analyze`, {
     method: "POST",
   });

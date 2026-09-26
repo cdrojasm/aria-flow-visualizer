@@ -6,7 +6,7 @@
 // GitHub Pages).
 export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
-function accessToken(): string | null {
+export function accessToken(): string | null {
   return typeof window === "undefined" ? null : localStorage.getItem("aria.auth.accessToken");
 }
 
