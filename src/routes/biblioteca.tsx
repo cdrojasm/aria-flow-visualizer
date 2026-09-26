@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import {
@@ -140,6 +140,27 @@ const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
   { key: "listas", label: "Listas negras/blancas" },
   { key: "datasets", label: "Datasets" },
 ];
+const KNOWLEDGE_TABS: { key: KnowledgeTab; label: string }[] = [
+  { key: "vector-store", label: "Vector store" },
+  { key: "taxonomias", label: "Taxonomías de fraude" },
+  { key: "modus-operandi", label: "Modus operandi" },
+  { key: "yellow-flags", label: "Yellow flags" },
+  { key: "red-flags", label: "Red flags" },
+  { key: "casos-similares", label: "Casos similares" },
+];
+
+type PersistedBibliotecaTabs = {
+  activeTab: BibliotecaTab;
+  activeKnowledgeTab: KnowledgeTab;
+};
+
+// Remembers the last visited top-level tab and "Base de conocimiento"
+// sub-tab so a refresh reopens the same view instead of resetting to
+// "conocimiento" / "vector-store" - same try/catch-guarded, post-mount-
+// hydrated localStorage convention as configuracion.tsx / ColumnVisibilityMenu.tsx
+// (initial state matches the server-rendered default; the restore effect
+// below only runs client-side after mount, so it never breaks SSR hydration).
+const BIBLIOTECA_TABS_STORAGE_KEY = "aria.biblioteca.activeTab.v1";
 
 function BibliotecaPage() {
   const { user } = useRole();
@@ -150,6 +171,48 @@ function BibliotecaPage() {
     useState<KnowledgeTab>("vector-store");
   const [activeEventCatalog, setActiveEventCatalog] =
     useState<TagCategory>("integration_point");
+  // Guards the persist effect below so it never fires on the initial
+  // (pre-restore) render and clobbers what's in storage before the restore
+  // effect's setState calls above take effect - same flag pattern as
+  // configuracion.tsx's editorStateHydrated.
+  const [tabsHydrated, setTabsHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(BIBLIOTECA_TABS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedBibliotecaTabs>;
+        if (BIBLIOTECA_TABS.some((tab) => tab.key === parsed.activeTab)) {
+          setActiveTab(parsed.activeTab as BibliotecaTab);
+        }
+        if (
+          KNOWLEDGE_TABS.some((tab) => tab.key === parsed.activeKnowledgeTab)
+        ) {
+          setActiveKnowledgeTab(parsed.activeKnowledgeTab as KnowledgeTab);
+        }
+      }
+    } catch {
+      // localStorage no disponible o corrupto - se queda en los valores por defecto.
+    } finally {
+      setTabsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!tabsHydrated) return;
+    try {
+      const toPersist: PersistedBibliotecaTabs = {
+        activeTab,
+        activeKnowledgeTab,
+      };
+      localStorage.setItem(
+        BIBLIOTECA_TABS_STORAGE_KEY,
+        JSON.stringify(toPersist),
+      );
+    } catch {
+      // localStorage no disponible - la preferencia solo dura la sesión actual.
+    }
+  }, [tabsHydrated, activeTab, activeKnowledgeTab]);
 
   const taxonomiesQuery = useQuery({
     queryKey: ["libraryTaxonomies"],
@@ -896,16 +959,7 @@ function BibliotecaPage() {
           <>
             <div className="sticky top-0 z-30 -mx-1 bg-background/95 py-2 backdrop-blur">
               <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card p-1.5 w-fit">
-                {(
-                  [
-                    ["vector-store", "Vector store"],
-                    ["taxonomias", "Taxonomías de fraude"],
-                    ["modus-operandi", "Modus operandi"],
-                    ["yellow-flags", "Yellow flags"],
-                    ["red-flags", "Red flags"],
-                    ["casos-similares", "Casos similares"],
-                  ] as const
-                ).map(([key, label]) => (
+                {KNOWLEDGE_TABS.map(({ key, label }) => (
                   <button
                     key={key}
                     type="button"
