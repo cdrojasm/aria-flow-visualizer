@@ -27,6 +27,21 @@ import {
   defaultSegments,
 } from "@/data/configs";
 
+function researchToApi(research: SegmentAgentConfig["detector"]["delegatedResearch"]) {
+  const base = (v: { enabled: boolean; onlyWhenInconclusive: boolean; maxDelegations: number; maxIterations: number; timeoutSeconds: number; maxResultItems: number; includeTrace: boolean }) => ({ enabled: v.enabled, only_when_inconclusive: v.onlyWhenInconclusive, max_delegations: v.maxDelegations, max_iterations: v.maxIterations, timeout_seconds: v.timeoutSeconds, max_result_items: v.maxResultItems, include_trace: v.includeTrace });
+  return {
+    priority: research.priority,
+    vector_store: { ...base(research.vectorStore), vector_store_instance_id: research.vectorStore.vectorStoreInstanceId, similarity_threshold: research.vectorStore.similarityThreshold, max_documents_per_query: research.vectorStore.maxDocumentsPerQuery, allowed_asset_types: research.vectorStore.allowedAssetTypes },
+    history_pandas: { ...base(research.historyPandas), max_history_rows: research.historyPandas.maxHistoryRows, max_analysis_operations: research.historyPandas.maxAnalysisOperations, allowed_columns: research.historyPandas.allowedColumns, allowed_operations: research.historyPandas.allowedOperations },
+  };
+}
+
+function researchFromApi(research: any, fallback: SegmentAgentConfig["detector"]["delegatedResearch"]) {
+  if (!research) return fallback;
+  const base = (v: any, defaultValue: any) => ({ enabled: v?.enabled ?? defaultValue.enabled, onlyWhenInconclusive: v?.only_when_inconclusive ?? defaultValue.onlyWhenInconclusive, maxDelegations: v?.max_delegations ?? defaultValue.maxDelegations, maxIterations: v?.max_iterations ?? defaultValue.maxIterations, timeoutSeconds: v?.timeout_seconds ?? defaultValue.timeoutSeconds, maxResultItems: v?.max_result_items ?? defaultValue.maxResultItems, includeTrace: v?.include_trace ?? defaultValue.includeTrace });
+  return { priority: research.priority ?? fallback.priority, vectorStore: { ...base(research.vector_store, fallback.vectorStore), vectorStoreInstanceId: research.vector_store?.vector_store_instance_id ?? null, similarityThreshold: research.vector_store?.similarity_threshold ?? fallback.vectorStore.similarityThreshold, maxDocumentsPerQuery: research.vector_store?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery, allowedAssetTypes: research.vector_store?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes }, historyPandas: { ...base(research.history_pandas, fallback.historyPandas), maxHistoryRows: research.history_pandas?.max_history_rows ?? fallback.historyPandas.maxHistoryRows, maxAnalysisOperations: research.history_pandas?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations, allowedColumns: research.history_pandas?.allowed_columns ?? fallback.historyPandas.allowedColumns, allowedOperations: research.history_pandas?.allowed_operations ?? fallback.historyPandas.allowedOperations } };
+}
+
 // Pure, bijective(-ish) conversion between the frontend's flat camelCase
 // ConfigSettings (src/data/configs.ts) and the backend's nested snake_case
 // CreateConfigurationRequest/ConfigurationDetailResponse (schemas.py). No
@@ -127,6 +142,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     watchlist_ids: a.detector.watchlistIds,
     watchlist_compare_field: a.detector.watchlistCompareField,
     calculator_enabled: a.detector.calculatorEnabled,
+    delegated_research: researchToApi(a.detector.delegatedResearch),
     enable_pandas_history_tool: a.detector.enablePandasHistoryTool,
     use_xgboost_model: a.detector.useXgboostModel,
     xgboost_model_id: a.detector.xgboostModelId,
@@ -158,6 +174,7 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     watchlist_ids: a.classification.watchlistIds,
     watchlist_compare_field: a.classification.watchlistCompareField,
     calculator_enabled: a.classification.calculatorEnabled,
+    delegated_research: researchToApi(a.classification.delegatedResearch),
     prompt: a.classification.prompt,
     prompt_vars: a.classification.promptVars,
     max_thought_iterations: a.classification.maxThoughtIterations,
@@ -290,6 +307,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
           watchlistIds: a.detector.watchlist_ids ?? [],
           watchlistCompareField: a.detector.watchlist_compare_field ?? null,
           calculatorEnabled: a.detector.calculator_enabled,
+          delegatedResearch: researchFromApi(a.detector.delegated_research, defaults.detector.delegatedResearch),
           enablePandasHistoryTool: a.detector.enable_pandas_history_tool,
           useXgboostModel: a.detector.use_xgboost_model,
           xgboostModelId: a.detector.xgboost_model_id,
@@ -329,6 +347,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
       watchlistIds: a.classification.watchlist_ids ?? [],
       watchlistCompareField: a.classification.watchlist_compare_field ?? null,
       calculatorEnabled: a.classification.calculator_enabled,
+      delegatedResearch: researchFromApi(a.classification.delegated_research, defaults.classification.delegatedResearch),
       prompt: a.classification.prompt,
       promptVars: a.classification.prompt_vars,
       maxThoughtIterations: a.classification.max_thought_iterations ?? 5,

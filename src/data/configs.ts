@@ -238,7 +238,20 @@ export const defaultToolPickerFields = (): ToolPickerFields => ({
   calculatorEnabled: false,
 });
 
+export type ResearchAgentConfig = { enabled: boolean; onlyWhenInconclusive: boolean; maxDelegations: number; maxIterations: number; timeoutSeconds: number; maxResultItems: number; includeTrace: boolean };
+export type DelegatedResearchSettings = {
+  priority: "vector_first" | "pandas_first";
+  vectorStore: ResearchAgentConfig & { vectorStoreInstanceId: string | null; similarityThreshold: number; maxDocumentsPerQuery: number; allowedAssetTypes: string[] };
+  historyPandas: ResearchAgentConfig & { maxHistoryRows: number; maxAnalysisOperations: number; allowedColumns: string[]; allowedOperations: string[] };
+};
+export const defaultDelegatedResearchSettings = (): DelegatedResearchSettings => ({
+  priority: "vector_first",
+  vectorStore: { enabled: false, onlyWhenInconclusive: true, maxDelegations: 1, maxIterations: 3, timeoutSeconds: 8, maxResultItems: 10, includeTrace: true, vectorStoreInstanceId: null, similarityThreshold: .7, maxDocumentsPerQuery: 8, allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"] },
+  historyPandas: { enabled: false, onlyWhenInconclusive: true, maxDelegations: 1, maxIterations: 3, timeoutSeconds: 8, maxResultItems: 10, includeTrace: true, maxHistoryRows: 5000, maxAnalysisOperations: 4, allowedColumns: [], allowedOperations: ["filter", "group_by", "aggregate", "distribution", "trend", "outlier", "comparison"] },
+});
+
 export type ClassificationConfig = ToolPickerFields & {
+  delegatedResearch: DelegatedResearchSettings;
   prompt: string;
   promptVars: string[];
   // "iteraciones de pensamiento" - max ReAct-style tool-call loops before
@@ -258,6 +271,7 @@ export type AdversarialConfig = ToolPickerFields & {
 
 export const defaultClassificationConfig = (): ClassificationConfig => ({
   ...defaultToolPickerFields(),
+  delegatedResearch: defaultDelegatedResearchSettings(),
   prompt: "",
   promptVars: [],
   maxThoughtIterations: 5,
@@ -286,6 +300,7 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
    parámetros que el de clasificación") plus maxThoughtIterations. */
 
 export type DetectorConfig = ToolPickerFields & {
+  delegatedResearch: DelegatedResearchSettings;
   enablePandasHistoryTool: boolean;
   useXgboostModel: boolean;
   xgboostModelId: string | null;
@@ -308,6 +323,7 @@ export type DetectorAdversarialConfig = AdversarialConfig & {
 
 export const defaultDetectorConfig = (): DetectorConfig => ({
   ...defaultToolPickerFields(),
+  delegatedResearch: defaultDelegatedResearchSettings(),
   enablePandasHistoryTool: false,
   useXgboostModel: false,
   xgboostModelId: null,

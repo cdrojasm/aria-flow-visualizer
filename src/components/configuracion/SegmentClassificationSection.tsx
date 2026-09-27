@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { type ClassificationConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
+import { Switch } from "@/components/ui/switch";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
@@ -39,6 +40,12 @@ export function SegmentClassificationSection({
         </div>
         <div className="p-6">
           <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
+          <div className="pt-4 mt-4 border-t border-border space-y-3">
+            <p className="text-[13px] font-medium text-text-primary">Investigación delegada</p>
+            <p className="text-[12px] text-text-secondary">Se activa solo cuando la clasificación permanece inconclusa.</p>
+            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente Vector Store</span><Switch checked={value.delegatedResearch.vectorStore.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, vectorStore: { ...value.delegatedResearch.vectorStore, enabled, vectorStoreInstanceId: value.delegatedResearch.vectorStore.vectorStoreInstanceId ?? value.vectorStoreInstanceId } } })} disabled={disabled} /></div>
+            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente historial Pandas</span><Switch checked={value.delegatedResearch.historyPandas.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, historyPandas: { ...value.delegatedResearch.historyPandas, enabled } } })} disabled={disabled} /></div>
+          </div>
         </div>
       </section>
 

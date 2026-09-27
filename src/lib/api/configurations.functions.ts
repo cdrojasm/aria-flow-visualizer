@@ -130,7 +130,14 @@ type ApiToolPickerFields = {
   watchlist_compare_field: string | null;
   calculator_enabled: boolean;
 };
+export type ApiResearchAgentConfig = { enabled: boolean; only_when_inconclusive: boolean; max_delegations: number; max_iterations: number; timeout_seconds: number; max_result_items: number; include_trace: boolean };
+export type ApiDelegatedResearchSettings = {
+  priority: "vector_first" | "pandas_first";
+  vector_store: ApiResearchAgentConfig & { vector_store_instance_id: string | null; similarity_threshold: number; max_documents_per_query: number; allowed_asset_types: string[] };
+  history_pandas: ApiResearchAgentConfig & { max_history_rows: number; max_analysis_operations: number; allowed_columns: string[]; allowed_operations: string[] };
+};
 export type ApiClassificationConfig = ApiToolPickerFields & {
+  delegated_research: ApiDelegatedResearchSettings;
   prompt: string;
   prompt_vars: string[];
   max_thought_iterations: number;
@@ -143,6 +150,7 @@ export type ApiAdversarialConfig = ApiToolPickerFields & {
   feed_feedback_to_classification: boolean;
 };
 export type ApiDetectorConfig = ApiToolPickerFields & {
+  delegated_research: ApiDelegatedResearchSettings;
   enable_pandas_history_tool: boolean;
   use_xgboost_model: boolean;
   xgboost_model_id: string | null;

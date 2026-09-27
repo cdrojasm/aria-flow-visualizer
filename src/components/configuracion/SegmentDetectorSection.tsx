@@ -71,6 +71,13 @@ export function SegmentDetectorSection({
           </div>
 
           <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-[13px] font-medium text-text-primary">Investigación delegada</p>
+            <p className="text-[12px] text-text-secondary">Solo se ejecuta si el detector sigue inconcluso; la evidencia queda auditada en la ejecución.</p>
+            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente Vector Store</span><Switch checked={value.delegatedResearch.vectorStore.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, vectorStore: { ...value.delegatedResearch.vectorStore, enabled, vectorStoreInstanceId: value.delegatedResearch.vectorStore.vectorStoreInstanceId ?? value.vectorStoreInstanceId } } })} disabled={disabled} /></div>
+            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente historial Pandas</span><Switch checked={value.delegatedResearch.historyPandas.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, historyPandas: { ...value.delegatedResearch.historyPandas, enabled } } })} disabled={disabled} /></div>
+          </div>
+
+          <div className="pt-2 border-t border-border space-y-3">
             <div className="flex items-center justify-between">
               <div className="pr-4">
                 <p className="text-[13px] font-medium text-text-primary">Modelo XGBoost</p>
