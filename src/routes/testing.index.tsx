@@ -24,6 +24,7 @@ import {
   type TestRunResponse,
 } from "@/lib/api/testing.functions";
 import { listConfigurations } from "@/lib/api/configurations.functions";
+import { listScenarios, type ScenarioStatus } from "@/lib/api/eventSimulation.functions";
 
 // Deep-link params for the "Probar configuración" button in Configuración
 // (src/routes/configuracion.tsx): configurationId+version identify the
@@ -62,6 +63,17 @@ const STATUS_STYLE: Record<TestRunResponse["status"], string> = {
   PENDING: "bg-warning/10 text-warning",
   RUNNING: "bg-primary/10 text-primary",
   SUCCEEDED: "bg-success/10 text-success",
+  FAILED: "bg-danger/10 text-danger",
+};
+
+// Scenarios (Generador strategy) aren't TestRunRecords - separate shape,
+// separate microservice - so they get their own small section instead of
+// being mixed into "Últimas pruebas"'s table/columns above.
+const SCENARIO_STATUS_STYLE: Record<ScenarioStatus, string> = {
+  DRAFT: "bg-warning/10 text-warning",
+  RUNNING: "bg-primary/10 text-primary",
+  PAUSED: "bg-warning/10 text-warning",
+  COMPLETED: "bg-success/10 text-success",
   FAILED: "bg-danger/10 text-danger",
 };
 
@@ -108,6 +120,10 @@ function TestingPage() {
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
   });
+  const scenariosQuery = useQuery({
+    queryKey: ["scenarios"],
+    queryFn: () => listScenarios(),
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (testRunIds: string[]) => deleteTestRuns({ data: { test_run_ids: testRunIds } }),
@@ -129,8 +145,7 @@ function TestingPage() {
 
   function toggleSelectAllFiltered() {
     setSelectedRunIds((prev) => {
-      const allSelected =
-        filteredRuns.length > 0 && filteredRuns.every((r) => prev.has(r.id));
+      const allSelected = filteredRuns.length > 0 && filteredRuns.every((r) => prev.has(r.id));
       return allSelected ? new Set() : new Set(filteredRuns.map((r) => r.id));
     });
   }
@@ -167,6 +182,7 @@ function TestingPage() {
 
   const configurations = configurationsQuery.data ?? [];
   const runs = testRunsQuery.data ?? [];
+  const scenarios = scenariosQuery.data ?? [];
   const runDatasetNames = Array.from(new Set(runs.map((r) => r.dataset_name))).sort();
   const filteredRuns = runs.filter(
     (run) =>
@@ -417,6 +433,48 @@ function TestingPage() {
             itemLabel="prueba"
           />
         </section>
+
+        {/* Generador scenarios - separate shape/microservice from
+            TestRunRecord above, so a small section of its own instead of
+            being squeezed into "Últimas pruebas"'s columns. */}
+        {scenarios.length > 0 && (
+          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="px-5 py-4 border-b border-border">
+              <h2 className="text-[14px] font-semibold text-text-primary">
+                Escenarios de simulación
+              </h2>
+              <p className="text-[12px] text-text-secondary mt-0.5">
+                Generadores de eventos sintéticos lanzados desde "Nueva prueba" → Generador.
+              </p>
+            </div>
+            <div className="divide-y divide-border">
+              {scenarios.map((s) => (
+                <Link
+                  key={s.id}
+                  to="/testing/scenarios/$scenarioId"
+                  params={{ scenarioId: s.id }}
+                  className="flex items-center gap-4 px-5 py-3 hover:bg-surface"
+                >
+                  <span className="text-[13px] font-medium text-text-primary flex-1 truncate">
+                    {s.name}
+                  </span>
+                  <span className="text-[11px] text-text-secondary w-32 shrink-0">
+                    {s.output_mode === "DATASET" ? "Dataset" : "Pipeline en vivo"}
+                  </span>
+                  <span className="text-[11px] text-text-secondary w-28 text-right shrink-0">
+                    {s.events_emitted} eventos
+                  </span>
+                  <span
+                    className={`text-[11px] font-semibold px-2 py-0.5 rounded-md shrink-0 ${SCENARIO_STATUS_STYLE[s.status]}`}
+                  >
+                    {s.status}
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 text-text-secondary shrink-0" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         <ConfirmDeleteDialog
           open={showDeleteConfirm}

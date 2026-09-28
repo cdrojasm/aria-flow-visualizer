@@ -22,6 +22,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestingIndexRouteImport } from './routes/testing.index'
 import { Route as TestingRunIdRouteImport } from './routes/testing.$runId'
 import { Route as AlertaIdRouteImport } from './routes/alerta.$id'
+import { Route as TestingScenariosScenarioIdRouteImport } from './routes/testing.scenarios.$scenarioId'
 
 const TestingRoute = TestingRouteImport.update({
   id: '/testing',
@@ -88,6 +89,12 @@ const AlertaIdRoute = AlertaIdRouteImport.update({
   path: '/alerta/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestingScenariosScenarioIdRoute =
+  TestingScenariosScenarioIdRouteImport.update({
+    id: '/scenarios/$scenarioId',
+    path: '/scenarios/$scenarioId',
+    getParentRoute: () => TestingRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing/': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -117,6 +125,7 @@ export interface FileRoutesByTo {
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -133,6 +142,7 @@ export interface FileRoutesById {
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing/': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing/'
+    | '/testing/scenarios/$scenarioId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing'
+    | '/testing/scenarios/$scenarioId'
   id:
     | '__root__'
     | '/'
@@ -179,6 +191,7 @@ export interface FileRouteTypes {
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing/'
+    | '/testing/scenarios/$scenarioId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -288,17 +301,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlertaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/testing/scenarios/$scenarioId': {
+      id: '/testing/scenarios/$scenarioId'
+      path: '/scenarios/$scenarioId'
+      fullPath: '/testing/scenarios/$scenarioId'
+      preLoaderRoute: typeof TestingScenariosScenarioIdRouteImport
+      parentRoute: typeof TestingRoute
+    }
   }
 }
 
 interface TestingRouteChildren {
   TestingRunIdRoute: typeof TestingRunIdRoute
   TestingIndexRoute: typeof TestingIndexRoute
+  TestingScenariosScenarioIdRoute: typeof TestingScenariosScenarioIdRoute
 }
 
 const TestingRouteChildren: TestingRouteChildren = {
   TestingRunIdRoute: TestingRunIdRoute,
   TestingIndexRoute: TestingIndexRoute,
+  TestingScenariosScenarioIdRoute: TestingScenariosScenarioIdRoute,
 }
 
 const TestingRouteWithChildren =
