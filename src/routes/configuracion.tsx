@@ -320,9 +320,9 @@ function ConfiguracionPage() {
     enabled: isDeployApprover,
   });
   const hasSucceededTestRun = (testRunsQuery.data ?? []).some((run) => run.status === "SUCCEEDED");
-  // Same resolution-method catalog AnalystPlaybook uses (see
-  // SegmentAnalystSection.tsx) - shortage behavior picks from it too now,
-  // via the block_soft/block_hard tags reserved for this use.
+  // Resolution-method catalog (see ResolutionMethodCatalogManager) -
+  // shortage behavior picks from it via the block_soft/block_hard tags
+  // reserved for this use.
   const resolutionMethodsQuery = useQuery({
     queryKey: ["resolutionMethods"],
     queryFn: () => listResolutionMethods({ data: { activeOnly: true } }),
@@ -3230,10 +3230,9 @@ function AnalystCapacityEditor({
 }
 
 /* ─── Shortage behavior editor ──────────────────────── */
-/* Picks from the same resolution-method catalog AnalystPlaybook uses (see
-   SegmentAnalystSection.tsx + ResolutionMethodCatalogManager) - block_soft/
-   block_hard are the two tags reserved for this editor, on top of the 3
-   tags a playbook can use. excludeTag guards against a self-referential
+/* Picks from the resolution-method catalog (see
+   ResolutionMethodCatalogManager) - block_soft/block_hard are the two tags
+   reserved for this editor, on top of the 3 routing tags. excludeTag guards against a self-referential
    loop (e.g. voicebot shortage routed right back to the voicebot). */
 
 function ShortageBehaviorEditor({

@@ -17,8 +17,8 @@ export type ApiAnalystCapacity = {
   default_profile_id: string;
   day_overrides: Record<string, string>;
 };
-// Shared with ApiAnalystPlaybook.resolution_tag below - one catalog, two
-// consumers (see resolution_method_catalog_port.py on the backend).
+// Resolution-method catalog tag (see resolution_method_catalog_port.py on
+// the backend).
 export type ApiResolutionTag =
   "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
 export type ApiShortageBehavior = {
@@ -166,26 +166,13 @@ export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
   max_thought_iterations: number;
 };
 
-export type ApiAnalystPlaybook = {
-  id: string;
-  name: string;
-  strategy: string;
-  resolution_tag: ApiResolutionTag;
-  resolution_method_id?: string | null;
-  // ModusOperandiDocument.library_id this playbook is written for -
-  // resolved at analyst-review time by matching the alert against this
-  // stage's vector_store_instance_id (see ClassificationConfig above).
-  // Advisory only: extra context for the analyst LLM, doesn't override its
-  // decision.
-  modus_operandi_id?: string | null;
-};
 export type ApiVoicebotCategoryPrompt = { id: string; taxonomy_id: string; prompt: string };
 export type ApiVoicebotConfig = {
   base_prompt: string;
   base_prompt_vars: string[];
   category_prompts: ApiVoicebotCategoryPrompt[];
 };
-export type ApiAnalystConfig = { playbooks: ApiAnalystPlaybook[] };
+export type ApiAnalystConfig = { prompt: string; prompt_vars: string[] };
 
 export type ApiDocumentationConfig = {
   strategy: "template" | "agent";

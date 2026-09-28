@@ -91,7 +91,7 @@ const outputFor = (stage: Stage, value: unknown) => {
     case "adversarial":
       return { validation: "retroalimentacion_adversarial", cycles: config.maxCycles ?? 0 };
     case "analyst":
-      return { actions: asRecords(config.playbooks).map((playbook) => playbook.name) };
+      return { resolution: "resolucion_del_analista", variables: asList(config.promptVars) };
     case "executor":
       return {
         aricComment: "comentario_de_marcacion",

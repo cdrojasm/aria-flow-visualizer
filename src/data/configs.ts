@@ -342,9 +342,7 @@ export const defaultDetectorAdversarialConfig = (): DetectorAdversarialConfig =>
 });
 
 /* ─── Analista + Documentación (Phase 5) ────────────────
-   Mirrors backend's AnalystConfig/DocumentationConfig. AnalystPlaybook is
-   distinct from the pre-existing runtime FraudPlaybookRecord concept - see
-   backend's configuration_port.py for the disambiguation note. */
+   Mirrors backend's AnalystConfig/DocumentationConfig. */
 
 export type ResolutionTag =
   "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
@@ -355,27 +353,6 @@ export const RESOLUTION_TAG_LABELS: Record<ResolutionTag, string> = {
   handle_by_aria: "Resolver con ARIA",
   block_soft: "Bloqueo soft",
   block_hard: "Bloqueo hard",
-};
-
-export type AnalystPlaybook = {
-  id: string;
-  name: string;
-  strategy: string;
-  resolutionTag: ResolutionTag;
-  // Which resolution_method_catalog entry the admin picked - resolutionTag
-  // stays in sync with the picked entry's fixed tag, see
-  // ResolutionMethodCatalogManager.
-  resolutionMethodId?: string;
-  // ModusOperandiLibraryEntry.id this playbook is written for - resolved at
-  // analyst-review time by matching the alert against this segment's
-  // Clasificación vector_store_instance_id (backend's
-  // ResolveAnalystPlaybookUseCase). Advisory only: extra context for the
-  // analyst LLM alongside the classification-keyed playbook catalog
-  // (Biblioteca), doesn't override its decision. See
-  // SegmentAnalystSection's modus operandi picker - only lists entries
-  // that are actually members of the segment's selected vector store, since
-  // a playbook pointing at one that isn't can never resolve.
-  modusOperandiId?: string;
 };
 
 export type VoicebotCategoryPrompt = {
@@ -390,9 +367,21 @@ export type VoicebotConfig = {
   categoryPrompts: VoicebotCategoryPrompt[];
 };
 
+// Mirrors backend's AnalystConfig: a single prompt authored for the analyst
+// stage. The playbook is library knowledge (Biblioteca), resolved at runtime
+// and exposed to this prompt as {playbook} - no per-segment playbook list.
 export type AnalystConfig = {
-  playbooks: AnalystPlaybook[];
+  prompt: string;
+  promptVars: string[];
 };
+
+// Runtime-provided placeholders the backend fills for the analyst prompt.
+export const ANALYST_PROMPT_VARIABLES = [
+  "modus_operandi",
+  "playbook",
+  "voicebot_resources",
+  "analyst_resources",
+];
 
 export type DocumentationStrategy = "template" | "agent";
 
@@ -411,7 +400,8 @@ export const defaultVoicebotConfig = (): VoicebotConfig => ({
 });
 
 export const defaultAnalystConfig = (): AnalystConfig => ({
-  playbooks: [],
+  prompt: "",
+  promptVars: [],
 });
 
 export const defaultDocumentationConfig = (): DocumentationConfig => ({
@@ -564,9 +554,9 @@ export type SamplingCriterion = { id: string; name: string; values: Distribution
 export type SamplingIntervalUnit = "minutes" | "hours" | "days";
 export type TestCleanupPolicy = "manual" | "oldest" | "failed-first";
 export type ListMembershipMode = "belongs" | "not_belongs";
-// Same catalog as AnalystPlaybook.resolutionMethodId (see
-// ResolutionMethodCatalogManager) - resolutionTag stays denormalized for the
-// same reason as AnalystPlaybook's.
+// Picks from the resolution-method catalog (see
+// ResolutionMethodCatalogManager) - resolutionTag stays denormalized
+// alongside the picked entry's id.
 export type ShortageBehavior = { resolutionTag: ResolutionTag; resolutionMethodId?: string | null };
 export type AnalystCapacity = {
   profiles: DayProfile[];
@@ -953,24 +943,7 @@ export const defaultSettings = (): ConfigSettings => ({
           promptVars: ["Red flag detectada"],
           maxCycles: 2,
         },
-        analyst: {
-          playbooks: [
-            {
-              id: "pb-1",
-              name: "Fraude confirmado con evidencia clara",
-              strategy:
-                "Escalar directamente al analista con el resumen del caso y las red flags detectadas.",
-              resolutionTag: "scale_to_analyst",
-            },
-            {
-              id: "pb-2",
-              name: "Duda razonable sobre la transacción",
-              strategy:
-                "Enviar al voicebot para confirmar la operación con el cliente antes de escalar.",
-              resolutionTag: "send_to_voicebot",
-            },
-          ],
-        },
+        analyst: defaultAnalystConfig(),
         executor: {
           aricMarking: { prompt: "", promptVars: [] },
           voicebotCall: {

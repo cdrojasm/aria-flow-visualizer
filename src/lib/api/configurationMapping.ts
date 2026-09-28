@@ -193,14 +193,8 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     feed_feedback_to_classification: a.adversarial.feedFeedbackToClassification,
   };
   const analyst: ApiAnalystConfig = {
-    playbooks: a.analyst.playbooks.map((p) => ({
-      id: p.id,
-      name: p.name,
-      strategy: p.strategy,
-      resolution_tag: p.resolutionTag,
-      resolution_method_id: p.resolutionMethodId,
-      modus_operandi_id: p.modusOperandiId,
-    })),
+    prompt: a.analyst.prompt,
+    prompt_vars: a.analyst.promptVars,
   };
   const voicebotCall: ApiVoicebotConfig = {
     base_prompt: a.executor.voicebotCall.basePrompt,
@@ -366,14 +360,8 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
       feedFeedbackToClassification: a.adversarial.feed_feedback_to_classification,
     },
     analyst: {
-      playbooks: a.analyst.playbooks.map((p) => ({
-        id: p.id,
-        name: p.name,
-        strategy: p.strategy,
-        resolutionTag: p.resolution_tag,
-        resolutionMethodId: p.resolution_method_id ?? undefined,
-        modusOperandiId: p.modus_operandi_id ?? undefined,
-      })),
+      prompt: a.analyst?.prompt ?? defaults.analyst.prompt,
+      promptVars: a.analyst?.prompt_vars ?? defaults.analyst.promptVars,
     },
     executor: a.executor
       ? {

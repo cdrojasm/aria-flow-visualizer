@@ -71,9 +71,8 @@ const SUBTAB_META: {
   {
     key: "analyst",
     label: "Analista",
-    description: "Configura los playbooks disponibles para la revisión humana.",
-    warningNote:
-      "Un playbook con modus operandi asignado se usa como contexto adicional para el analista (no reemplaza su decisión) - un playbook sin modus operandi asignado se guarda pero el motor de ejecución todavía no lo usa; sigue resolviendo el playbook por defecto desde el catálogo global (Biblioteca).",
+    description:
+      "Define el prompt con el que el agente resuelve la alerta usando el playbook de Biblioteca.",
   },
   {
     key: "executor",
@@ -240,12 +239,9 @@ export function SegmentAgentSection({
       )}
       {subtab === "analyst" && (
         <SegmentAnalystSection
-          value={value.analyst}
+          value={value.analyst ?? defaults.analyst}
           onChange={(analyst) => onChange({ analyst })}
-          // Modus operandi resolution reuses whichever vector store
-          // Clasificación already searches - same reuse pattern as
-          // Adversarial's tools (see backend's ResolveAnalystPlaybookUseCase).
-          vectorStoreInstanceId={value.classification.vectorStoreInstanceId}
+          extraVariables={enrichmentVariables}
           disabled={disabled}
         />
       )}
