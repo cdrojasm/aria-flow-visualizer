@@ -199,9 +199,9 @@ export function DatasetTestForm({
         </div>
 
         <div>
-          <div className="flex items-center justify-between gap-2 mb-1">
-            <label className="text-[11px] text-text-secondary">Dataset</label>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+            <label className="text-[11px] text-text-secondary shrink-0">Dataset</label>
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
               <button
                 type="button"
                 onClick={() => downloadSampleDatasetCsv()}
@@ -231,11 +231,11 @@ export function DatasetTestForm({
             <p className="text-[12px] text-danger py-2">No se pudieron cargar los datasets.</p>
           )}
           {datasetsQuery.isSuccess && (
-            <div className="flex items-center gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 min-w-0">
               <select
                 value={selectedDataset ?? ""}
                 onChange={(e) => setSelectedDataset(e.target.value || null)}
-                className="flex-1 rounded-md border border-border px-3 py-2 text-[13px] bg-background"
+                className="min-w-0 w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
               >
                 <option value="">Selecciona un dataset…</option>
                 {datasets.map((ds) => (
@@ -262,7 +262,7 @@ export function DatasetTestForm({
                 onClick={() => setShowDatasetDetail(true)}
                 disabled={!selectedDataset}
                 title="Ver detalle del dataset"
-                className="inline-flex items-center gap-1 text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                className="inline-flex items-center gap-1 whitespace-nowrap text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-2 hover:bg-primary/10 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
               >
                 <Eye className="h-3.5 w-3.5" /> Ver detalle
               </button>
