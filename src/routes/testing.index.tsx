@@ -212,14 +212,12 @@ function TestingPage() {
             <Plus className="h-3.5 w-3.5" /> Nueva prueba
           </button>
         </header>
-
         <NewTestRunModal
           open={showNewRunModal}
           onClose={() => setShowNewRunModal(false)}
           initialConfigurationId={deepLinkConfigurationId ?? null}
           initialConfigVersion={deepLinkVersion ?? null}
         />
-
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">

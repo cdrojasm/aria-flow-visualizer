@@ -35,8 +35,11 @@ export function DashboardLayout({
 
   useEffect(() => {
     if (!role) return;
+    // Detail routes that aren't nav items belong to the section they are
+    // opened from (/alerta/$id is an alert of the /cola queue).
+    const section = pathname.startsWith("/alerta/") ? "/cola" : pathname;
     const allowed = ROLE_NAV[role].some(
-      (path) => pathname === path || pathname.startsWith(`${path}/`),
+      (path) => section === path || section.startsWith(`${path}/`),
     );
     if (!allowed) navigate({ to: ROLE_NAV[role][0] as never, replace: true });
   }, [navigate, pathname, role]);

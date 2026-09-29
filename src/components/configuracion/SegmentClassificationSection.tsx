@@ -2,8 +2,8 @@ import { useRef } from "react";
 
 import { type ClassificationConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
-import { Switch } from "@/components/ui/switch";
+import { AgentToolsSection } from "./shared/AgentToolsSection";
+import { Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
@@ -31,23 +31,13 @@ export function SegmentClassificationSection({
 
   return (
     <div className="space-y-6">
-      <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-[14px] font-semibold text-text-primary">Herramientas del agente</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Qué puede consultar el agente de clasificación al evaluar una alerta.
-          </p>
-        </div>
-        <div className="p-6">
-          <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
-          <div className="pt-4 mt-4 border-t border-border space-y-3">
-            <p className="text-[13px] font-medium text-text-primary">Investigación delegada</p>
-            <p className="text-[12px] text-text-secondary">Se activa solo cuando la clasificación permanece inconclusa.</p>
-            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente Vector Store</span><Switch checked={value.delegatedResearch.vectorStore.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, vectorStore: { ...value.delegatedResearch.vectorStore, enabled, vectorStoreInstanceId: value.delegatedResearch.vectorStore.vectorStoreInstanceId ?? value.vectorStoreInstanceId } } })} disabled={disabled} /></div>
-            <div className="flex items-center justify-between"><span className="text-[13px]">Subagente historial Pandas</span><Switch checked={value.delegatedResearch.historyPandas.enabled} onCheckedChange={(enabled) => onChange({ ...value, delegatedResearch: { ...value.delegatedResearch, historyPandas: { ...value.delegatedResearch.historyPandas, enabled } } })} disabled={disabled} /></div>
-          </div>
-        </div>
-      </section>
+      <AgentToolsSection
+        value={value}
+        onChange={onChange}
+        pool={pool}
+        disabled={disabled}
+        description="Qué puede consultar el agente de clasificación al evaluar una alerta."
+      />
 
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
         <div className="px-6 py-4 border-b border-border">
@@ -98,11 +88,30 @@ export function SegmentClassificationSection({
           </Field>
 
           <div className="pt-2 border-t border-border mt-5">
-            <Field label="Etiquetas de salida" hint="Valores válidos que debe devolver el prompt, separados por coma.">
-              <input value={value.outputLabels.join(", ")} disabled={disabled}
-                onChange={(e) => onChange({ ...value, outputLabels: e.target.value.split(",").map((label) => label.trim()).filter(Boolean) })}
-                placeholder="risk, risk-suspected, no-risk" className="w-full h-9 rounded-md border border-border px-3 text-[13px]" />
-              {value.outputLabels.length === 0 && <p className="mt-2 text-[12px] text-danger">Debes definir etiquetas de salida para validar y reintentar la clasificación.</p>}
+            <Field
+              label="Etiquetas de salida"
+              hint="Valores válidos que debe devolver el prompt, separados por coma."
+            >
+              <input
+                value={value.outputLabels.join(", ")}
+                disabled={disabled}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    outputLabels: e.target.value
+                      .split(",")
+                      .map((label) => label.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="risk, risk-suspected, no-risk"
+                className="w-full h-9 rounded-md border border-border px-3 text-[13px]"
+              />
+              {value.outputLabels.length === 0 && (
+                <p className="mt-2 text-[12px] text-danger">
+                  Debes definir etiquetas de salida para validar y reintentar la clasificación.
+                </p>
+              )}
             </Field>
           </div>
           <div className="pt-2 border-t border-border mt-5">

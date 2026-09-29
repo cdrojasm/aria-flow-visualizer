@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "test:web:unit": "vitest run",
     "test:web:component": "vitest run src/test/biblioteca.vector-store.test.tsx",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:simulation": "playwright test e2e/event-simulation.spec.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

@@ -1,11 +1,10 @@
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useRef, KeyboardEvent, ChangeEvent } from "react";
+import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import {
   Plus,
   Pencil,
-  Trash2,
   ChevronDown,
   ChevronUp,
   Save,
@@ -13,20 +12,16 @@ import {
   RotateCcw,
   Loader2,
   AlertTriangle,
-  Power,
   Clock,
   Radio,
   Eye,
   ExternalLink,
-  FileSpreadsheet,
   Rocket,
   Send,
   ClipboardList,
   CheckCircle2,
   Zap,
   CalendarClock,
-  Download,
-  DollarSign,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -44,22 +39,15 @@ import { ConfigurationVersionGuide } from "@/components/configuracion/Configurat
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
 import { SegmentParserSection } from "@/components/configuracion/SegmentParserSection";
+import { rubricValidationErrors } from "@/components/configuracion/SegmentRubricsSection";
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
-import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
-import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
+import { OperationsPanel } from "@/components/configuracion/OperationsPanel";
 import {
-  PROFILE_COLORS,
   defaultSettings,
   defaultSegmentAgent,
   buildSegmentsFromChannels,
-  RESOLUTION_TAG_LABELS,
   type TabKey,
-  type DayProfile,
-  type SamplingIntervalUnit,
-  type ShortageBehavior,
-  type ResolutionTag,
-  type AnalystCapacity,
   type TestCleanupPolicy,
   type VersionEntry,
   type AgentConfig,
@@ -86,15 +74,7 @@ import {
   toCreateConfigurationRequest,
   settingsFromConfigurationDetail,
 } from "@/lib/api/configurationMapping";
-import {
-  uploadAnalystCapacityImport,
-  getAnalystCapacityImport,
-} from "@/lib/api/analystCapacity.functions";
 import { listChannelLibraryEntries } from "@/lib/api/channelLibrary.functions";
-import {
-  listResolutionMethods,
-  type ResolutionMethodResponse,
-} from "@/lib/api/resolutionMethod.functions";
 import { listTestRuns } from "@/lib/api/testing.functions";
 import { useApiHealth } from "@/hooks/useApiHealth";
 import { useRole } from "@/hooks/useRole";
@@ -117,7 +97,7 @@ export const Route = createFileRoute("/configuracion")({
 const GENERAL_TAB_META: { key: TabKey; label: string }[] = [
   { key: "general", label: "General" },
   { key: "infra", label: "Infraestructura" },
-  { key: "ops", label: "Operación" },
+  { key: "ops", label: "Operación (inmediata)" },
   { key: "test", label: "Test" },
   { key: "segmento", label: "Segmento" },
   { key: "schema", label: "Esquema" },
@@ -320,15 +300,6 @@ function ConfiguracionPage() {
     enabled: isDeployApprover,
   });
   const hasSucceededTestRun = (testRunsQuery.data ?? []).some((run) => run.status === "SUCCEEDED");
-  // Resolution-method catalog (see ResolutionMethodCatalogManager) -
-  // shortage behavior picks from it via the block_soft/block_hard tags
-  // reserved for this use.
-  const resolutionMethodsQuery = useQuery({
-    queryKey: ["resolutionMethods"],
-    queryFn: () => listResolutionMethods({ data: { activeOnly: true } }),
-  });
-  const resolutionMethods = resolutionMethodsQuery.data ?? [];
-  const [showShortageResolutionCatalog, setShowShortageResolutionCatalog] = useState(false);
   // Segment keys come from this catalog now (see biblioteca.tsx's
   // "Canales" tab) - a fresh draft with no base config seeds its segments
   // from these instead of the old fixed 2-value enum.
@@ -1159,9 +1130,6 @@ function ConfiguracionPage() {
     }
     const clonedSettings: ConfigSettings = {
       ...baseSettings,
-      queueDiscardBehavior: { ...baseSettings.queueDiscardBehavior },
-      voicebotShortageBehavior: { ...baseSettings.voicebotShortageBehavior },
-      analystShortageBehavior: { ...baseSettings.analystShortageBehavior },
       // ponytail: JSON round-trip clone, fine while SegmentSettings holds only JSON-safe data.
       segments: JSON.parse(JSON.stringify(baseSettings.segments)),
     };
@@ -1258,7 +1226,13 @@ function ConfiguracionPage() {
     (selectedDraft.baseline
       ? JSON.stringify(selectedDraft.workingCopy) !== JSON.stringify(selectedDraft.baseline)
       : selectedDraft.dirtyTabs.length > 0);
-  const canSave = !locked && !!selectedConfigId && (unsaved || hasChanges);
+  // Rúbricas must sum to exactly 100 pts each (backend returns 422
+  // otherwise) - block save up front and say which ones are off.
+  const rubricErrors = selectedDraft
+    ? rubricValidationErrors(selectedDraft.workingCopy.segments ?? {})
+    : [];
+  const canSave =
+    !locked && !!selectedConfigId && (unsaved || hasChanges) && rubricErrors.length === 0;
   const canRestore =
     isDraftView && !!selectedDraft && hasChanges && !saving && !restoring && !savePreviewLoading;
   const actionButtonClass =
@@ -1285,6 +1259,12 @@ function ConfiguracionPage() {
                           ? "Cambios pendientes de guardar"
                           : "Sin cambios pendientes"}
             </p>
+            {isDraftView && rubricErrors.length > 0 && (
+              <p className="text-danger" title={rubricErrors.join("\n")}>
+                No se puede guardar: {rubricErrors.length === 1 ? "la rúbrica" : "las rúbricas"}{" "}
+                {rubricErrors.join(" · ")} (deben sumar 100 pts).
+              </p>
+            )}
           </div>
           {canEditConfiguration && isDraftView && (
             <div className="flex flex-wrap items-center gap-2">
@@ -1820,93 +1800,6 @@ function ConfiguracionPage() {
         <fieldset disabled={locked} className="contents">
           {activeTab === "general" && (
             <div className="space-y-6">
-              {/* Estado del agente */}
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="px-6 py-4 border-b border-border">
-                  <h2 className="text-[14px] font-semibold text-text-primary">Estado del agente</h2>
-                  <p className="text-[12px] text-text-secondary mt-0.5">
-                    Enciende o apaga la operación de ARIA para esta configuración.
-                  </p>
-                </div>
-                <div className="p-6 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`inline-flex items-center justify-center h-9 w-9 rounded-full ${settings.agentEnabled ? "bg-success/10 text-success" : "bg-text-secondary/10 text-text-secondary"}`}
-                    >
-                      <Power className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className="text-[13px] font-medium text-text-primary">
-                        {settings.agentEnabled ? "Agente encendido" : "Agente apagado"}
-                      </p>
-                      <p className="text-[12px] text-text-secondary">
-                        {settings.agentEnabled
-                          ? "ARIA está procesando alertas normalmente."
-                          : "ARIA no procesará nuevas alertas hasta que se encienda."}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() =>
-                      patchSettings("general", { agentEnabled: !settings.agentEnabled })
-                    }
-                    className={`inline-flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium ${settings.agentEnabled ? "bg-danger/10 text-danger hover:bg-danger/20" : "bg-success text-white hover:bg-success/90"}`}
-                  >
-                    <Power className="h-4 w-4" /> {settings.agentEnabled ? "Apagar" : "Encender"}
-                  </button>
-                </div>
-                <div className="px-6 pb-6 flex flex-wrap gap-3 border-t border-border pt-5">
-                  <div className="flex items-center justify-between gap-4 flex-1 min-w-[260px] rounded-lg border border-border p-4">
-                    <div>
-                      <p className="text-[13px] font-medium text-text-primary">
-                        Escalado a analistas
-                      </p>
-                      <p className="text-[12px] text-text-secondary mt-0.5">
-                        {settings.analystEscalationEnabled
-                          ? "ARIA puede escalar alertas a un analista humano."
-                          : "ARIA no escalará alertas a analistas."}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        patchSettings("general", {
-                          analystEscalationEnabled: !settings.analystEscalationEnabled,
-                        })
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${settings.analystEscalationEnabled ? "bg-primary" : "bg-border"}`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${settings.analystEscalationEnabled ? "translate-x-5" : "translate-x-0.5"}`}
-                      />
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between gap-4 flex-1 min-w-[260px] rounded-lg border border-border p-4">
-                    <div>
-                      <p className="text-[13px] font-medium text-text-primary">
-                        Escalado a voicebot
-                      </p>
-                      <p className="text-[12px] text-text-secondary mt-0.5">
-                        {settings.voicebotEscalationEnabled
-                          ? "ARIA puede escalar alertas a voicebot."
-                          : "ARIA no escalará alertas a voicebot."}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        patchSettings("general", {
-                          voicebotEscalationEnabled: !settings.voicebotEscalationEnabled,
-                        })
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${settings.voicebotEscalationEnabled ? "bg-primary" : "bg-border"}`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${settings.voicebotEscalationEnabled ? "translate-x-5" : "translate-x-0.5"}`}
-                      />
-                    </button>
-                  </div>
-                </div>
-              </section>
-
               {/* Ventana de migración */}
               <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
                 <div className="px-6 py-4 border-b border-border">
@@ -2047,224 +1940,11 @@ function ConfiguracionPage() {
               </section>
             </div>
           )}
-
-          {activeTab === "ops" && (
-            <div className="space-y-6">
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="px-6 py-4 border-b border-border">
-                  <h2 className="text-[14px] font-semibold text-text-primary">Voicebot</h2>
-                  <p className="text-[12px] text-text-secondary mt-0.5">
-                    Capacidad del recurso físico de voicebot.
-                  </p>
-                </div>
-                <div className="p-6 space-y-6">
-                  <LimitField
-                    label="Máximo de llamadas concurrentes"
-                    hint="Cantidad máxima de llamadas simultáneas que el componente voicebot puede sostener en paralelo."
-                    value={settings.voicebotMaxConcurrentCalls}
-                    onChange={(v) => patchSettings("ops", { voicebotMaxConcurrentCalls: v })}
-                    min={1}
-                    max={500}
-                    suffix="llamadas"
-                  />
-                  <Field
-                    label="Escasez de voicebot"
-                    hint="Qué debe hacer ARIA cuando no logra asignar una llamada de voicebot disponible para una alerta."
-                  >
-                    <ShortageBehaviorEditor
-                      name="voicebot-shortage"
-                      excludeTag="send_to_voicebot"
-                      resolutionMethods={resolutionMethods}
-                      onManage={() => setShowShortageResolutionCatalog(true)}
-                      value={settings.voicebotShortageBehavior}
-                      onChange={(v) => patchSettings("ops", { voicebotShortageBehavior: v })}
-                    />
-                  </Field>
-                </div>
-              </section>
-
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="px-6 py-4 border-b border-border">
-                  <h2 className="text-[14px] font-semibold text-text-primary">
-                    Analista — disponibilidad
-                  </h2>
-                  <p className="text-[12px] text-text-secondary mt-0.5">
-                    Cantidad de analistas listos para escalar alertas, por hora del día. Define
-                    perfiles de disponibilidad y asígnalos a días del mes (ej. días de pago).
-                  </p>
-                </div>
-                <div className="p-6 space-y-6">
-                  <AnalystCapacityEditor
-                    value={settings.analystCapacity}
-                    onChange={(v) => patchSettings("ops", { analystCapacity: v })}
-                  />
-                  <Field
-                    label="Escasez de analistas"
-                    hint="Qué debe hacer ARIA cuando no hay analistas disponibles para recibir una alerta escalada."
-                  >
-                    <ShortageBehaviorEditor
-                      name="analyst-shortage"
-                      excludeTag="scale_to_analyst"
-                      resolutionMethods={resolutionMethods}
-                      onManage={() => setShowShortageResolutionCatalog(true)}
-                      value={settings.analystShortageBehavior}
-                      onChange={(v) => patchSettings("ops", { analystShortageBehavior: v })}
-                    />
-                  </Field>
-                </div>
-              </section>
-
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="px-6 py-4 border-b border-border">
-                  <h2 className="text-[14px] font-semibold text-text-primary">
-                    Manejo de encolamiento
-                  </h2>
-                  <p className="text-[12px] text-text-secondary mt-0.5">
-                    Tiempo máximo que una alerta puede esperar en cola antes de ser saltada (skip),
-                    y monto mínimo para que valga la pena encolarla.
-                  </p>
-                </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Field
-                    label="Tiempo de vida máximo en cola"
-                    hint="Si una alerta lleva encolada más de este tiempo, ARIA la saltea en vez de procesarla."
-                  >
-                    <div className="flex items-center gap-2 max-w-xs">
-                      <Clock className="h-4 w-4 text-text-secondary shrink-0" />
-                      <input
-                        type="number"
-                        min={1}
-                        value={settings.queueMaxLifetimeValue}
-                        onChange={(e) =>
-                          patchSettings("ops", { queueMaxLifetimeValue: Number(e.target.value) })
-                        }
-                        className="w-24 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-                      />
-                      <select
-                        value={settings.queueMaxLifetimeUnit}
-                        onChange={(e) =>
-                          patchSettings("ops", {
-                            queueMaxLifetimeUnit: e.target.value as SamplingIntervalUnit,
-                          })
-                        }
-                        className="h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
-                      >
-                        <option value="minutes">Minutos</option>
-                        <option value="hours">Horas</option>
-                        <option value="days">Días</option>
-                      </select>
-                    </div>
-                  </Field>
-                  <Field
-                    label="Descartar por monto"
-                    hint="Si el monto de la alerta es menor a este valor, ARIA la descarta en vez de encolarla."
-                  >
-                    <div className="flex items-center gap-2 max-w-xs">
-                      <DollarSign className="h-4 w-4 text-text-secondary shrink-0" />
-                      <input
-                        type="number"
-                        min={0}
-                        value={settings.queueDiscardAmountThreshold}
-                        onChange={(e) =>
-                          patchSettings("ops", {
-                            queueDiscardAmountThreshold: Number(e.target.value),
-                          })
-                        }
-                        className="w-32 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-                      />
-                      <span className="text-[12px] text-text-secondary">
-                        0 = sin descarte por monto
-                      </span>
-                    </div>
-                  </Field>
-                  <div className="md:col-span-2 flex items-center justify-between">
-                    <div>
-                      <label className="text-[13px] font-medium text-text-primary">
-                        Restringir por regla disparada
-                      </label>
-                      <p className="text-[12px] text-text-secondary mt-0.5">
-                        {settings.queueRuleFilterMode === "not_belongs"
-                          ? "Si está activo, se descartan las alertas cuya regla disparada pertenezca a la lista; el resto se encola."
-                          : "Si está activo, solo se encolan alertas cuya regla disparada pertenezca a la lista; el resto se descarta."}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        patchSettings("ops", {
-                          queueRuleFilterEnabled: !settings.queueRuleFilterEnabled,
-                        })
-                      }
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors shrink-0 ${settings.queueRuleFilterEnabled ? "bg-primary" : "bg-border"}`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${settings.queueRuleFilterEnabled ? "translate-x-5" : "translate-x-0.5"}`}
-                      />
-                    </button>
-                  </div>
-                  {settings.queueRuleFilterEnabled && (
-                    <div className="md:col-span-2 space-y-4">
-                      <Field
-                        label="Condición de la lista"
-                        hint="Define si la lista de abajo es de reglas permitidas (pertenencia) o de reglas excluidas (no pertenencia)."
-                      >
-                        <div className="inline-flex rounded-md border border-border p-0.5 bg-background">
-                          <button
-                            type="button"
-                            onClick={() => patchSettings("ops", { queueRuleFilterMode: "belongs" })}
-                            className={`h-8 px-3 rounded text-[13px] font-medium transition-colors ${settings.queueRuleFilterMode === "belongs" ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"}`}
-                          >
-                            Pertenece a la lista
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              patchSettings("ops", { queueRuleFilterMode: "not_belongs" })
-                            }
-                            className={`h-8 px-3 rounded text-[13px] font-medium transition-colors ${settings.queueRuleFilterMode === "not_belongs" ? "bg-primary text-white" : "text-text-secondary hover:text-text-primary"}`}
-                          >
-                            No pertenece a la lista
-                          </button>
-                        </div>
-                      </Field>
-                      <Field
-                        label={
-                          settings.queueRuleFilterMode === "not_belongs"
-                            ? "Reglas disparadas excluidas de cola"
-                            : "Reglas disparadas permitidas en cola"
-                        }
-                        hint={
-                          settings.queueRuleFilterMode === "not_belongs"
-                            ? "Alertas cuya regla disparada esté en esta lista se descartan en vez de encolarse."
-                            : "Alertas cuya regla disparada no esté en esta lista se descartan en vez de encolarse."
-                        }
-                      >
-                        <TagMultiSelect
-                          category="triggered_rule"
-                          value={settings.queueAllowedTriggeredRules}
-                          onChange={(v) => patchSettings("ops", { queueAllowedTriggeredRules: v })}
-                        />
-                      </Field>
-                    </div>
-                  )}
-                  <div className="md:col-span-2">
-                    <Field
-                      label="Descarte de cola"
-                      hint="Qué debe hacer ARIA con una alerta en vez de encolarla normalmente, ya sea por tiempo de vida, monto mínimo o filtro de regla disparada."
-                    >
-                      <ShortageBehaviorEditor
-                        name="queue-discard"
-                        resolutionMethods={resolutionMethods}
-                        onManage={() => setShowShortageResolutionCatalog(true)}
-                        value={settings.queueDiscardBehavior}
-                        onChange={(v) => patchSettings("ops", { queueDiscardBehavior: v })}
-                      />
-                    </Field>
-                  </div>
-                </div>
-              </section>
-            </div>
-          )}
         </fieldset>
+
+        {/* Not versioned: reads/writes the OperationalSettings singleton and
+            applies immediately, so it's outside the version lock above. */}
+        {activeTab === "ops" && <OperationsPanel readOnly={apiDown} />}
 
         {activeTab === "test" && (
           <div className="space-y-6">
@@ -2952,337 +2632,6 @@ function ConfiguracionPage() {
           </div>
         </div>
       )}
-
-      <ResolutionMethodCatalogManager
-        open={showShortageResolutionCatalog}
-        onOpenChange={setShowShortageResolutionCatalog}
-      />
     </DashboardLayout>
-  );
-}
-
-/* ─── Analyst capacity editor ────────────────────────── */
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
-
-function AnalystCapacityEditor({
-  value,
-  onChange,
-}: {
-  value: AnalystCapacity;
-  onChange: (v: AnalystCapacity) => void;
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importState, setImportState] = useState<"idle" | "loading" | "done" | "error">("idle");
-  const [importInfo, setImportInfo] = useState<{ file: string; count: number } | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [pendingFileName, setPendingFileName] = useState<string | null>(null);
-  const [pollingTaskId, setPollingTaskId] = useState<string | null>(null);
-
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return uploadAnalystCapacityImport({ data: formData });
-    },
-  });
-
-  const importQuery = useQuery({
-    queryKey: ["analystCapacityImport", pollingTaskId],
-    queryFn: () => getAnalystCapacityImport({ data: { taskId: pollingTaskId! } }),
-    enabled: !!pollingTaskId,
-    refetchInterval: (query) => (query.state.data?.status === "PENDING" ? 1200 : false),
-  });
-
-  useEffect(() => {
-    const result = importQuery.data;
-    if (!result || result.status === "PENDING") return;
-    if (result.status === "READY") {
-      const importedProfiles: DayProfile[] = result.profiles.map((p) => ({ ...p }));
-      const dayOverrides = { ...value.dayOverrides };
-      for (const [day, profileId] of Object.entries(result.day_overrides))
-        dayOverrides[Number(day)] = profileId;
-      onChange({ ...value, profiles: [...value.profiles, ...importedProfiles], dayOverrides });
-      setImportState("done");
-      setImportInfo({ file: pendingFileName ?? "", count: importedProfiles.length });
-      setTimeout(() => setImportState("idle"), 4000);
-    } else {
-      setImportState("error");
-      setImportError(result.error ?? "No se pudo importar el archivo.");
-    }
-    setPollingTaskId(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [importQuery.data]);
-
-  const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    setImportState("loading");
-    setImportError(null);
-    setPendingFileName(file.name);
-    uploadMutation.mutate(file, {
-      onSuccess: (res) => setPollingTaskId(res.task_id),
-      onError: (err) => {
-        setImportState("error");
-        setImportError(err instanceof Error ? err.message : String(err));
-      },
-    });
-  };
-
-  const colorFor = (profileId: string) => {
-    const idx = value.profiles.findIndex((p) => p.id === profileId);
-    return (
-      PROFILE_COLORS[idx % PROFILE_COLORS.length] ??
-      "bg-text-secondary/10 text-text-secondary border-border"
-    );
-  };
-
-  const updateProfile = (id: string, patch: Partial<DayProfile>) =>
-    onChange({
-      ...value,
-      profiles: value.profiles.map((p) => (p.id === id ? { ...p, ...patch } : p)),
-    });
-
-  const updateHour = (id: string, hour: number, hourly: number) =>
-    updateProfile(id, {
-      hourly: value.profiles
-        .find((p) => p.id === id)!
-        .hourly.map((h, i) => (i === hour ? hourly : h)),
-    });
-
-  const addProfile = () => {
-    const id = `profile-${Date.now()}`;
-    onChange({
-      ...value,
-      profiles: [
-        ...value.profiles,
-        { id, name: "Nuevo perfil", description: "", hourly: Array(24).fill(4) },
-      ],
-    });
-  };
-
-  const removeProfile = (id: string) => {
-    if (value.profiles.length <= 1) return;
-    const remainingProfiles = value.profiles.filter((p) => p.id !== id);
-    const defaultProfileId =
-      value.defaultProfileId === id ? remainingProfiles[0].id : value.defaultProfileId;
-    const dayOverrides = Object.fromEntries(
-      Object.entries(value.dayOverrides).filter(([, pid]) => pid !== id),
-    );
-    onChange({ profiles: remainingProfiles, defaultProfileId, dayOverrides });
-  };
-
-  const cycleDay = (day: number) => {
-    const current = value.dayOverrides[day] ?? value.defaultProfileId;
-    const idx = value.profiles.findIndex((p) => p.id === current);
-    const next = value.profiles[(idx + 1) % value.profiles.length];
-    const dayOverrides = { ...value.dayOverrides };
-    if (next.id === value.defaultProfileId) delete dayOverrides[day];
-    else dayOverrides[day] = next.id;
-    onChange({ ...value, dayOverrides });
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-[12px] font-medium text-text-secondary">
-            Perfiles de disponibilidad (analistas por hora)
-          </p>
-          <div className="flex items-center gap-3">
-            <a
-              href="/templates/plantilla-disponibilidad-analistas.xlsx"
-              download
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-text-secondary hover:text-primary hover:underline"
-            >
-              <Download className="h-3.5 w-3.5" /> Descargar plantilla
-            </a>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx"
-              onChange={handleFile}
-              className="hidden"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={importState === "loading"}
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {importState === "loading" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <FileSpreadsheet className="h-3.5 w-3.5" />
-              )}
-              {importState === "loading" ? "Importando…" : "Cargar desde Excel"}
-            </button>
-            <button
-              onClick={addProfile}
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-primary hover:underline"
-            >
-              <Plus className="h-3.5 w-3.5" /> Nuevo perfil
-            </button>
-          </div>
-        </div>
-        {importState === "done" && importInfo && (
-          <p className="text-[11px] text-success mb-2">
-            Se importaron {importInfo.count} perfiles desde "{importInfo.file}".
-          </p>
-        )}
-        {importState === "error" && importError && (
-          <p className="text-[11px] text-danger mb-2">{importError}</p>
-        )}
-        <div className="space-y-4 mt-3">
-          {value.profiles.map((p) => (
-            <div key={p.id} className="rounded-lg border border-border bg-surface p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  title={p.name}
-                  className={`h-3 w-3 rounded-full border shrink-0 ${colorFor(p.id)}`}
-                />
-                <input
-                  value={p.name}
-                  onChange={(e) => updateProfile(p.id, { name: e.target.value })}
-                  className="h-8 rounded-md border border-border px-2 text-[13px] font-medium bg-card focus:outline-none focus:border-primary"
-                />
-                <label className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary ml-2">
-                  <input
-                    type="radio"
-                    name="defaultProfile"
-                    checked={value.defaultProfileId === p.id}
-                    onChange={() => onChange({ ...value, defaultProfileId: p.id })}
-                  />
-                  Perfil por defecto
-                </label>
-                <button
-                  onClick={() => removeProfile(p.id)}
-                  disabled={value.profiles.length <= 1}
-                  className="ml-auto p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger disabled:opacity-30 disabled:cursor-not-allowed"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <input
-                value={p.description}
-                onChange={(e) => updateProfile(p.id, { description: e.target.value })}
-                placeholder="Descripción del perfil (ej. cuándo aplica, qué lo distingue)"
-                className="w-full h-8 rounded-md border border-border px-2 text-[12px] bg-card focus:outline-none focus:border-primary mb-2"
-              />
-              <div className="flex gap-1 overflow-x-auto pb-1">
-                {HOURS.map((h) => (
-                  <div key={h} className="flex flex-col items-center shrink-0">
-                    <span className="text-[9px] text-text-secondary font-mono mb-0.5">{h}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={p.hourly[h]}
-                      onChange={(e) => updateHour(p.id, h, Number(e.target.value))}
-                      className="w-9 h-8 rounded border border-border px-1 text-[11px] text-center bg-card focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <p className="text-[12px] font-medium text-text-secondary mb-2">
-          Asignación por día del mes
-        </p>
-        <p className="text-[11px] text-text-secondary mb-3">
-          Clic sobre un día para rotar entre perfiles. Patrón recurrente: aplica todos los meses
-          (ej. días de pago 15, 20, 30).
-        </p>
-        <div className="grid grid-cols-7 gap-1.5 max-w-lg">
-          {DAYS.map((d) => {
-            const profileId = value.dayOverrides[d] ?? value.defaultProfileId;
-            const profile = value.profiles.find((p) => p.id === profileId);
-            return (
-              <button
-                key={d}
-                onClick={() => cycleDay(d)}
-                title={profile?.name}
-                className={`h-9 rounded-md border text-[12px] font-mono transition-colors ${colorFor(profileId)}`}
-              >
-                {d}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex flex-wrap gap-3 mt-3">
-          {value.profiles.map((p) => (
-            <span
-              key={p.id}
-              className="inline-flex items-center gap-1.5 text-[11px] text-text-secondary"
-            >
-              <span className={`h-2.5 w-2.5 rounded-full border ${colorFor(p.id)}`} /> {p.name}
-              {p.id === value.defaultProfileId && " (defecto)"}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Shortage behavior editor ──────────────────────── */
-/* Picks from the resolution-method catalog (see
-   ResolutionMethodCatalogManager) - block_soft/block_hard are the two tags
-   reserved for this editor, on top of the 3 routing tags. excludeTag guards against a self-referential
-   loop (e.g. voicebot shortage routed right back to the voicebot). */
-
-function ShortageBehaviorEditor({
-  value,
-  onChange,
-  name,
-  excludeTag,
-  resolutionMethods,
-  onManage,
-}: {
-  value: ShortageBehavior;
-  onChange: (v: ShortageBehavior) => void;
-  name: string;
-  excludeTag?: ResolutionTag;
-  resolutionMethods: ResolutionMethodResponse[];
-  onManage: () => void;
-}) {
-  const options = resolutionMethods.filter((m) => m.resolution_tag !== excludeTag);
-  return (
-    <div aria-label={name} className="flex items-center gap-2">
-      <select
-        value={value.resolutionMethodId ?? ""}
-        onChange={(e) => {
-          const method = options.find((m) => m.id === e.target.value);
-          if (!method) return;
-          onChange({
-            resolutionMethodId: method.id,
-            resolutionTag: method.resolution_tag as ResolutionTag,
-          });
-        }}
-        className="h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
-      >
-        {!value.resolutionMethodId && (
-          <option value="" disabled>
-            Selecciona un método
-          </option>
-        )}
-        {options.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.value} ({RESOLUTION_TAG_LABELS[m.resolution_tag as ResolutionTag]})
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={onManage}
-        className="text-[11px] font-medium text-primary hover:underline"
-      >
-        Gestionar métodos
-      </button>
-    </div>
   );
 }

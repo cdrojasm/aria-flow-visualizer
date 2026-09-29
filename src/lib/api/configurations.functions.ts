@@ -27,30 +27,14 @@ export type ApiShortageBehavior = {
 };
 
 export type ApiGeneralSettings = {
-  agent_enabled: boolean;
   migration_window_enabled: boolean;
   migration_window_datetime: string;
-  analyst_escalation_enabled: boolean;
-  voicebot_escalation_enabled: boolean;
 };
 export type ApiInfraSettings = {
   max_instances: number;
   auto_scale: boolean;
   fraud_history_db_retention_days: number;
   fraud_history_cold_storage_retention_months: number;
-};
-export type ApiOpsSettings = {
-  voicebot_max_concurrent_calls: number;
-  analyst_capacity: ApiAnalystCapacity;
-  queue_max_lifetime_value: number;
-  queue_max_lifetime_unit: "minutes" | "hours" | "days";
-  queue_discard_amount_threshold: number;
-  queue_rule_filter_enabled: boolean;
-  queue_rule_filter_mode: "belongs" | "not_belongs";
-  queue_allowed_triggered_rules: string[];
-  queue_discard_behavior: ApiShortageBehavior;
-  voicebot_shortage_behavior: ApiShortageBehavior;
-  analyst_shortage_behavior: ApiShortageBehavior;
 };
 export type ApiTestSettings = {
   max_test_instances: number;
@@ -119,25 +103,25 @@ export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition
 // configuration_port.py, which this mirrors 1:1). Membership direction for
 // a selected watchlist isn't carried here - it's read off the watchlist
 // itself (its list_type).
-type ApiToolPickerFields = {
-  vector_store_enabled: boolean;
-  // One vector store per stage, not a list - a stage's tool loop searches
-  // exactly one vector_store_id. Several stages may point at the same one;
-  // that's sharing, not multi-selection.
-  vector_store_instance_id: string | null;
+export type ApiResearchAgentConfig = { enabled: boolean; max_delegations: number; timeout_seconds: number; max_result_items: number };
+export type ApiDelegatedResearchSettings = {
+  vector_store: ApiResearchAgentConfig & { vector_store_instance_id: string | null; similarity_threshold: number; max_documents_per_query: number; allowed_asset_types: string[] };
+  history_pandas: ApiResearchAgentConfig & { max_history_rows: number; window_days: number; max_analysis_operations: number; allowed_columns: string[]; allowed_operations: string[] };
+};
+// Backend AgentToolsConfigSchema - identical for the four ReAct steps.
+export type ApiToolPickerFields = {
   watchlist_enabled: boolean;
   watchlist_ids: string[];
   watchlist_compare_field: string | null;
   calculator_enabled: boolean;
-};
-export type ApiResearchAgentConfig = { enabled: boolean; only_when_inconclusive: boolean; max_delegations: number; max_iterations: number; timeout_seconds: number; max_result_items: number; include_trace: boolean };
-export type ApiDelegatedResearchSettings = {
-  priority: "vector_first" | "pandas_first";
-  vector_store: ApiResearchAgentConfig & { vector_store_instance_id: string | null; similarity_threshold: number; max_documents_per_query: number; allowed_asset_types: string[] };
-  history_pandas: ApiResearchAgentConfig & { max_history_rows: number; max_analysis_operations: number; allowed_columns: string[]; allowed_operations: string[] };
+  use_xgboost_model: boolean;
+  xgboost_model_id: string | null;
+  xgboost_fraud_threshold: number;
+  xgboost_uncertainty_threshold: number;
+  xgboost_shap_enabled: boolean;
+  delegated_research: ApiDelegatedResearchSettings;
 };
 export type ApiClassificationConfig = ApiToolPickerFields & {
-  delegated_research: ApiDelegatedResearchSettings;
   prompt: string;
   prompt_vars: string[];
   max_thought_iterations: number;
@@ -149,19 +133,7 @@ export type ApiAdversarialConfig = ApiToolPickerFields & {
   max_cycles: number;
   feed_feedback_to_classification: boolean;
 };
-export type ApiDetectorConfig = ApiToolPickerFields & {
-  delegated_research: ApiDelegatedResearchSettings;
-  enable_pandas_history_tool: boolean;
-  use_xgboost_model: boolean;
-  xgboost_model_id: string | null;
-  xgboost_fraud_threshold: number;
-  xgboost_uncertainty_threshold: number;
-  xgboost_shap_enabled: boolean;
-  prompt: string;
-  prompt_vars: string[];
-  max_thought_iterations: number;
-  output_labels: string[];
-};
+export type ApiDetectorConfig = ApiClassificationConfig;
 export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
   max_thought_iterations: number;
 };
@@ -235,7 +207,6 @@ export type CreateConfigurationRequest = {
   description?: string;
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
-  ops: ApiOpsSettings;
   test: ApiTestSettings;
   created_by?: string | null;
   segments: Record<string, ApiSegmentSettings>;
@@ -262,7 +233,6 @@ export type ConfigurationSummaryResponse = {
 export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
-  ops: ApiOpsSettings;
   test: ApiTestSettings;
   segments: Record<string, ApiSegmentSettings>;
   created_by: string | null;

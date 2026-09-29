@@ -15,6 +15,31 @@ const COMPARISONS: { value: RuleComparison; label: string; values: number }[] = 
   { value: "in", label: "está en categoría", values: 1 },
 ];
 
+// Each rubric is an additive scorecard: every matched condition adds its
+// points, and a rubric's points must sum to exactly 100 (0-100 score). The
+// backend rejects the save with 422 otherwise (CreateConfigurationRequest).
+export const RUBRIC_TARGET_TOTAL = 100;
+
+export const rubricTotal = (rubric: Rubric): number =>
+  rubric.conditions.reduce((total, condition) => total + (Number(condition.score) || 0), 0);
+
+const isRubricBalanced = (rubric: Rubric): boolean =>
+  Math.abs(rubricTotal(rubric) - RUBRIC_TARGET_TOTAL) < 1e-9;
+
+/** Human-readable problems blocking save, one per unbalanced rubric. */
+export function rubricValidationErrors(
+  segments: Record<string, { agent?: { rubrics?: Rubric[] } }>,
+): string[] {
+  return Object.entries(segments).flatMap(([code, segment]) =>
+    (segment.agent?.rubrics ?? [])
+      .filter((rubric) => !isRubricBalanced(rubric))
+      .map(
+        (rubric) =>
+          `${code} · ${rubric.name || "Rúbrica sin nombre"}: ${rubricTotal(rubric)} de ${RUBRIC_TARGET_TOTAL} pts`,
+      ),
+  );
+}
+
 const emptyCondition = (): RuleCondition => ({
   id: createId(),
   variable: "",
@@ -160,7 +185,8 @@ export function SegmentRubricsSection({
         <div>
           <h2 className="text-[15px] font-semibold text-text-primary">Rúbricas</h2>
           <p className="mt-0.5 text-[12px] text-text-secondary">
-            Cada rúbrica calcula un puntaje independiente. Los puntos no necesitan sumar 100.
+            Cada rúbrica calcula un puntaje independiente de 0 a 100: cada condición que se cumple
+            suma sus puntos. Los puntos de cada rúbrica deben sumar exactamente 100.
           </p>
         </div>
         <button
@@ -172,51 +198,72 @@ export function SegmentRubricsSection({
           <Plus className="h-3.5 w-3.5" /> Nueva rúbrica
         </button>
       </div>
-      {value.map((rubric) => (
-        <article
-          key={rubric.id}
-          className="rounded-xl border border-border bg-card shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
-        >
-          <div className="flex items-center gap-3 border-b border-border px-5 py-3">
-            <input
-              value={rubric.name}
-              disabled={disabled}
-              onChange={(event) =>
-                onChange(
-                  value.map((item) =>
-                    item.id === rubric.id ? { ...item, name: event.target.value } : item,
-                  ),
-                )
-              }
-              className="h-8 flex-1 rounded-md border border-border px-2 text-[13px] font-semibold focus:outline-none focus:border-primary"
-            />
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => onChange(value.filter((item) => item.id !== rubric.id))}
-              aria-label="Eliminar rúbrica"
-              className="rounded p-1.5 text-text-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </div>
-          <div className="space-y-3 p-5">
-            <p className="text-[11px] text-text-secondary">
-              Ej.: amount &gt; 3000 +10 · device ≠ iphone +5 · device_enroll_time &lt; 6 meses +15.
-            </p>
-            <RuleConditionEditor
-              value={rubric.conditions}
-              onChange={(conditions) =>
-                onChange(
-                  value.map((item) => (item.id === rubric.id ? { ...item, conditions } : item)),
-                )
-              }
-              variables={variablePool}
-              disabled={disabled}
-            />
-          </div>
-        </article>
-      ))}
+      {value.map((rubric) => {
+        const total = rubricTotal(rubric);
+        const balanced = isRubricBalanced(rubric);
+        return (
+          <article
+            key={rubric.id}
+            className="rounded-xl border border-border bg-card shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
+          >
+            <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+              <input
+                value={rubric.name}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChange(
+                    value.map((item) =>
+                      item.id === rubric.id ? { ...item, name: event.target.value } : item,
+                    ),
+                  )
+                }
+                className="h-8 flex-1 rounded-md border border-border px-2 text-[13px] font-semibold focus:outline-none focus:border-primary"
+              />
+              <span
+                className={`whitespace-nowrap rounded-md px-2 py-1 text-[12px] font-medium ${
+                  balanced ? "bg-success/10 text-success" : "bg-danger/10 text-danger"
+                }`}
+                title="Los puntos de la rúbrica deben sumar exactamente 100"
+              >
+                {total} / {RUBRIC_TARGET_TOTAL} pts
+              </span>
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => onChange(value.filter((item) => item.id !== rubric.id))}
+                aria-label="Eliminar rúbrica"
+                className="rounded p-1.5 text-text-secondary hover:bg-danger/10 hover:text-danger disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3 p-5">
+              <p className="text-[11px] text-text-secondary">
+                Ej.: amount &gt; 3000 +10 · device ≠ iphone +5 · device_enroll_time &lt; 6 meses
+                +15.
+              </p>
+              <RuleConditionEditor
+                value={rubric.conditions}
+                onChange={(conditions) =>
+                  onChange(
+                    value.map((item) => (item.id === rubric.id ? { ...item, conditions } : item)),
+                  )
+                }
+                variables={variablePool}
+                disabled={disabled}
+              />
+              {!balanced && (
+                <p className="text-[12px] text-danger">
+                  {total < RUBRIC_TARGET_TOTAL
+                    ? `Faltan ${RUBRIC_TARGET_TOTAL - total} pts`
+                    : `Sobran ${total - RUBRIC_TARGET_TOTAL} pts`}{" "}
+                  para llegar a {RUBRIC_TARGET_TOTAL}. No se puede guardar hasta corregirlo.
+                </p>
+              )}
+            </div>
+          </article>
+        );
+      })}
       {value.length === 0 && (
         <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-[12px] text-text-secondary">
           Aún no hay rúbricas. Crea una para definir un score como <code>estafa_score</code>.

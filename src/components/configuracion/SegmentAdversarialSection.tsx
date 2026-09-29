@@ -3,18 +3,18 @@ import { useRef } from "react";
 import { Switch } from "@/components/ui/switch";
 import { type AdversarialConfig } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { AgentToolsFields, Field, VariablePicker } from "./shared/FormControls";
+import { AgentToolsSection } from "./shared/AgentToolsSection";
+import { Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
 
 /* ─── Adversarial agent (Phase 4, generalized Wave 6) ────
-   No tool picker of its own - it can use whatever tools its paired agent
-   already has configured (shown read-only here) plus that agent's
-   chain-of-thought. Generalized (was hardcoded to Classification) so the
-   same component backs both Clasificación's Adversarial (`tools` =
-   classification config) and Detector's Adversarial (`tools` = detector
-   config) - item 7 requires the two to share identical parameters, so
-   reusing one component is both less code and a correctness guarantee.
+   Has its own tool selection (shared AgentToolsSection, read by the
+   backend independently of the paired agent's) plus that agent's
+   chain-of-thought. The same component backs both Clasificación's
+   Adversarial and Detector's Adversarial - item 7 requires the two to
+   share identical parameters, so reusing one component is both less code
+   and a correctness guarantee.
    `showMaxThoughtIterations` is only set true for the Detector instance
    (see SegmentAgentSection.tsx). Configures how many reclassification
    cycles run and whether the paired agent receives the adversarial
@@ -39,17 +39,13 @@ export function SegmentAdversarialSection({
 
   return (
     <div className="space-y-6">
-      <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-[14px] font-semibold text-text-primary">Herramientas del agente</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Selecciona las fuentes y utilidades que el adversarial puede usar para cuestionar el resultado.
-          </p>
-        </div>
-        <div className="p-6">
-          <AgentToolsFields value={value} onChange={(patch) => onChange({ ...value, ...patch })} pool={pool} disabled={disabled} />
-        </div>
-      </section>
+      <AgentToolsSection
+        value={value}
+        onChange={onChange}
+        pool={pool}
+        disabled={disabled}
+        description="Selecciona las fuentes y utilidades que el adversarial puede usar para cuestionar el resultado."
+      />
 
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
         <div className="px-6 py-4 border-b border-border">

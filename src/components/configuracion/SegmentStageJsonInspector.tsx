@@ -31,6 +31,19 @@ function asList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+// Shared "Herramientas del agente" block (AgentToolsSection), same for
+// Detector, both Adversarials and Clasificación.
+function agentTools(config: Record<string, unknown>): string[] {
+  const research = asRecord(config.delegatedResearch);
+  return [
+    ...(config.watchlistEnabled ? ["watchlist"] : []),
+    ...(config.calculatorEnabled ? ["calculator"] : []),
+    ...(config.useXgboostModel ? ["xgboost_model"] : []),
+    ...(asRecord(research.vectorStore).enabled ? ["vector_store_search"] : []),
+    ...(asRecord(research.historyPandas).enabled ? ["history_analysis"] : []),
+  ];
+}
+
 const outputFor = (stage: Stage, value: unknown) => {
   const config = asRecord(value);
 
@@ -63,13 +76,7 @@ const outputFor = (stage: Stage, value: unknown) => {
       return {
         detection: "resultado_de_deteccion",
         outputLabels: asList(config.outputLabels),
-        tools: [
-          ...(config.vectorStoreEnabled ? ["vector_store"] : []),
-          ...(config.watchlistEnabled ? ["watchlist"] : []),
-          ...(config.calculatorEnabled ? ["calculator"] : []),
-          ...(config.useXgboostModel ? ["xgboost_model"] : []),
-          ...(config.enablePandasHistoryTool ? ["pandas_history"] : []),
-        ],
+        tools: agentTools(config),
       };
     case "detectorAdversarial":
       return {
@@ -77,19 +84,20 @@ const outputFor = (stage: Stage, value: unknown) => {
         cycles: config.maxCycles ?? 0,
         maxThoughtIterations: config.maxThoughtIterations ?? 5,
         outputLabels: asList(config.outputLabels),
+        tools: agentTools(config),
       };
     case "classification":
       return {
         classification: "resultado_de_clasificacion",
-        tools: [
-          ...(config.vectorStoreEnabled ? ["vector_store"] : []),
-          ...(config.watchlistEnabled ? ["watchlist"] : []),
-          ...(config.calculatorEnabled ? ["calculator"] : []),
-        ],
+        tools: agentTools(config),
         maxThoughtIterations: config.maxThoughtIterations ?? 5,
       };
     case "adversarial":
-      return { validation: "retroalimentacion_adversarial", cycles: config.maxCycles ?? 0 };
+      return {
+        validation: "retroalimentacion_adversarial",
+        cycles: config.maxCycles ?? 0,
+        tools: agentTools(config),
+      };
     case "analyst":
       return { resolution: "resolucion_del_analista", variables: asList(config.promptVars) };
     case "executor":

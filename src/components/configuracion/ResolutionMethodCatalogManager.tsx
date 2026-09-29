@@ -23,13 +23,12 @@ import {
 } from "@/lib/api/resolutionMethod.functions";
 
 /* ─── Admin CRUD for the resolution-method catalog ───────
-   Opened from the Analista subtab, next to the playbook "Resolución"
-   dropdown - see SegmentAnalystSection.tsx. Same flat pattern as
+   Opened from a modus operandi playbook (Biblioteca) and from the queue
+   discard behavior (Operación). Same flat pattern as
    MarcacionCatalogManager, with the fixed ResolutionTag enum playing the
    role MarcacionCategory.risk_label plays there: admins name as many
-   methods as they want, each mapped onto one of the 3 tags the workflow
-   understands (labels only - see backlog decision, no new execution logic
-   per tag today). */
+   methods as they want, each mapped onto one of the 5 tags the executor
+   branches on. */
 
 const RESOLUTION_TAG_OPTIONS: { value: ResolutionTag; label: string }[] = (
   Object.keys(RESOLUTION_TAG_LABELS) as ResolutionTag[]
@@ -119,8 +118,8 @@ export function ResolutionMethodCatalogManager({
         <DialogHeader>
           <DialogTitle>Gestionar métodos de resolución</DialogTitle>
           <DialogDescription>
-            Métodos que un playbook puede asignar como resolución. Cada uno mapea a una de las 3 vías que
-            ARIA sabe ejecutar hoy.
+            Métodos que un playbook puede asignar como resolución o como respaldo. Cada uno mapea a una
+            de las vías que ARIA sabe ejecutar.
           </DialogDescription>
         </DialogHeader>
 
@@ -219,7 +218,7 @@ export function ResolutionMethodCatalogManager({
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
         itemName={`método de resolución "${deleting?.value ?? ""}"`}
-        consequence="Referenciado por voicebot_shortage_behavior, analyst_shortage_behavior y playbooks; esas referencias apuntan a un id inexistente."
+        consequence="Referenciado por playbooks de modus operandi y por el descarte de cola; esas referencias apuntan a un id inexistente."
         pending={deletePending}
         onConfirm={() => deleting && handleDelete(deleting)}
       />

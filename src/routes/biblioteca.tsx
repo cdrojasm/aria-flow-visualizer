@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BookOpen,
   Check,
   ChevronRight,
   LoaderCircle,
@@ -68,6 +69,11 @@ import {
 } from "@/lib/api/channelLibrary.functions";
 import { WatchlistManager } from "@/components/biblioteca/WatchlistManager";
 import { DatasetLibraryManager } from "@/components/biblioteca/DatasetLibraryManager";
+import {
+  ModusOperandiPlaybookModal,
+  PlaybookPath,
+} from "@/components/biblioteca/ModusOperandiPlaybookModal";
+import { apiPlaybookPath } from "@/lib/playbookPath";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { ConfirmVectorStoreDocumentsDialog } from "@/components/ui/confirm-vector-store-documents-dialog";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
@@ -578,6 +584,8 @@ function BibliotecaPage() {
     useState<Partial<ModusOperandiLibraryEntry> | null>(null);
   const [showMOForm, setShowMOForm] = useState(false);
   const [deletingMO, setDeletingMO] =
+    useState<ModusOperandiLibraryEntry | null>(null);
+  const [playbookMO, setPlaybookMO] =
     useState<ModusOperandiLibraryEntry | null>(null);
   const saveMOMutation = useMutation({
     mutationFn: (draft: Partial<ModusOperandiLibraryEntry>) =>
@@ -1581,8 +1589,9 @@ function BibliotecaPage() {
                       <th className="px-6 py-2 font-medium">Nombre</th>
                       <th className="px-3 py-2 font-medium">Descripción</th>
                       <th className="px-3 py-2 font-medium">Taxonomía</th>
+                      <th className="px-3 py-2 font-medium">Playbook</th>
                       <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium w-24"></th>
+                      <th className="px-3 py-2 font-medium w-28"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1607,6 +1616,15 @@ function BibliotecaPage() {
                             </span>
                           </td>
                           <td className="px-3 py-3">
+                            {m.playbook ? (
+                              <PlaybookPath path={apiPlaybookPath(m.playbook)} />
+                            ) : (
+                              <span className="text-[11px] text-text-secondary">
+                                Sin playbook (escala a analista)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-3">
                             <button
                               onClick={() => toggleMOActive.mutate(m)}
                               className={`text-[11px] uppercase tracking-wider ${m.active ? "text-success" : "text-text-secondary"}`}
@@ -1616,6 +1634,15 @@ function BibliotecaPage() {
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                aria-label={`Playbook de ${m.title}`}
+                                title="Playbook: método de resolución y respaldos"
+                                onClick={() => setPlaybookMO(m)}
+                                className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
+                              >
+                                <BookOpen className="h-3.5 w-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 aria-label={`Editar modus operandi ${m.title}`}
@@ -2016,6 +2043,14 @@ function BibliotecaPage() {
         )}
 
         {/* MO modal */}
+        {playbookMO && (
+          <ModusOperandiPlaybookModal
+            entry={playbookMO}
+            onClose={() => setPlaybookMO(null)}
+            onSaved={invalidateAll}
+          />
+        )}
+
         {showMOForm && editingMO && (
           <div
             className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"

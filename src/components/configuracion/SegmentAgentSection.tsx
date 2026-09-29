@@ -42,16 +42,12 @@ const SUBTAB_META: {
     label: "Perfilamiento",
     description:
       "Ingeniería de características → cadena de perfilamiento → rúbricas. Configura las señales, construye el contexto de la alerta y define cómo se evalúa el riesgo.",
-    warningNote:
-      "Las Rúbricas de esta pestaña se guardan pero ningún paso del motor de ejecución las calcula todavía.",
   },
   {
     key: "detector",
     label: "Detector",
     description:
       "Define las herramientas (incluido el modelo XGBoost) y el prompt para detectar alertas que ameritan una investigación más profunda.",
-    warningNote:
-      "El modelo XGBoost todavía no está conectado (Modelo XGBoost / umbrales / SHAP) — el resto de esta pestaña (herramientas, prompt, etiquetas de salida) sí se ejecuta.",
   },
   {
     key: "detectorAdversarial",

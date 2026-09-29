@@ -1,5 +1,8 @@
 import type {
   ApiAgentSettings,
+  ApiDelegatedResearchSettings,
+  ApiResearchAgentConfig,
+  ApiToolPickerFields,
   ApiAnalystConfig,
   ApiClassificationConfig,
   ApiAdversarialConfig,
@@ -17,6 +20,9 @@ import type {
 } from "./configurations.functions";
 import {
   type ConfigSettings,
+  type DelegatedResearchSettings,
+  type ResearchAgentConfig,
+  type ToolPickerFields,
   type FilterGroup,
   type SegmentAgentConfig,
   type SegmentCode,
@@ -27,19 +33,58 @@ import {
   defaultSegments,
 } from "@/data/configs";
 
-function researchToApi(research: SegmentAgentConfig["detector"]["delegatedResearch"]) {
-  const base = (v: { enabled: boolean; onlyWhenInconclusive: boolean; maxDelegations: number; maxIterations: number; timeoutSeconds: number; maxResultItems: number; includeTrace: boolean }) => ({ enabled: v.enabled, only_when_inconclusive: v.onlyWhenInconclusive, max_delegations: v.maxDelegations, max_iterations: v.maxIterations, timeout_seconds: v.timeoutSeconds, max_result_items: v.maxResultItems, include_trace: v.includeTrace });
+function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearchSettings {
+  const base = (v: ResearchAgentConfig) => ({ enabled: v.enabled, max_delegations: v.maxDelegations, timeout_seconds: v.timeoutSeconds, max_result_items: v.maxResultItems });
   return {
-    priority: research.priority,
     vector_store: { ...base(research.vectorStore), vector_store_instance_id: research.vectorStore.vectorStoreInstanceId, similarity_threshold: research.vectorStore.similarityThreshold, max_documents_per_query: research.vectorStore.maxDocumentsPerQuery, allowed_asset_types: research.vectorStore.allowedAssetTypes },
-    history_pandas: { ...base(research.historyPandas), max_history_rows: research.historyPandas.maxHistoryRows, max_analysis_operations: research.historyPandas.maxAnalysisOperations, allowed_columns: research.historyPandas.allowedColumns, allowed_operations: research.historyPandas.allowedOperations },
+    history_pandas: { ...base(research.historyPandas), max_history_rows: research.historyPandas.maxHistoryRows, window_days: research.historyPandas.windowDays, max_analysis_operations: research.historyPandas.maxAnalysisOperations, allowed_columns: research.historyPandas.allowedColumns, allowed_operations: research.historyPandas.allowedOperations },
   };
 }
 
-function researchFromApi(research: any, fallback: SegmentAgentConfig["detector"]["delegatedResearch"]) {
+function researchFromApi(
+  research: Partial<ApiDelegatedResearchSettings> | undefined,
+  fallback: DelegatedResearchSettings,
+): DelegatedResearchSettings {
   if (!research) return fallback;
-  const base = (v: any, defaultValue: any) => ({ enabled: v?.enabled ?? defaultValue.enabled, onlyWhenInconclusive: v?.only_when_inconclusive ?? defaultValue.onlyWhenInconclusive, maxDelegations: v?.max_delegations ?? defaultValue.maxDelegations, maxIterations: v?.max_iterations ?? defaultValue.maxIterations, timeoutSeconds: v?.timeout_seconds ?? defaultValue.timeoutSeconds, maxResultItems: v?.max_result_items ?? defaultValue.maxResultItems, includeTrace: v?.include_trace ?? defaultValue.includeTrace });
-  return { priority: research.priority ?? fallback.priority, vectorStore: { ...base(research.vector_store, fallback.vectorStore), vectorStoreInstanceId: research.vector_store?.vector_store_instance_id ?? null, similarityThreshold: research.vector_store?.similarity_threshold ?? fallback.vectorStore.similarityThreshold, maxDocumentsPerQuery: research.vector_store?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery, allowedAssetTypes: research.vector_store?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes }, historyPandas: { ...base(research.history_pandas, fallback.historyPandas), maxHistoryRows: research.history_pandas?.max_history_rows ?? fallback.historyPandas.maxHistoryRows, maxAnalysisOperations: research.history_pandas?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations, allowedColumns: research.history_pandas?.allowed_columns ?? fallback.historyPandas.allowedColumns, allowedOperations: research.history_pandas?.allowed_operations ?? fallback.historyPandas.allowedOperations } };
+  const base = (v: Partial<ApiResearchAgentConfig> | undefined, d: ResearchAgentConfig): ResearchAgentConfig => ({ enabled: v?.enabled ?? d.enabled, maxDelegations: v?.max_delegations ?? d.maxDelegations, timeoutSeconds: v?.timeout_seconds ?? d.timeoutSeconds, maxResultItems: v?.max_result_items ?? d.maxResultItems });
+  const vs = research.vector_store;
+  const hp = research.history_pandas;
+  return {
+    vectorStore: { ...base(vs, fallback.vectorStore), vectorStoreInstanceId: vs?.vector_store_instance_id ?? null, similarityThreshold: vs?.similarity_threshold ?? fallback.vectorStore.similarityThreshold, maxDocumentsPerQuery: vs?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery, allowedAssetTypes: vs?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes },
+    historyPandas: { ...base(hp, fallback.historyPandas), maxHistoryRows: hp?.max_history_rows ?? fallback.historyPandas.maxHistoryRows, windowDays: hp?.window_days ?? fallback.historyPandas.windowDays, maxAnalysisOperations: hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations, allowedColumns: hp?.allowed_columns ?? fallback.historyPandas.allowedColumns, allowedOperations: hp?.allowed_operations ?? fallback.historyPandas.allowedOperations },
+  };
+}
+
+// The shared "Herramientas del agente" block - same wire shape for
+// Detector, both Adversarials and Clasificación.
+function toolsToApi(t: ToolPickerFields): ApiToolPickerFields {
+  return {
+    watchlist_enabled: t.watchlistEnabled,
+    watchlist_ids: t.watchlistIds,
+    watchlist_compare_field: t.watchlistCompareField,
+    calculator_enabled: t.calculatorEnabled,
+    use_xgboost_model: t.useXgboostModel,
+    xgboost_model_id: t.xgboostModelId,
+    xgboost_fraud_threshold: t.xgboostFraudThreshold,
+    xgboost_uncertainty_threshold: t.xgboostUncertaintyThreshold,
+    xgboost_shap_enabled: t.xgboostShapEnabled,
+    delegated_research: researchToApi(t.delegatedResearch),
+  };
+}
+
+function toolsFromApi(t: Partial<ApiToolPickerFields>, d: ToolPickerFields): ToolPickerFields {
+  return {
+    watchlistEnabled: t.watchlist_enabled ?? d.watchlistEnabled,
+    watchlistIds: t.watchlist_ids ?? d.watchlistIds,
+    watchlistCompareField: t.watchlist_compare_field ?? d.watchlistCompareField,
+    calculatorEnabled: t.calculator_enabled ?? d.calculatorEnabled,
+    useXgboostModel: t.use_xgboost_model ?? d.useXgboostModel,
+    xgboostModelId: t.xgboost_model_id ?? d.xgboostModelId,
+    xgboostFraudThreshold: t.xgboost_fraud_threshold ?? d.xgboostFraudThreshold,
+    xgboostUncertaintyThreshold: t.xgboost_uncertainty_threshold ?? d.xgboostUncertaintyThreshold,
+    xgboostShapEnabled: t.xgboost_shap_enabled ?? d.xgboostShapEnabled,
+    delegatedResearch: researchFromApi(t.delegated_research, d.delegatedResearch),
+  };
 }
 
 // Pure, bijective(-ish) conversion between the frontend's flat camelCase
@@ -136,31 +181,14 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     })),
   };
   const detector: ApiDetectorConfig = {
-    vector_store_enabled: a.detector.vectorStoreEnabled,
-    vector_store_instance_id: a.detector.vectorStoreInstanceId,
-    watchlist_enabled: a.detector.watchlistEnabled,
-    watchlist_ids: a.detector.watchlistIds,
-    watchlist_compare_field: a.detector.watchlistCompareField,
-    calculator_enabled: a.detector.calculatorEnabled,
-    delegated_research: researchToApi(a.detector.delegatedResearch),
-    enable_pandas_history_tool: a.detector.enablePandasHistoryTool,
-    use_xgboost_model: a.detector.useXgboostModel,
-    xgboost_model_id: a.detector.xgboostModelId,
-    xgboost_fraud_threshold: a.detector.xgboostFraudThreshold,
-    xgboost_uncertainty_threshold: a.detector.xgboostUncertaintyThreshold,
-    xgboost_shap_enabled: a.detector.xgboostShapEnabled,
+    ...toolsToApi(a.detector),
     prompt: a.detector.prompt,
     prompt_vars: a.detector.promptVars,
     max_thought_iterations: a.detector.maxThoughtIterations,
     output_labels: a.detector.outputLabels,
   };
   const detectorAdversarial: ApiDetectorAdversarialConfig = {
-    vector_store_enabled: a.detectorAdversarial.vectorStoreEnabled,
-    vector_store_instance_id: a.detectorAdversarial.vectorStoreInstanceId,
-    watchlist_enabled: a.detectorAdversarial.watchlistEnabled,
-    watchlist_ids: a.detectorAdversarial.watchlistIds,
-    watchlist_compare_field: a.detectorAdversarial.watchlistCompareField,
-    calculator_enabled: a.detectorAdversarial.calculatorEnabled,
+    ...toolsToApi(a.detectorAdversarial),
     prompt: a.detectorAdversarial.prompt,
     prompt_vars: a.detectorAdversarial.promptVars,
     max_cycles: a.detectorAdversarial.maxCycles,
@@ -168,25 +196,14 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     max_thought_iterations: a.detectorAdversarial.maxThoughtIterations,
   };
   const classification: ApiClassificationConfig = {
-    vector_store_enabled: a.classification.vectorStoreEnabled,
-    vector_store_instance_id: a.classification.vectorStoreInstanceId,
-    watchlist_enabled: a.classification.watchlistEnabled,
-    watchlist_ids: a.classification.watchlistIds,
-    watchlist_compare_field: a.classification.watchlistCompareField,
-    calculator_enabled: a.classification.calculatorEnabled,
-    delegated_research: researchToApi(a.classification.delegatedResearch),
+    ...toolsToApi(a.classification),
     prompt: a.classification.prompt,
     prompt_vars: a.classification.promptVars,
     max_thought_iterations: a.classification.maxThoughtIterations,
     output_labels: a.classification.outputLabels,
   };
   const adversarial: ApiAdversarialConfig = {
-    vector_store_enabled: a.adversarial.vectorStoreEnabled,
-    vector_store_instance_id: a.adversarial.vectorStoreInstanceId,
-    watchlist_enabled: a.adversarial.watchlistEnabled,
-    watchlist_ids: a.adversarial.watchlistIds,
-    watchlist_compare_field: a.adversarial.watchlistCompareField,
-    calculator_enabled: a.adversarial.calculatorEnabled,
+    ...toolsToApi(a.adversarial),
     prompt: a.adversarial.prompt,
     prompt_vars: a.adversarial.promptVars,
     max_cycles: a.adversarial.maxCycles,
@@ -295,23 +312,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
     rubrics: a.rubrics ?? [],
     detector: a.detector
       ? {
-          vectorStoreEnabled: a.detector.vector_store_enabled,
-          vectorStoreInstanceId: a.detector.vector_store_instance_id ?? null,
-          watchlistEnabled: a.detector.watchlist_enabled,
-          watchlistIds: a.detector.watchlist_ids ?? [],
-          watchlistCompareField: a.detector.watchlist_compare_field ?? null,
-          calculatorEnabled: a.detector.calculator_enabled,
-          delegatedResearch: researchFromApi(a.detector.delegated_research, defaults.detector.delegatedResearch),
-          enablePandasHistoryTool: a.detector.enable_pandas_history_tool,
-          useXgboostModel: a.detector.use_xgboost_model,
-          xgboostModelId: a.detector.xgboost_model_id,
-          xgboostFraudThreshold:
-            a.detector.xgboost_fraud_threshold ?? defaults.detector.xgboostFraudThreshold,
-          xgboostUncertaintyThreshold:
-            a.detector.xgboost_uncertainty_threshold ??
-            defaults.detector.xgboostUncertaintyThreshold,
-          xgboostShapEnabled:
-            a.detector.xgboost_shap_enabled ?? defaults.detector.xgboostShapEnabled,
+          ...toolsFromApi(a.detector, defaults.detector),
           prompt: a.detector.prompt,
           promptVars: a.detector.prompt_vars,
           maxThoughtIterations:
@@ -321,12 +322,7 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
       : defaults.detector,
     detectorAdversarial: a.detector_adversarial
       ? {
-          vectorStoreEnabled: a.detector_adversarial.vector_store_enabled,
-          vectorStoreInstanceId: a.detector_adversarial.vector_store_instance_id ?? null,
-          watchlistEnabled: a.detector_adversarial.watchlist_enabled,
-          watchlistIds: a.detector_adversarial.watchlist_ids ?? [],
-          watchlistCompareField: a.detector_adversarial.watchlist_compare_field ?? null,
-          calculatorEnabled: a.detector_adversarial.calculator_enabled,
+          ...toolsFromApi(a.detector_adversarial, defaults.detectorAdversarial),
           prompt: a.detector_adversarial.prompt,
           promptVars: a.detector_adversarial.prompt_vars,
           maxCycles: a.detector_adversarial.max_cycles,
@@ -335,25 +331,14 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
         }
       : defaults.detectorAdversarial,
     classification: {
-      vectorStoreEnabled: a.classification.vector_store_enabled,
-      vectorStoreInstanceId: a.classification.vector_store_instance_id ?? null,
-      watchlistEnabled: a.classification.watchlist_enabled,
-      watchlistIds: a.classification.watchlist_ids ?? [],
-      watchlistCompareField: a.classification.watchlist_compare_field ?? null,
-      calculatorEnabled: a.classification.calculator_enabled,
-      delegatedResearch: researchFromApi(a.classification.delegated_research, defaults.classification.delegatedResearch),
+      ...toolsFromApi(a.classification, defaults.classification),
       prompt: a.classification.prompt,
       promptVars: a.classification.prompt_vars,
       maxThoughtIterations: a.classification.max_thought_iterations ?? 5,
       outputLabels: a.classification.output_labels ?? defaults.classification.outputLabels,
     },
     adversarial: {
-      vectorStoreEnabled: a.adversarial.vector_store_enabled,
-      vectorStoreInstanceId: a.adversarial.vector_store_instance_id ?? null,
-      watchlistEnabled: a.adversarial.watchlist_enabled,
-      watchlistIds: a.adversarial.watchlist_ids ?? [],
-      watchlistCompareField: a.adversarial.watchlist_compare_field ?? null,
-      calculatorEnabled: a.adversarial.calculator_enabled,
+      ...toolsFromApi(a.adversarial, defaults.adversarial),
       prompt: a.adversarial.prompt,
       promptVars: a.adversarial.prompt_vars,
       maxCycles: a.adversarial.max_cycles,
@@ -441,43 +426,14 @@ export function toCreateConfigurationRequest(
     based_on_version: opts.basedOnVersion ?? null,
     description: opts.description,
     general: {
-      agent_enabled: settings.agentEnabled,
       migration_window_enabled: settings.migrationWindowEnabled,
       migration_window_datetime: settings.migrationWindowDatetime,
-      analyst_escalation_enabled: settings.analystEscalationEnabled,
-      voicebot_escalation_enabled: settings.voicebotEscalationEnabled,
     },
     infra: {
       max_instances: settings.maxInstances,
       auto_scale: settings.autoScale,
       fraud_history_db_retention_days: settings.fraudHistoryDbRetentionDays,
       fraud_history_cold_storage_retention_months: settings.fraudHistoryColdStorageRetentionMonths,
-    },
-    ops: {
-      voicebot_max_concurrent_calls: settings.voicebotMaxConcurrentCalls,
-      analyst_capacity: {
-        profiles: settings.analystCapacity.profiles,
-        default_profile_id: settings.analystCapacity.defaultProfileId,
-        day_overrides: settings.analystCapacity.dayOverrides as Record<string, string>,
-      },
-      queue_max_lifetime_value: settings.queueMaxLifetimeValue,
-      queue_max_lifetime_unit: settings.queueMaxLifetimeUnit,
-      queue_discard_amount_threshold: settings.queueDiscardAmountThreshold,
-      queue_rule_filter_enabled: settings.queueRuleFilterEnabled,
-      queue_rule_filter_mode: settings.queueRuleFilterMode,
-      queue_allowed_triggered_rules: settings.queueAllowedTriggeredRules,
-      queue_discard_behavior: {
-        resolution_tag: settings.queueDiscardBehavior.resolutionTag,
-        resolution_method_id: settings.queueDiscardBehavior.resolutionMethodId ?? null,
-      },
-      voicebot_shortage_behavior: {
-        resolution_tag: settings.voicebotShortageBehavior.resolutionTag,
-        resolution_method_id: settings.voicebotShortageBehavior.resolutionMethodId ?? null,
-      },
-      analyst_shortage_behavior: {
-        resolution_tag: settings.analystShortageBehavior.resolutionTag,
-        resolution_method_id: settings.analystShortageBehavior.resolutionMethodId ?? null,
-      },
     },
     test: {
       max_test_instances: settings.maxTestInstances,
@@ -503,40 +459,13 @@ export function settingsFromConfigurationDetail(
     ? agentFromApi(firstSegment.agent).parser
     : defaultAlertParserConfig();
   return {
-    agentEnabled: detail.general.agent_enabled,
     migrationWindowEnabled: detail.general.migration_window_enabled,
     migrationWindowDatetime: detail.general.migration_window_datetime,
-    analystEscalationEnabled: detail.general.analyst_escalation_enabled,
-    voicebotEscalationEnabled: detail.general.voicebot_escalation_enabled,
     maxInstances: detail.infra.max_instances,
     autoScale: detail.infra.auto_scale,
     fraudHistoryDbRetentionDays: detail.infra.fraud_history_db_retention_days,
     fraudHistoryColdStorageRetentionMonths:
       detail.infra.fraud_history_cold_storage_retention_months,
-    voicebotMaxConcurrentCalls: detail.ops.voicebot_max_concurrent_calls,
-    analystCapacity: {
-      profiles: detail.ops.analyst_capacity.profiles,
-      defaultProfileId: detail.ops.analyst_capacity.default_profile_id,
-      dayOverrides: detail.ops.analyst_capacity.day_overrides as Record<number, string>,
-    },
-    queueMaxLifetimeValue: detail.ops.queue_max_lifetime_value,
-    queueMaxLifetimeUnit: detail.ops.queue_max_lifetime_unit,
-    queueDiscardAmountThreshold: detail.ops.queue_discard_amount_threshold,
-    queueRuleFilterEnabled: detail.ops.queue_rule_filter_enabled,
-    queueRuleFilterMode: detail.ops.queue_rule_filter_mode,
-    queueAllowedTriggeredRules: detail.ops.queue_allowed_triggered_rules,
-    queueDiscardBehavior: {
-      resolutionTag: detail.ops.queue_discard_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.queue_discard_behavior.resolution_method_id,
-    },
-    voicebotShortageBehavior: {
-      resolutionTag: detail.ops.voicebot_shortage_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.voicebot_shortage_behavior.resolution_method_id,
-    },
-    analystShortageBehavior: {
-      resolutionTag: detail.ops.analyst_shortage_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.analyst_shortage_behavior.resolution_method_id,
-    },
     maxTestInstances: detail.test.max_test_instances,
     maxConcurrentExperiments: detail.test.max_concurrent_experiments,
     experimentTimeoutMinutes: detail.test.experiment_timeout_minutes,

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { apiFetch } from "./client";
+import type { ApiShortageBehavior } from "./configurations.functions";
 
 // Client functions wrapping the backend's knowledge-library API (4
 // resources: taxonomies, modus operandi, flags, similar cases) - global,
@@ -25,6 +26,17 @@ export type TaxonomyLibraryEntry = {
   updated_at: string;
 };
 
+// How the analyst agent resolves an alert matching this modus operandi:
+// strategy, preferred resolution method, and what to fall back to when the
+// voicebot / analysts have no capacity (applied without LLM by the
+// executor). Mirrors backend's ModusOperandiPlaybook.
+export type ApiModusOperandiPlaybook = {
+  strategy: string;
+  resolution: ApiShortageBehavior;
+  if_no_voicebot: ApiShortageBehavior;
+  if_no_analyst: ApiShortageBehavior;
+};
+
 export type ModusOperandiLibraryEntry = {
   id: string;
   title: string;
@@ -34,6 +46,7 @@ export type ModusOperandiLibraryEntry = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  playbook: ApiModusOperandiPlaybook | null;
 };
 
 export type FlagLibraryEntry = {
@@ -149,6 +162,7 @@ export function updateModusOperandiLibraryEntry({
     taxonomyLibraryId?: string;
     evolvedVariables?: string[];
     active?: boolean;
+    playbook?: ApiModusOperandiPlaybook;
   };
 }): Promise<ModusOperandiLibraryEntry> {
   return apiFetch(`/api/v0/library/modus-operandi/${encodeURIComponent(data.entryId)}`, {
@@ -159,6 +173,7 @@ export function updateModusOperandiLibraryEntry({
       taxonomy_library_id: data.taxonomyLibraryId,
       evolved_variables: data.evolvedVariables,
       active: data.active,
+      playbook: data.playbook,
     }),
   });
 }

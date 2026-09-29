@@ -198,60 +198,64 @@ export const defaultDeterministicConfig = (): DeterministicConfig => ({
 export const defaultAlertParserConfig = (): AlertParserConfig => ({ fields: [] });
 
 /* ─── Classification + Adversarial (Phase 4) ────────────
-   Mirrors backend's ClassificationConfig/AdversarialConfig. Adversarial
-   has no tool picker of its own - it reuses whichever tools Classification
-   already has configured (shown read-only in its section). */
+   Mirrors backend's ClassificationConfig/AdversarialConfig - both carry
+   the same shared tool block (ToolPickerFields, backend AgentToolsConfig),
+   each read independently. */
 
-/* Tool-picker shape shared by Classification/Adversarial/Detector: a plain
-   enable switch per tool family (item 1/2/3 of the "reemplaza base de
-   conocimiento vector store" request), replacing the old fixed
-   VectorStoreTool/BuiltInTool category pill-toggles. Vector-store search
-   now scopes to specific vector store instances (@/lib/api/
-   vectorStoreInstances.functions, picked by id - see VectorStoreToolField
-   in shared/FormControls.tsx) instead of document-type categories, and
-   blacklist/whitelist are now their own switch (@/lib/api/watchlist.
-   functions, picked by id - see WatchlistToolField) instead of being
-   lumped into "built-in tools" alongside the calculator, which is now just
-   its own switch. Membership direction (watch for presence vs. absence)
-   isn't stored here - it's intrinsic to each selected watchlist's own
-   list_type, read off the watchlist itself (see WatchlistToolField). */
+/* Tool block shared verbatim by Detector, Adversarial (detector),
+   Clasificación and Adversarial (clasificador) - rendered by the single
+   shared/AgentToolsSection.tsx. The vector store is only reachable
+   through the Búsqueda en Vector Store (delegatedResearch.vectorStore); the
+   old separate "Base de conocimiento" switch was the same thing and was
+   merged into it. Watchlist membership direction isn't stored here - it's
+   intrinsic to each selected watchlist's own list_type. */
 export type ToolPickerFields = {
-  vectorStoreEnabled: boolean;
-  // One vector store per stage, not several - see VectorStoreToolField in
-  // shared/FormControls.tsx (a single-select, not the old multi-chip
-  // picker) and ApiToolPickerFields.vector_store_instance_id's note.
-  vectorStoreInstanceId: string | null;
   watchlistEnabled: boolean;
   watchlistIds: string[];
   // Which alert field's value is looked up against the selected
   // watchlists' elements (e.g. "documento", "correo").
   watchlistCompareField: string | null;
   calculatorEnabled: boolean;
+  // XGBoost decides only in the Detector (score >= xgboostFraudThreshold
+  // -> fraude; < xgboostUncertaintyThreshold -> no fraude; en la banda
+  // decide el agente). In every other step its output (score + SHAP) is
+  // separate evidence for the agent.
+  useXgboostModel: boolean;
+  xgboostModelId: string | null;
+  xgboostFraudThreshold: number;
+  xgboostUncertaintyThreshold: number;
+  xgboostShapEnabled: boolean;
+  delegatedResearch: DelegatedResearchSettings;
 };
 
 export const defaultToolPickerFields = (): ToolPickerFields => ({
-  vectorStoreEnabled: false,
-  vectorStoreInstanceId: null,
   watchlistEnabled: false,
   watchlistIds: [],
   watchlistCompareField: null,
   calculatorEnabled: false,
+  useXgboostModel: false,
+  xgboostModelId: null,
+  xgboostFraudThreshold: 0.8,
+  xgboostUncertaintyThreshold: 0.4,
+  xgboostShapEnabled: true,
+  delegatedResearch: defaultDelegatedResearchSettings(),
 });
 
-export type ResearchAgentConfig = { enabled: boolean; onlyWhenInconclusive: boolean; maxDelegations: number; maxIterations: number; timeoutSeconds: number; maxResultItems: number; includeTrace: boolean };
+export type ResearchAgentConfig = { enabled: boolean; maxDelegations: number; timeoutSeconds: number; maxResultItems: number };
+// vectorStore: the agent calls it as a tool; maxDelegations = max
+// interactions per step. historyPandas ("Análisis de historial"): selector
+// = allowedColumns (vacío = todas) + windowDays (0 = sin límite) +
+// maxHistoryRows (las más recientes).
 export type DelegatedResearchSettings = {
-  priority: "vector_first" | "pandas_first";
   vectorStore: ResearchAgentConfig & { vectorStoreInstanceId: string | null; similarityThreshold: number; maxDocumentsPerQuery: number; allowedAssetTypes: string[] };
-  historyPandas: ResearchAgentConfig & { maxHistoryRows: number; maxAnalysisOperations: number; allowedColumns: string[]; allowedOperations: string[] };
+  historyPandas: ResearchAgentConfig & { maxHistoryRows: number; windowDays: number; maxAnalysisOperations: number; allowedColumns: string[]; allowedOperations: string[] };
 };
 export const defaultDelegatedResearchSettings = (): DelegatedResearchSettings => ({
-  priority: "vector_first",
-  vectorStore: { enabled: false, onlyWhenInconclusive: true, maxDelegations: 1, maxIterations: 3, timeoutSeconds: 8, maxResultItems: 10, includeTrace: true, vectorStoreInstanceId: null, similarityThreshold: .7, maxDocumentsPerQuery: 8, allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"] },
-  historyPandas: { enabled: false, onlyWhenInconclusive: true, maxDelegations: 1, maxIterations: 3, timeoutSeconds: 8, maxResultItems: 10, includeTrace: true, maxHistoryRows: 5000, maxAnalysisOperations: 4, allowedColumns: [], allowedOperations: ["filter", "group_by", "aggregate", "distribution", "trend", "outlier", "comparison"] },
+  vectorStore: { enabled: false, maxDelegations: 3, timeoutSeconds: 8, maxResultItems: 10, vectorStoreInstanceId: null, similarityThreshold: .7, maxDocumentsPerQuery: 8, allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"] },
+  historyPandas: { enabled: false, maxDelegations: 1, timeoutSeconds: 8, maxResultItems: 10, maxHistoryRows: 50, windowDays: 30, maxAnalysisOperations: 4, allowedColumns: [], allowedOperations: ["filter", "group_by", "aggregate", "distribution", "trend", "outlier", "comparison"] },
 });
 
 export type ClassificationConfig = ToolPickerFields & {
-  delegatedResearch: DelegatedResearchSettings;
   prompt: string;
   promptVars: string[];
   // "iteraciones de pensamiento" - max ReAct-style tool-call loops before
@@ -271,7 +275,6 @@ export type AdversarialConfig = ToolPickerFields & {
 
 export const defaultClassificationConfig = (): ClassificationConfig => ({
   ...defaultToolPickerFields(),
-  delegatedResearch: defaultDelegatedResearchSettings(),
   prompt: "",
   promptVars: [],
   maxThoughtIterations: 5,
@@ -288,53 +291,19 @@ export const defaultAdversarialConfig = (): AdversarialConfig => ({
 
 /* ─── Detector + Adversarial (Detector) (Wave 6) ─────────
    Runs before Clasificación in the agent pipeline, immediately followed by
-   its own adversarial critique step - mirrors Clasificación/Adversarial's
-   shape (same tool categories + prompt + maxThoughtIterations), plus
-   tool-specific extras: an XGBoost model toggle (own inline model-version
-   selector - the standalone "Modelo" subtab/SegmentModelSection.tsx was
-   removed, this is now the only place a segment's model is picked), its
-   scoring thresholds (xgboostFraudThreshold / xgboostUncertaintyThreshold)
-   and SHAP toggle, and a free-form pandas query tool over the alert's
-   transaction-history dataframe. DetectorAdversarialConfig intentionally
-   has the exact same fields as AdversarialConfig (item 7: "los mismos
-   parámetros que el de clasificación") plus maxThoughtIterations. */
+   its own adversarial critique step. Same shape as Clasificación - the
+   whole tool block (ToolPickerFields) is shared by every step; only
+   XGBoost's semantics differ (it decides here). DetectorAdversarialConfig
+   has the exact same fields as AdversarialConfig (item 7) plus
+   maxThoughtIterations. */
 
-export type DetectorConfig = ToolPickerFields & {
-  delegatedResearch: DelegatedResearchSettings;
-  enablePandasHistoryTool: boolean;
-  useXgboostModel: boolean;
-  xgboostModelId: string | null;
-  // Score >= xgboostFraudThreshold: clasifica directo como clase fraude.
-  // Score en [xgboostUncertaintyThreshold, xgboostFraudThreshold): banda de
-  // incertidumbre, se envía al agente para explorar más a fondo. Score
-  // < xgboostUncertaintyThreshold: se descarta sin pasar por el agente.
-  xgboostFraudThreshold: number;
-  xgboostUncertaintyThreshold: number;
-  xgboostShapEnabled: boolean;
-  prompt: string;
-  promptVars: string[];
-  maxThoughtIterations: number;
-  outputLabels: string[];
-};
+export type DetectorConfig = ClassificationConfig;
 
 export type DetectorAdversarialConfig = AdversarialConfig & {
   maxThoughtIterations: number;
 };
 
-export const defaultDetectorConfig = (): DetectorConfig => ({
-  ...defaultToolPickerFields(),
-  delegatedResearch: defaultDelegatedResearchSettings(),
-  enablePandasHistoryTool: false,
-  useXgboostModel: false,
-  xgboostModelId: null,
-  xgboostFraudThreshold: 0.8,
-  xgboostUncertaintyThreshold: 0.4,
-  xgboostShapEnabled: false,
-  prompt: "",
-  promptVars: [],
-  maxThoughtIterations: 5,
-  outputLabels: [],
-});
+export const defaultDetectorConfig = (): DetectorConfig => defaultClassificationConfig();
 
 export const defaultDetectorAdversarialConfig = (): DetectorAdversarialConfig => ({
   ...defaultAdversarialConfig(),
@@ -585,27 +554,17 @@ export type AgentConfig = {
   dirtyTabs: TabKey[];
 };
 
+// Agent/analyst/voicebot on-off, resource sizing and queue handling are NOT
+// here: they take effect immediately and live in the backend's
+// OperationalSettings singleton (see src/lib/api/operations.functions.ts
+// and the "Operación" tab), never in a versioned configuration.
 export type ConfigSettings = {
-  agentEnabled: boolean;
   migrationWindowEnabled: boolean;
   migrationWindowDatetime: string;
-  analystEscalationEnabled: boolean;
-  voicebotEscalationEnabled: boolean;
   maxInstances: number;
   autoScale: boolean;
   fraudHistoryDbRetentionDays: number;
   fraudHistoryColdStorageRetentionMonths: number;
-  voicebotMaxConcurrentCalls: number;
-  analystCapacity: AnalystCapacity;
-  queueMaxLifetimeValue: number;
-  queueMaxLifetimeUnit: SamplingIntervalUnit;
-  queueDiscardAmountThreshold: number;
-  queueRuleFilterEnabled: boolean;
-  queueRuleFilterMode: ListMembershipMode;
-  queueAllowedTriggeredRules: string[];
-  queueDiscardBehavior: ShortageBehavior;
-  voicebotShortageBehavior: ShortageBehavior;
-  analystShortageBehavior: ShortageBehavior;
   maxTestInstances: number;
   maxConcurrentExperiments: number;
   experimentTimeoutMinutes: number;
@@ -808,26 +767,12 @@ export const defaultAnalystCapacity = (): AnalystCapacity => ({
 });
 
 export const defaultSettings = (): ConfigSettings => ({
-  agentEnabled: true,
   migrationWindowEnabled: false,
   migrationWindowDatetime: "2000-01-01T02:00",
-  analystEscalationEnabled: true,
-  voicebotEscalationEnabled: true,
   maxInstances: 8,
   autoScale: true,
   fraudHistoryDbRetentionDays: 90,
   fraudHistoryColdStorageRetentionMonths: 24,
-  voicebotMaxConcurrentCalls: 40,
-  analystCapacity: defaultAnalystCapacity(),
-  queueMaxLifetimeValue: 60,
-  queueMaxLifetimeUnit: "minutes",
-  queueDiscardAmountThreshold: 0,
-  queueRuleFilterEnabled: false,
-  queueRuleFilterMode: "belongs",
-  queueAllowedTriggeredRules: [],
-  queueDiscardBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
-  voicebotShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
-  analystShortageBehavior: { resolutionTag: "block_soft", resolutionMethodId: null },
   maxTestInstances: 4,
   maxConcurrentExperiments: 3,
   experimentTimeoutMinutes: 30,
@@ -921,7 +866,6 @@ export const defaultSettings = (): ConfigSettings => ({
         },
         detector: {
           ...defaultDetectorConfig(),
-          vectorStoreEnabled: true,
           prompt: "",
           promptVars: ["CoT (cadena de razonamiento)"],
         },
@@ -932,7 +876,6 @@ export const defaultSettings = (): ConfigSettings => ({
         },
         classification: {
           ...defaultClassificationConfig(),
-          vectorStoreEnabled: true,
           watchlistEnabled: true,
           prompt: "",
           promptVars: ["CoT (cadena de razonamiento)", "Taxonomía asignada"],

@@ -421,79 +421,60 @@ export function SamplingDistributionEditor({
   );
 }
 
-/* ─── Vector store tool: enable switch + instance picker (Wave 7) ──
-   Replaces the old fixed-category pill-toggle + single "version" <select>
-   (a global vector store's versions) with an enable switch (same pattern
-   as Detector's XGBoost model toggle) followed by a multi-select of named
-   vector store instances (@/lib/api/vectorStoreInstances.functions - each
-   one a curated, independently-versioned document set, picked by id
-   instead of by document-type category). */
+/* ─── Vector store instance picker ───────────────────────
+   The Búsqueda en Vector Store's instance selector (see AgentToolsSection),
+   shown once the search is switched on. One vector store per step, not
+   several; several steps may point at the same instance - that's
+   sharing, not multi-selection. */
 
-function VectorStoreToolField({
-  enabled,
-  onEnabledChange,
+export function VectorStoreInstancePicker({
   instanceId,
   onInstanceIdChange,
   disabled,
 }: {
-  enabled: boolean;
-  onEnabledChange: (enabled: boolean) => void;
   instanceId: string | null;
   onInstanceIdChange: (id: string | null) => void;
   disabled?: boolean;
 }) {
-  // One vector store per stage, not several - a stage's tool loop searches
-  // exactly one vector_store_id (see backend's ClassificationConfig
-  // .vector_store_instance_id). Several stages may point at the same
-  // instance; that's sharing, not multi-selection.
   const { versions: instances } = useVectorStoreVersions();
   const selected = instances.find((i) => i.id === instanceId);
 
   return (
-    <div className="space-y-3">
-      <SwitchField
-        label="Base de conocimiento (vector store)"
-        hint="Permite al agente buscar semánticamente en una instancia del vector store."
-        checked={enabled}
-        onCheckedChange={(checked) => {
-          onEnabledChange(checked);
-          if (!checked) onInstanceIdChange(null);
-        }}
+    <Field
+      label="Vector store"
+      hint="Instancia en la que busca el agente - debe estar promovida para que la búsqueda real encuentre algo."
+    >
+      <select
+        value={instanceId ?? ""}
+        onChange={(e) => onInstanceIdChange(e.target.value || null)}
         disabled={disabled}
-      />
-      {enabled && (
-        <Field
-          label="Instancia"
-          hint="Vector store que el agente puede consultar - debe estar promovida para que la búsqueda real encuentre algo."
-        >
-          <select
-            value={instanceId ?? ""}
-            onChange={(e) => onInstanceIdChange(e.target.value || null)}
-            disabled={disabled}
-            className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
-          >
-            <option value="">Sin instancia asignada</option>
-            {instances.map((instance) => (
-              <option key={instance.id} value={instance.id}>
-                {`v${instance.version} · ${instance.name}`}
-                {instance.promotedVersion == null ? " (sin promover)" : ""}
-              </option>
-            ))}
-          </select>
-          {instances.length === 0 && (
-            <p className="mt-1.5 text-[11px] text-text-secondary">
-              Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
-            </p>
-          )}
-          {selected && selected.promotedVersion == null && (
-            <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-              Esta instancia todavía no se ha promovido a producción (Biblioteca → Repositorio de
-              Conocimiento) - la búsqueda real no encontrará resultados hasta que se promueva.
-            </p>
-          )}
-        </Field>
+        className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
+      >
+        <option value="">Sin instancia asignada</option>
+        {instances.map((instance) => (
+          <option key={instance.id} value={instance.id}>
+            {`v${instance.version} · ${instance.name}`}
+            {instance.promotedVersion == null ? " (sin promover)" : ""}
+          </option>
+        ))}
+      </select>
+      {!instanceId && (
+        <p className="mt-1.5 text-[11px] text-danger">
+          Selecciona un vector store para poder guardar la búsqueda activa.
+        </p>
       )}
-    </div>
+      {instances.length === 0 && (
+        <p className="mt-1.5 text-[11px] text-text-secondary">
+          Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
+        </p>
+      )}
+      {selected && selected.promotedVersion == null && (
+        <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+          Esta instancia todavía no se ha promovido a producción (Biblioteca → Repositorio de
+          Conocimiento) - la búsqueda real no encontrará resultados hasta que se promueva.
+        </p>
+      )}
+    </Field>
   );
 }
 
@@ -626,12 +607,10 @@ function WatchlistToolField({
   );
 }
 
-/* ─── Agent tool picker (Wave 7) ──────────────────────────
-   Combines the three tool switches above (vector store, watchlist,
-   calculator) into the one block shared verbatim by every agent subtab
-   that has a tool picker: Detector, Adversarial (detector), Clasificación,
-   Adversarial (clasificador) - item 4: "aplica estos cambios para los
-   agentes de las subtabs ... que utilicen estas herramientas". */
+/* ─── Agent tool picker ───────────────────────────────────
+   The plain tool switches (watchlist, calculator) - rendered by the shared
+   AgentToolsSection, which adds XGBoost and the delegated-research
+   tools below them. */
 
 export function AgentToolsFields({
   value,
@@ -646,14 +625,7 @@ export function AgentToolsFields({
 }) {
   return (
     <div className="space-y-5">
-      <VectorStoreToolField
-        enabled={value.vectorStoreEnabled}
-        onEnabledChange={(vectorStoreEnabled) => onChange({ vectorStoreEnabled })}
-        instanceId={value.vectorStoreInstanceId}
-        onInstanceIdChange={(vectorStoreInstanceId) => onChange({ vectorStoreInstanceId })}
-        disabled={disabled}
-      />
-      <div className="pt-2 border-t border-border">
+      <div>
         <WatchlistToolField
           enabled={value.watchlistEnabled}
           onEnabledChange={(watchlistEnabled) => onChange({ watchlistEnabled })}
