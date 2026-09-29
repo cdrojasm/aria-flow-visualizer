@@ -1,19 +1,13 @@
 import { useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { X } from "lucide-react";
 import { DatasetTestForm } from "./DatasetTestForm";
 import { FormularioTestForm } from "./FormularioTestForm";
 import { GeneradorScenarioForm } from "./GeneradorScenarioForm";
 
 /* ─── New test run, three launch strategies behind one entry point ───────
-   Was a single always-Dataset modal (Phase B). Phase C turns it into a
+   The launch area is a side panel, not a modal. Phase C turns it into a
    strategy switcher: Dataset (existing, untouched behavior, now living in
    DatasetTestForm.tsx), Formulario (a raw JSON event dispatched straight
    into the real pipeline via POST /alerts/test) and Generador (configures
@@ -23,13 +17,11 @@ import { GeneradorScenarioForm } from "./GeneradorScenarioForm";
 
 type LaunchStrategy = "dataset" | "formulario" | "generador";
 
-export function NewTestRunModal({
-  open,
+export function NewTestRunPanel({
   onClose,
   initialConfigurationId = null,
   initialConfigVersion = null,
 }: {
-  open: boolean;
   onClose: () => void;
   // Deep-link pre-fill (from /testing?configurationId=...&version=...) — set
   // by "Probar configuración" in Configuración. Only meaningful for the
@@ -40,29 +32,27 @@ export function NewTestRunModal({
   const [strategy, setStrategy] = useState<LaunchStrategy>("dataset");
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          onClose();
-          // Reset to the default tab for the next time this modal opens -
-          // it fully unmounts on close (Radix Dialog), so this just avoids
-          // a stale tab flashing before the reset would've happened anyway.
-          setStrategy("dataset");
-        }
-      }}
-    >
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Nueva prueba</DialogTitle>
-          <DialogDescription>
-            Elige cómo lanzar la prueba del pipeline de 7 pasos: sobre un dataset, con un evento
-            preformado por formulario, o con un generador de eventos sintéticos.
-          </DialogDescription>
-        </DialogHeader>
+    <aside className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto">
+      <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[14px] font-semibold text-text-primary">Nueva prueba</h2>
+          <p className="text-[12px] text-text-secondary mt-0.5">
+            Elige cómo lanzar el pipeline de 7 pasos.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar nueva prueba"
+          className="text-text-secondary hover:text-text-primary shrink-0"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
 
+      <div className="p-5">
         <Tabs value={strategy} onValueChange={(v) => setStrategy(v as LaunchStrategy)}>
-          <TabsList>
+          <TabsList className="w-full">
             <TabsTrigger value="dataset">Dataset</TabsTrigger>
             <TabsTrigger value="formulario">Formulario</TabsTrigger>
             <TabsTrigger value="generador">Generador</TabsTrigger>
@@ -82,7 +72,7 @@ export function NewTestRunModal({
             <GeneradorScenarioForm onClose={onClose} />
           </TabsContent>
         </Tabs>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </aside>
   );
 }

@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { NewTestRunModal } from "@/components/testing/NewTestRunModal";
+import { NewTestRunPanel } from "@/components/testing/NewTestRunModal";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { usePagination } from "@/hooks/usePagination";
@@ -28,7 +28,7 @@ import { listScenarios, type ScenarioStatus } from "@/lib/api/eventSimulation.fu
 
 // Deep-link params for the "Probar configuración" button in Configuración
 // (src/routes/configuracion.tsx): configurationId+version identify the
-// exact saved version to pre-select in NewTestRunModal, opened
+// exact saved version to pre-select in NewTestRunPanel, opened
 // automatically when present — see TestingPage's mount effect below.
 export const Route = createFileRoute("/testing/")({
   // Optional keys (not `key: value | undefined`) so plain `<Link to="/testing">`
@@ -207,17 +207,16 @@ function TestingPage() {
           </div>
           <button
             onClick={() => setShowNewRunModal(true)}
+            disabled={showNewRunModal}
             className="inline-flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 shrink-0"
           >
             <Plus className="h-3.5 w-3.5" /> Nueva prueba
           </button>
         </header>
-        <NewTestRunModal
-          open={showNewRunModal}
-          onClose={() => setShowNewRunModal(false)}
-          initialConfigurationId={deepLinkConfigurationId ?? null}
-          initialConfigVersion={deepLinkVersion ?? null}
-        />
+        <div
+          className={`grid gap-6 items-start ${showNewRunModal ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1"}`}
+        >
+          <div className="space-y-6">
         {/* Last runs */}
         <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
@@ -473,6 +472,15 @@ function TestingPage() {
             </div>
           </section>
         )}
+          </div>
+          {showNewRunModal && (
+            <NewTestRunPanel
+              onClose={() => setShowNewRunModal(false)}
+              initialConfigurationId={deepLinkConfigurationId ?? null}
+              initialConfigVersion={deepLinkVersion ?? null}
+            />
+          )}
+        </div>
 
         <ConfirmDeleteDialog
           open={showDeleteConfirm}
