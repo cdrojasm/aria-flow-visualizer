@@ -52,10 +52,25 @@ export function NewTestRunPanel({
 
       <div className="p-5">
         <Tabs value={strategy} onValueChange={(v) => setStrategy(v as LaunchStrategy)}>
-          <TabsList className="w-full">
-            <TabsTrigger value="dataset">Dataset</TabsTrigger>
-            <TabsTrigger value="formulario">Formulario</TabsTrigger>
-            <TabsTrigger value="generador">Generador</TabsTrigger>
+          <TabsList className="flex h-auto w-full items-center justify-start gap-1 rounded-xl border border-border bg-card p-1.5">
+            <TabsTrigger
+              value="dataset"
+              className="flex-1 rounded-lg px-3 py-2 text-[13px] font-medium text-text-secondary shadow-none hover:text-text-primary data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+            >
+              Dataset
+            </TabsTrigger>
+            <TabsTrigger
+              value="formulario"
+              className="flex-1 rounded-lg px-3 py-2 text-[13px] font-medium text-text-secondary shadow-none hover:text-text-primary data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+            >
+              Formulario
+            </TabsTrigger>
+            <TabsTrigger
+              value="generador"
+              className="flex-1 rounded-lg px-3 py-2 text-[13px] font-medium text-text-secondary shadow-none hover:text-text-primary data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-none"
+            >
+              Generador
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dataset">
