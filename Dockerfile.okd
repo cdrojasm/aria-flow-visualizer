@@ -1,0 +1,46 @@
+# OKD image for the static SPA. Base images and npm packages are pulled
+# through BBVA Artifactory; the local equivalent is ./Dockerfile, which
+# stays on public registries.
+#
+#   docker build -f Dockerfile.okd \
+#     --build-arg ARTIFACTORY_USER=... --build-arg ARTIFACTORY_PASSWORD=... \
+#     -t artifactory.globaldevtools.bbva.com:443/co-genai-public-cloud-docker-local/aria-genai/co-frontend-app-aria-frontend:<tag> .
+#
+# The runtime runs as an arbitrary non-root UID (OKD restricted SCC) and
+# listens on 8080, matching deploy/okd/iac_celery/frontend/app in the backend.
+
+ARG NODE_IMAGE=artifactory.globaldevtools.bbva.com:443/public.ecr.aws-remote/docker/library/node:22-alpine
+ARG NGINX_IMAGE=artifactory.globaldevtools.bbva.com:443/public.ecr.aws-remote/nginx/nginx-unprivileged:1.27-alpine
+
+FROM ${NODE_IMAGE} AS builder
+
+ARG ARTIFACTORY_USER
+ARG ARTIFACTORY_PASSWORD
+ARG NPM_REGISTRY=https://artifactory.globaldevtools.bbva.com/artifactory/api/npm/npmjs.com-remote/
+ARG BUN_VERSION=1
+
+WORKDIR /app
+
+# bun.lock is the source of truth (package-lock.json resolves a different,
+# non-building tree), so bun itself is installed from the npm registry.
+# Registry credentials live only in this disposable stage's .npmrc, which is
+# deleted before the sources are copied in.
+COPY package.json bun.lock bunfig.toml ./
+RUN echo "registry=${NPM_REGISTRY}" > .npmrc \
+    && if [ -n "${ARTIFACTORY_USER}" ]; then \
+         echo "//${NPM_REGISTRY#*://}:_auth=$(printf '%s:%s' "${ARTIFACTORY_USER}" "${ARTIFACTORY_PASSWORD}" | base64 | tr -d '\n')" >> .npmrc; \
+       fi \
+    && npm install -g --userconfig .npmrc --no-audit --no-fund bun@${BUN_VERSION} \
+    && bun install --frozen-lockfile \
+    && rm -f .npmrc
+
+COPY . .
+# Static SPA build (no SSR runtime), served at the container's root path.
+RUN STATIC=1 STATIC_BASE=/ bun run build:static
+
+FROM ${NGINX_IMAGE} AS runtime
+
+COPY --from=builder /app/dist/client /usr/share/nginx/html
+COPY nginx.okd.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 8080
