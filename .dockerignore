@@ -10,3 +10,9 @@ dist-ssr
 .env*.local
 .git
 .github
+
+# Local SSH deploy keys — never send them into a build context.
+bbva_enterprise
+bbva_enterprise.pub
+*.pem
+*.key
