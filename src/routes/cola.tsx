@@ -176,11 +176,19 @@ function toPendingRow(alert: AnalystQueueAlert, userId: string | undefined): Pen
     amount?: number | { baseValue?: number };
     channel?: string;
     eventType?: string;
-    object?: { triggeredRules?: { name?: string }[] };
+    object?: { triggeredRules?: { name?: string }[] | string };
   };
   const created = new Date(alert.created_at);
   const amount = num(typeof p.amount === "object" ? p.amount?.baseValue : p.amount);
-  const rules = (p.object?.triggeredRules ?? []).map((r) => r?.name).filter(Boolean) as string[];
+  // Parser payloads carry [{name}]; CSV-loaded alerts carry "RULE-1;RULE-2".
+  const rawRules = p.object?.triggeredRules ?? [];
+  const rules = (
+    typeof rawRules === "string"
+      ? rawRules.split(/[;,]/).map((r) => r.trim())
+      : Array.isArray(rawRules)
+        ? rawRules.map((r) => r?.name)
+        : []
+  ).filter(Boolean) as string[];
   return {
     alertId: alert.alert_id,
     id: alert.alert_id.slice(0, 8),

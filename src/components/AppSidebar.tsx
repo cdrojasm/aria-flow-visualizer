@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
@@ -11,9 +12,11 @@ import {
   History,
   Library,
   BrainCircuit,
+  LogOut,
 } from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
 import type { AuthUser } from "@/lib/api/auth.functions";
+import { LogoutDialog } from "./LogoutDialog";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -38,10 +41,11 @@ export function AppSidebar({
   onToggle: () => void;
   role: Role | null | undefined;
   user: AuthUser | null | undefined;
-  onLogout: () => void;
+  onLogout: () => Promise<void>;
   apiHealthy: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
 
   return (
@@ -98,16 +102,15 @@ export function AppSidebar({
         })}
       </nav>
       <div className="px-3 py-4 border-t border-white/10">
-        <button
-          onClick={onLogout}
-          title="Cerrar sesión"
-          className={`w-full flex items-center rounded-md -mx-1 px-1 py-1 hover:bg-white/10 transition-colors ${collapsed ? "justify-center" : "gap-3"}`}
-        >
-          <div className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold">
+        <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-3"}`}>
+          <div
+            className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold"
+            title={collapsed ? user?.name : undefined}
+          >
             {user?.name.slice(0, 2).toUpperCase() ?? "AR"}
           </div>
           {!collapsed && (
-            <div className="min-w-0 text-left">
+            <div className="min-w-0 flex-1">
               <div className="text-[13px] font-medium truncate">
                 {user?.name ?? "Sesión requerida"}
               </div>
@@ -116,7 +119,18 @@ export function AppSidebar({
               </div>
             </div>
           )}
-        </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => setConfirmLogout(true)}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              className="shrink-0 p-1.5 rounded-md hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
         {!collapsed && (
           <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/80">
             <span className="relative flex h-2 w-2">
@@ -131,6 +145,12 @@ export function AppSidebar({
           </div>
         )}
       </div>
+      <LogoutDialog
+        open={confirmLogout}
+        onOpenChange={setConfirmLogout}
+        user={user}
+        onLogout={onLogout}
+      />
     </aside>
   );
 }

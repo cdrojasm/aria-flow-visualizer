@@ -1,4 +1,5 @@
 import { apiFetch } from "./client";
+import type { AmountTier } from "@/lib/amountTiers";
 import type { ApiAnalystCapacity, ApiShortageBehavior } from "./configurations.functions";
 import type {
   AnalystCapacity,
@@ -36,6 +37,25 @@ export type ApiOperationalSettings = {
   experiment_timeout_minutes: number;
   max_stored_test_runs: number;
   test_cleanup_policy: TestCleanupPolicy;
+  // Request: omitted/null keeps the current tiers, [] clears them; must be
+  // contiguous, non-overlapping and cover 0 -> inf (else 422). Response:
+  // always the full current list.
+  amount_tiers: ApiAmountTier[] | null;
+  // Read-only: bumped server-side on every amount_tiers change, ignored on
+  // requests.
+  amount_tier_set_version: number;
+  // Share (0..1) of finished alerts sent to the reasoning LLM-judge; 0
+  // disables it.
+  reasoning_evaluation_sample_rate: number;
+};
+
+// AmountTierSchema
+export type ApiAmountTier = {
+  code: string;
+  label: string;
+  min_inclusive: number;
+  // null = unbounded (the last tier).
+  max_exclusive: number | null;
 };
 
 export type OperationalSettings = {
@@ -51,6 +71,9 @@ export type OperationalSettings = {
   queueRuleFilterMode: ListMembershipMode;
   queueAllowedTriggeredRules: string[];
   queueDiscardBehavior: ShortageBehavior;
+  amountTiers: AmountTier[];
+  amountTierSetVersion: number;
+  reasoningEvaluationSampleRate: number;
   // Round-tripped untouched - edited elsewhere / not yet in this panel.
   passthrough: Pick<
     ApiOperationalSettings,
@@ -87,6 +110,14 @@ export function operationalSettingsFromApi(api: ApiOperationalSettings): Operati
       resolutionTag: api.queue_discard_behavior.resolution_tag,
       resolutionMethodId: api.queue_discard_behavior.resolution_method_id,
     },
+    amountTiers: (api.amount_tiers ?? []).map((tier) => ({
+      code: tier.code,
+      label: tier.label,
+      minInclusive: tier.min_inclusive,
+      maxExclusive: tier.max_exclusive,
+    })),
+    amountTierSetVersion: api.amount_tier_set_version,
+    reasoningEvaluationSampleRate: api.reasoning_evaluation_sample_rate,
     passthrough: {
       max_instances: api.max_instances,
       auto_scale: api.auto_scale,
@@ -123,6 +154,16 @@ export function operationalSettingsToApi(s: OperationalSettings): ApiOperational
       resolution_tag: s.queueDiscardBehavior.resolutionTag,
       resolution_method_id: s.queueDiscardBehavior.resolutionMethodId ?? null,
     },
+    // Always the full list: the backend only bumps amount_tier_set_version
+    // when it actually differs from the stored one.
+    amount_tiers: s.amountTiers.map((tier) => ({
+      code: tier.code.trim(),
+      label: tier.label.trim(),
+      min_inclusive: tier.minInclusive,
+      max_exclusive: tier.maxExclusive,
+    })),
+    amount_tier_set_version: s.amountTierSetVersion,
+    reasoning_evaluation_sample_rate: s.reasoningEvaluationSampleRate,
   };
 }
 

@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { ACCESS_TOKEN_KEY, apiFetch } from "./client";
 
 export type Role =
   | "manager"
@@ -29,10 +29,29 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return apiFetch("/api/v0/auth/me");
 }
 
+// Revokes the current access token server-side, so a copy of it stops
+// working before its exp.
+export async function logoutSession(): Promise<void> {
+  return apiFetch("/api/v0/auth/logout", { method: "POST" });
+}
+
 export function storeAccessToken(token: string) {
-  localStorage.setItem("aria.auth.accessToken", token);
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
 }
 
 export function clearAccessToken() {
-  localStorage.removeItem("aria.auth.accessToken");
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
+// Unsaved work tied to whoever was signed in. Cleared on logout so the next
+// person on a shared workstation doesn't inherit it. Pure UI preferences
+// (active tab, hidden columns) are kept.
+const USER_DRAFT_KEYS = [
+  "aria.configuracion.editorState.v4",
+  "aria.model-training.draft.v1",
+  "aria.new-test-run.config-selection.v1",
+];
+
+export function clearUserDrafts() {
+  USER_DRAFT_KEYS.forEach((key) => localStorage.removeItem(key));
 }

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   clearAccessToken,
+  clearUserDrafts,
   getCurrentUser,
   login,
+  logoutSession,
   storeAccessToken,
   type AuthUser,
   type Role,
 } from "@/lib/api/auth.functions";
+import { ACCESS_TOKEN_KEY, SESSION_ENDED_EVENT } from "@/lib/api/client";
 
 export type { Role } from "@/lib/api/auth.functions";
 
@@ -45,10 +49,11 @@ export const ROLE_NAV: Record<Role, string[]> = {
 };
 
 export function useRole() {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
 
   useEffect(() => {
-    if (!localStorage.getItem("aria.auth.accessToken")) {
+    if (!localStorage.getItem(ACCESS_TOKEN_KEY)) {
       setUser(null);
       return;
     }
@@ -60,16 +65,40 @@ export function useRole() {
       });
   }, []);
 
+  // The session can end outside this component: a 401 from any API call
+  // (expired/revoked token) or a logout in another tab (the storage event
+  // only fires in the *other* tabs).
+  useEffect(() => {
+    const endSession = () => {
+      queryClient.clear();
+      setUser(null);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ACCESS_TOKEN_KEY && !event.newValue) endSession();
+    };
+    window.addEventListener(SESSION_ENDED_EVENT, endSession);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SESSION_ENDED_EVENT, endSession);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [queryClient]);
+
   const signIn = useCallback(async (email: string, password: string) => {
     const session = await login(email, password);
     storeAccessToken(session.access_token);
     setUser(session);
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Best effort: even if the API is down the local session still ends;
+    // the token then just runs out at its exp.
+    await logoutSession().catch(() => undefined);
     clearAccessToken();
+    clearUserDrafts();
+    queryClient.clear();
     setUser(null);
-  }, []);
+  }, [queryClient]);
 
   return { user, role: user?.role, signIn, logout };
 }

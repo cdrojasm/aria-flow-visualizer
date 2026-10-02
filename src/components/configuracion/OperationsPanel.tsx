@@ -11,6 +11,7 @@ import {
   Save,
   Users,
 } from "lucide-react";
+import { AmountTierEditor } from "@/components/configuracion/AmountTierEditor";
 import { AnalystCapacityEditor } from "@/components/configuracion/AnalystCapacityEditor";
 import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
 import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
@@ -18,6 +19,7 @@ import { Field, LimitField } from "@/components/configuracion/shared/FormControl
 import { ResolutionMethodPicker } from "@/components/configuracion/shared/ResolutionMethodPicker";
 import type { SamplingIntervalUnit } from "@/data/configs";
 import { useRole } from "@/hooks/useRole";
+import { validateAmountTiers } from "@/lib/amountTiers";
 import {
   getOperationalSettings,
   getOperationsCapacity,
@@ -47,6 +49,9 @@ const SETTING_LABELS: Record<string, string> = {
   analyst_enabled: "Estado del analista",
   voicebot_enabled: "Estado del voicebot",
   voicebot_max_concurrent_calls: "Slots de voicebot",
+  amount_tiers: "Rangos de monto",
+  amount_tier_set_version: "Versión de rangos de monto",
+  reasoning_evaluation_sample_rate: "Muestreo de evaluación de razonamiento",
 };
 
 function settingLabel(path: string): string {
@@ -56,9 +61,16 @@ function settingLabel(path: string): string {
   return path;
 }
 
-function formatValue(value: unknown): string {
+function formatValue(value: unknown, path?: string): string {
   if (typeof value === "boolean") return value ? "encendido" : "apagado";
   if (value === null || value === undefined) return "—";
+  if (path === "amount_tiers" && Array.isArray(value)) {
+    const codes = value.map((tier) => (tier as { code?: unknown }).code).filter(Boolean);
+    return codes.length ? codes.join(", ") : "sin rangos";
+  }
+  if (path === "reasoning_evaluation_sample_rate" && typeof value === "number") {
+    return `${(value * 100).toLocaleString("es-CO", { maximumFractionDigits: 2 })}%`;
+  }
   if (typeof value === "object") return "(editado)";
   return String(value);
 }
@@ -189,6 +201,12 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
 
   const saved = settingsQuery.data;
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const tierErrors = validateAmountTiers(draft.amountTiers);
+  const sampleRateValid =
+    Number.isFinite(draft.reasoningEvaluationSampleRate) &&
+    draft.reasoningEvaluationSampleRate >= 0 &&
+    draft.reasoningEvaluationSampleRate <= 1;
+  const canSave = dirty && tierErrors.length === 0 && sampleRateValid;
   const patch = (changes: Partial<OperationalSettings>) =>
     setDraft((prev) => (prev ? { ...prev, ...changes } : prev));
   const capacity = capacityQuery.data;
@@ -203,7 +221,15 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
           </p>
           <div className="flex items-center gap-2">
             {saveMutation.isError && (
-              <span className="text-[12px] text-danger">No se pudo guardar.</span>
+              <span className="text-[12px] text-danger">
+                No se pudo guardar
+                {String(saveMutation.error).includes("422")
+                  ? ": el servidor rechazó los valores (revisa los rangos de monto)."
+                  : "."}
+              </span>
+            )}
+            {dirty && !canSave && (
+              <span className="text-[12px] text-danger">Corrige los errores antes de guardar.</span>
             )}
             <button
               type="button"
@@ -215,7 +241,7 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
             </button>
             <button
               type="button"
-              disabled={!dirty}
+              disabled={!canSave}
               onClick={() => saveMutation.mutate(draft)}
               className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
             >
@@ -484,6 +510,57 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
         </section>
 
         <Section
+          title="Rangos de monto"
+          description="Rangos con los que se clasifica el monto de cada alerta al llegar. Alimentan el filtro de monto de Dashboard, Monitor e Histórico; cada cambio crea una nueva versión del juego de rangos."
+        >
+          <div className="p-6">
+            <AmountTierEditor
+              value={draft.amountTiers}
+              version={draft.amountTierSetVersion}
+              onChange={(amountTiers) => patch({ amountTiers })}
+            />
+          </div>
+        </Section>
+
+        <Section
+          title="Evaluación de razonamiento"
+          description="Porcentaje de alertas finalizadas que un evaluador LLM revisa para medir alucinaciones y uso correcto de datos (Monitor). 0 % lo desactiva."
+        >
+          <div className="p-6">
+            <Field
+              label="Muestra evaluada"
+              hint="Entre 0 % y 100 %. Más muestra da indicadores más precisos a cambio de más llamadas al LLM."
+            >
+              <div className="flex items-center gap-2 max-w-xs">
+                <input
+                  type="number"
+                  aria-label="Porcentaje de muestreo de evaluación"
+                  min={0}
+                  max={100}
+                  step={0.5}
+                  value={
+                    Number.isFinite(draft.reasoningEvaluationSampleRate)
+                      ? Math.round(draft.reasoningEvaluationSampleRate * 10000) / 100
+                      : ""
+                  }
+                  onChange={(e) =>
+                    patch({
+                      reasoningEvaluationSampleRate:
+                        e.target.value.trim() === "" ? Number.NaN : Number(e.target.value) / 100,
+                    })
+                  }
+                  className="w-24 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+                />
+                <span className="text-[12px] text-text-secondary">%</span>
+              </div>
+              {!sampleRateValid && (
+                <p className="mt-1 text-[12px] text-danger">Debe ser un valor entre 0 y 100.</p>
+              )}
+            </Field>
+          </div>
+        </Section>
+
+        <Section
           title="Historial de cambios"
           description="Últimos cambios guardados en esta pestaña."
         >
@@ -506,7 +583,7 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
                           : change.changes
                               .map(
                                 (c) =>
-                                  `${settingLabel(c.path)}: ${formatValue(c.previous)} → ${formatValue(c.new)}`,
+                                  `${settingLabel(c.path)}: ${formatValue(c.previous, c.path)} → ${formatValue(c.new, c.path)}`,
                               )
                               .filter((line, index, all) => all.indexOf(line) === index)
                               .join(" · ")}

@@ -6,8 +6,15 @@
 // GitHub Pages).
 export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
+export const ACCESS_TOKEN_KEY = "aria.auth.accessToken";
+
+// Fired when the session ends without the user clicking "Cerrar sesión"
+// (token expired or revoked -> the API answers 401). useRole listens to it
+// so every mounted layout drops to /login at once.
+export const SESSION_ENDED_EVENT = "aria:session-ended";
+
 export function accessToken(): string | null {
-  return typeof window === "undefined" ? null : localStorage.getItem("aria.auth.accessToken");
+  return typeof window === "undefined" ? null : localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -20,6 +27,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       ...init?.headers,
     },
   });
+  if (res.status === 401 && token) {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    window.dispatchEvent(new Event(SESSION_ENDED_EVENT));
+  }
   if (!res.ok) {
     throw new Error(`${path} -> ${res.status}: ${await res.text()}`);
   }
