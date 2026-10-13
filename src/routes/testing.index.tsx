@@ -119,10 +119,12 @@ function TestingPage() {
   const testRunsQuery = useQuery({
     queryKey: ["testRuns", order],
     queryFn: () => listTestRuns({ data: { order } }),
+    refetchInterval: 5_000,
   });
   const scenariosQuery = useQuery({
     queryKey: ["scenarios"],
     queryFn: () => listScenarios(),
+    refetchInterval: 5_000,
   });
 
   const deleteMutation = useMutation({

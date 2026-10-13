@@ -963,18 +963,35 @@ function ConfiguracionPage() {
     }
   };
 
-  // ponytail: drops the local draft rather than rebasing it onto the new
-  // latest version — simplest correct response to a 409, at the cost of
-  // losing unsaved edits. Add a merge/rebase UX if that turns out to bite.
+  // Retain the local draft after a 409. The user can explicitly rebase it
+  // onto the latest saved version, which updates its base without dropping edits.
   const reloadLatestVersion = () => {
     if (!selectedConfigId) return;
+    const configId = selectedConfigId;
+    const latestVersion = configListItems.find((item) => item.id === configId)?.latestVersion;
+    if (latestVersion == null) return;
     setVersionConflict(false);
-    setDrafts((prev) => {
-      const next = { ...prev };
-      delete next[selectedConfigId];
-      return next;
+    void queryClient.fetchQuery({
+      queryKey: ["configurationVersion", configId, latestVersion],
+      queryFn: () =>
+        getConfigurationVersion({ data: { configurationId: configId, version: latestVersion } }),
+    }).then((latest) => {
+      setDrafts((prev) => {
+        const draft = prev[configId];
+        if (!draft) return prev;
+        return {
+          ...prev,
+          [configId]: {
+            ...draft,
+            baseline: settingsFromConfigurationDetail(latest),
+            basedOnVersion: latestVersion,
+          },
+        };
+      });
+    }).catch((error) => {
+      setVersionConflict(true);
+      setSavePreviewError(error instanceof Error ? error.message : "No se pudo cargar la última versión.");
     });
-    queryClient.invalidateQueries({ queryKey: ["configurations"] });
   };
 
   const openDeploy = (configId: string, version: number) => {
@@ -1739,15 +1756,15 @@ function ConfiguracionPage() {
           <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
             <p className="text-[12px] text-text-primary">
-              Alguien más guardó una versión más nueva de esta configuración desde que cargaste este
-              borrador. Recarga la última versión antes de reintentar — tus cambios sin guardar se
-              perderán.
+              Alguien más guardó una versión más nueva de esta configuración. Tus cambios siguen
+              guardados localmente. Puedes actualizar la versión base y conservar tus ediciones para
+              revisarlas antes de reintentar.
             </p>
             <button
               onClick={reloadLatestVersion}
               className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-danger border border-danger/30 rounded-md px-2.5 py-1 hover:bg-danger/10 shrink-0"
             >
-              Recargar última versión
+              Actualizar base y conservar cambios
             </button>
           </div>
         )}

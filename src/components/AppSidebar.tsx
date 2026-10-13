@@ -20,7 +20,7 @@ import { LogoutDialog } from "./LogoutDialog";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/cola", label: "In Progress", icon: Inbox },
+  { to: "/cola", label: "En proceso", icon: Inbox },
   { to: "/historico-fraude", label: "Histórico de Gestión de Fraude", icon: History },
   { to: "/monitor", label: "Monitor del Agente", icon: GaugeCircle },
   { to: "/testing", label: "Testing", icon: FlaskConical },

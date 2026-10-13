@@ -95,7 +95,12 @@ export function LimitField({
           min={min}
           max={max}
           step={step}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (raw === "") return;
+            const next = Number(raw);
+            if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next)));
+          }}
           className="w-32 h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
         />
         {suffix && <span className="text-[12px] text-text-secondary">{suffix}</span>}
