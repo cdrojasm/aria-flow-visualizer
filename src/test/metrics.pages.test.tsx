@@ -47,7 +47,7 @@ const range = {
   from: "2026-09-30T12:00:00Z",
   to: "2026-10-01T12:00:00Z",
   timezone: "America/Bogota",
-  amount_tier_set_versions: ["1"],
+  schema_versions: ["1"],
 };
 const histogram = [{ bucket: "rt_lt_1m", upper_bound_seconds: 60, count: 3 }];
 const quality = {
@@ -189,7 +189,7 @@ const historyItem = {
   subchannel: "PSE",
   amount: 1200,
   amount_tier: "bajo",
-  amount_tier_set_version: 1,
+  schema_version: 1,
   configuration_id: "cfg",
   resolution_method: "aria",
   mark: "fraud",
@@ -227,7 +227,7 @@ const server = setupServer(
   http.get("*/api/v0/operational-settings", () =>
     HttpResponse.json({
       amount_tiers: [],
-      amount_tier_set_version: 1,
+      schema_version: 1,
       reasoning_evaluation_sample_rate: 0.05,
       analyst_capacity: { profiles: [], default_profile_id: "", day_overrides: {} },
       queue_discard_behavior: { resolution_tag: "block_soft", resolution_method_id: null },

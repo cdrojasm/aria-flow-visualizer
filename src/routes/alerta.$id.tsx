@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -18,6 +18,13 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { curateAlertToDataset } from "@/lib/api/alerts.functions";
+import {
+  getActiveAlertSchema,
+  getAlertRaw,
+  getAlertSchemaVersion,
+  type AlertSchemaVersion,
+} from "@/lib/api/alertSchema.functions";
+import { AlertSchemaView, type CanonicalAlertData } from "@/components/alert/AlertSchemaView";
 import { getDatasets } from "@/lib/api/datasets.functions";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -42,7 +49,7 @@ export const Route = createFileRoute("/alerta/$id")({
   component: AlertaDetailPage,
 });
 
-type AlertTab = "resumen" | "razonamiento" | "data" | "usuario" | "historial";
+type AlertTab = "resumen" | "razonamiento" | "data" | "usuario" | "historial" | "raw";
 
 const TABS: { id: AlertTab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
@@ -109,22 +116,6 @@ function stepOutput(detail: AlertDetail | undefined, name: string): Json {
   return asObject(step?.output);
 }
 
-// Flattens nested payload objects into dotted key/value rows.
-function flatten(value: unknown, prefix = ""): [string, string][] {
-  if (value === null || value === undefined) return prefix ? [[prefix, "—"]] : [];
-  if (Array.isArray(value)) {
-    if (value.every((v) => typeof v !== "object" || v === null))
-      return [[prefix, value.join(", ") || "—"]];
-    return value.flatMap((v, i) => flatten(v, `${prefix}[${i}]`));
-  }
-  if (typeof value === "object") {
-    return Object.entries(value as Json).flatMap(([k, v]) =>
-      flatten(v, prefix ? `${prefix}.${k}` : k),
-    );
-  }
-  return [[prefix, String(value)]];
-}
-
 function duration(step: AlertStep): string {
   if (!step.started_at || !step.finished_at) return "—";
   const ms = new Date(step.finished_at).getTime() - new Date(step.started_at).getTime();
@@ -134,29 +125,6 @@ function duration(step: AlertStep): string {
 function minutesSince(iso: string): string {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}
-
-function KeyValueTable({ rows, empty }: { rows: [string, string][]; empty: string }) {
-  if (rows.length === 0) return <p className="text-[13px] text-text-secondary">{empty}</p>;
-  return (
-    <div className="bg-card rounded-xl border border-border overflow-hidden">
-      <table className="w-full text-[12px]">
-        <tbody>
-          {rows.map(([k, v], i) => (
-            <tr
-              key={`${k}-${i}`}
-              className={`border-b border-border/50 last:border-0 ${i % 2 === 1 ? "bg-surface/50" : ""}`}
-            >
-              <td className="px-4 py-2.5 text-text-primary font-medium align-top w-[40%] break-all">
-                {k}
-              </td>
-              <td className="px-4 py-2.5 text-text-secondary font-mono break-all">{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 /* ────────────── tabs ────────────── */
@@ -189,7 +157,13 @@ function PlaybookFallbacks({ executor }: { executor: Json }) {
   );
 }
 
-function ResumenTab({ detail }: { detail: AlertDetail }) {
+function ResumenTab({
+  detail,
+  schema,
+}: {
+  detail: AlertDetail;
+  schema: AlertSchemaVersion | null;
+}) {
   const analyst = stepOutput(detail, "analyst");
   const executor = stepOutput(detail, "executor");
   const classification = Object.keys(stepOutput(detail, "classification")).length
@@ -203,8 +177,9 @@ function ResumenTab({ detail }: { detail: AlertDetail }) {
     ["Perfilamiento transacción", profiling.transaction_profile],
     ["Perfil transaccional (histórico)", profiling.transactional_profile],
   ];
-  const payload = detail.payload as Json;
-  const amount = asObject(payload.amount).baseValue ?? payload.amount;
+  const amountField = schema?.fields.find((field) => field.id === schema.field_roles.amount);
+  const amount = amountField ? detail.input[amountField.field] : undefined;
+  const channelField = schema?.fields.find((field) => field.id === schema.field_roles.channel);
 
   return (
     <div className="max-w-[1180px] space-y-6">
@@ -315,7 +290,7 @@ function ResumenTab({ detail }: { detail: AlertDetail }) {
               ["Tipo", detail.event_type],
               ["Cliente", detail.customer_id ?? "—"],
               ["Monto", amount !== undefined && amount !== null ? String(amount) : "—"],
-              ["Canal", payload.channel ? String(payload.channel) : "—"],
+              ["Canal", channelField ? String(detail.input[channelField.field] ?? "—") : "—"],
               ["Recibida", new Date(detail.created_at).toLocaleString("es-CO")],
             ].map(([k, v]) => (
               <div key={k} className="flex justify-between gap-2">
@@ -332,7 +307,13 @@ function ResumenTab({ detail }: { detail: AlertDetail }) {
   );
 }
 
-function RazonamientoTab({ detail }: { detail: AlertDetail }) {
+function RazonamientoTab({
+  detail,
+  schema,
+}: {
+  detail: AlertDetail;
+  schema: AlertSchemaVersion | null;
+}) {
   const stepKey = (step: AlertStep, i: number) => `${step.step_name}-${step.attempt}-${i}`;
   // Opens the analyst's decision by default (the last analyst step).
   const [open, setOpen] = useState<string | null>(() => {
@@ -345,111 +326,84 @@ function RazonamientoTab({ detail }: { detail: AlertDetail }) {
   if (detail.steps.length === 0)
     return <p className="text-[13px] text-text-secondary">El workflow aún no registra pasos.</p>;
   return (
-    <section className="max-w-[860px] bg-card rounded-xl border border-border p-6">
-      <h2 className="text-[14px] font-semibold text-text-primary mb-5">
-        Línea de tiempo del ciclo
-      </h2>
-      <ol className="relative">
-        {detail.steps.map((step, i) => {
-          const key = stepKey(step, i);
-          const isOpen = open === key;
-          const failed = step.status === "FAILED";
-          const running = step.status === "RUNNING";
-          return (
-            <li key={key} className="relative pl-10 pb-5 last:pb-0">
-              {i < detail.steps.length - 1 && (
-                <span className="absolute left-[14px] top-7 bottom-0 w-px bg-border" />
-              )}
-              <button onClick={() => setOpen(isOpen ? null : key)} className="w-full text-left">
-                <span
-                  className={`absolute left-0 top-0 h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-semibold border-2 ${
-                    failed
-                      ? "border-danger bg-danger text-white"
-                      : running
-                        ? "border-primary bg-primary-light text-primary"
-                        : "border-success bg-success text-white"
-                  }`}
-                >
-                  {failed ? (
-                    <X className="h-3.5 w-3.5" />
-                  ) : running ? (
-                    i + 1
-                  ) : (
-                    <Check className="h-3.5 w-3.5" />
-                  )}
-                </span>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium text-text-primary">
-                      {STEP_LABELS[step.step_name] ?? step.step_name}
-                      {step.attempt > 1 ? ` (intento ${step.attempt})` : ""}
-                    </span>
-                    <span className="text-[11px] text-text-secondary">· {duration(step)}</span>
+    <div className="space-y-5">
+      {schema && (
+        <section className="max-w-[860px] bg-card rounded-xl border border-border p-5">
+          <h2 className="text-[14px] font-semibold text-text-primary mb-3">Campos del agente</h2>
+          <AlertSchemaView schema={schema} data={detail} mode="aria" alertId={detail.alert_id} />
+        </section>
+      )}
+      <section className="max-w-[860px] bg-card rounded-xl border border-border p-6">
+        <h2 className="text-[14px] font-semibold text-text-primary mb-5">
+          Línea de tiempo del ciclo
+        </h2>
+        <ol className="relative">
+          {detail.steps.map((step, i) => {
+            const key = stepKey(step, i);
+            const isOpen = open === key;
+            const failed = step.status === "FAILED";
+            const running = step.status === "RUNNING";
+            return (
+              <li key={key} className="relative pl-10 pb-5 last:pb-0">
+                {i < detail.steps.length - 1 && (
+                  <span className="absolute left-[14px] top-7 bottom-0 w-px bg-border" />
+                )}
+                <button onClick={() => setOpen(isOpen ? null : key)} className="w-full text-left">
+                  <span
+                    className={`absolute left-0 top-0 h-7 w-7 rounded-full flex items-center justify-center text-[11px] font-semibold border-2 ${
+                      failed
+                        ? "border-danger bg-danger text-white"
+                        : running
+                          ? "border-primary bg-primary-light text-primary"
+                          : "border-success bg-success text-white"
+                    }`}
+                  >
+                    {failed ? (
+                      <X className="h-3.5 w-3.5" />
+                    ) : running ? (
+                      i + 1
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-text-primary">
+                        {STEP_LABELS[step.step_name] ?? step.step_name}
+                        {step.attempt > 1 ? ` (intento ${step.attempt})` : ""}
+                      </span>
+                      <span className="text-[11px] text-text-secondary">· {duration(step)}</span>
+                    </div>
+                    <ChevronDown
+                      className={`h-4 w-4 text-text-secondary transition-transform ${isOpen ? "rotate-180" : ""}`}
+                    />
                   </div>
-                  <ChevronDown
-                    className={`h-4 w-4 text-text-secondary transition-transform ${isOpen ? "rotate-180" : ""}`}
-                  />
-                </div>
-              </button>
-              {isOpen && (
-                <pre className="mt-2 bg-[#0f172a] text-[#94a3b8] text-[11px] rounded-lg p-3 overflow-x-auto leading-relaxed whitespace-pre-wrap font-mono max-h-[420px]">
-                  {step.error ?? JSON.stringify(step.output, null, 2)}
-                </pre>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </section>
+                </button>
+                {isOpen && (
+                  <pre className="mt-2 bg-[#0f172a] text-[#94a3b8] text-[11px] rounded-lg p-3 overflow-x-auto leading-relaxed whitespace-pre-wrap font-mono max-h-[420px]">
+                    {step.error ?? JSON.stringify(step.output, null, 2)}
+                  </pre>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </div>
   );
 }
 
-function enrichment(detail: AlertDetail): Json {
-  return asObject(stepOutput(detail, "pre_process").enrichment);
-}
-
-function HistorialTab({ detail }: { detail: AlertDetail }) {
-  const history = enrichment(detail).transaction_history;
-  const rows = Array.isArray(history) ? (history as Json[]) : [];
-  if (rows.length === 0)
-    return (
-      <p className="text-[13px] text-text-secondary">
-        Sin historial transaccional en el enriquecimiento.
-      </p>
-    );
-  const columns = Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).slice(0, 8);
+function HistorialTab({
+  detail,
+  schema,
+}: {
+  detail: AlertDetail;
+  schema: AlertSchemaVersion | null;
+}) {
   return (
-    <section className="max-w-[1180px] bg-card rounded-xl border border-border overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead className="bg-surface">
-          <tr className="text-[11px] uppercase tracking-wider text-text-secondary border-b border-border">
-            {columns.map((c) => (
-              <th key={c} className="text-left font-normal px-4 py-2.5 whitespace-nowrap">
-                {c}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr
-              key={i}
-              className={`border-b border-border/50 last:border-0 ${i % 2 === 1 ? "bg-surface/50" : ""}`}
-            >
-              {columns.map((c) => (
-                <td key={c} className="px-4 py-2.5 text-text-primary whitespace-nowrap">
-                  {row[c] === undefined || row[c] === null
-                    ? "—"
-                    : typeof row[c] === "object"
-                      ? JSON.stringify(row[c])
-                      : String(row[c])}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <div className="max-w-[1180px]">
+      <AlertSchemaView schema={schema} data={detail} mode="history" alertId={detail.alert_id} />
+    </div>
   );
 }
 
@@ -569,7 +523,15 @@ function ResolveModal({
   );
 }
 
-function DatasetModal({ alertId, onClose }: { alertId: string; onClose: () => void }) {
+function DatasetModal({
+  alertId,
+  schema,
+  onClose,
+}: {
+  alertId: string;
+  schema: AlertSchemaVersion | null;
+  onClose: () => void;
+}) {
   const [text, setText] = useState("");
   const [datasetName, setDatasetName] = useState("");
   const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: () => getDatasets() });
@@ -579,6 +541,7 @@ function DatasetModal({ alertId, onClose }: { alertId: string; onClose: () => vo
     onSuccess: onClose,
   });
   const disabled = text.trim().length < 20 || !datasetName || curateMutation.isPending;
+  const columns = schema?.fields.filter((field) => field.is_alert && !field.is_history) ?? [];
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
@@ -601,6 +564,37 @@ function DatasetModal({ alertId, onClose }: { alertId: string; onClose: () => vo
           </button>
         </div>
         <div className="px-5 py-4 space-y-4">
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">
+                  Columnas que llenará
+                </p>
+                <p className="text-[12px] text-text-secondary mt-1">
+                  Entrada y etiquetas de la alerta canónica; no se aplica mapeo de exportación.
+                </p>
+              </div>
+              <span className="shrink-0 text-[12px] font-medium text-text-primary">
+                Esquema v{schema?.version ?? "—"}
+              </span>
+            </div>
+            {columns.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {columns.map((field) => (
+                  <span
+                    key={field.id}
+                    className={`rounded-md border px-2 py-1 text-[11px] ${field.is_label ? "border-warning/40 bg-warning/10 text-warning" : "border-border bg-card text-text-primary"}`}
+                  >
+                    {field.field_name || field.field} · {field.is_label ? "etiqueta" : "entrada"}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-[12px] text-text-secondary">
+                No hay una versión activa del esquema con campos para exportar.
+              </p>
+            )}
+          </div>
           <div>
             <label className="text-[11px] uppercase tracking-wider text-text-secondary">
               Dataset destino
@@ -664,7 +658,15 @@ function DatasetModal({ alertId, onClose }: { alertId: string; onClose: () => vo
   );
 }
 
-function AnalystBar({ detail, onChanged }: { detail: AlertDetail; onChanged: () => void }) {
+function AnalystBar({
+  detail,
+  schema,
+  onChanged,
+}: {
+  detail: AlertDetail;
+  schema: AlertSchemaVersion | null;
+  onChanged: () => void;
+}) {
   const { user, role } = useRole();
   const navigate = useNavigate();
   const [resolving, setResolving] = useState<AnalystResolution | null>(null);
@@ -776,7 +778,11 @@ function AnalystBar({ detail, onChanged }: { detail: AlertDetail; onChanged: () 
         />
       )}
       {showDataset && (
-        <DatasetModal alertId={detail.alert_id} onClose={() => setShowDataset(false)} />
+        <DatasetModal
+          alertId={detail.alert_id}
+          schema={schema}
+          onClose={() => setShowDataset(false)}
+        />
       )}
     </>
   );
@@ -793,17 +799,32 @@ function AlertaDetailPage() {
     queryFn: () => getAlertDetail({ data: { alertId: id } }),
     refetchInterval: 15_000,
   });
+  const schemaVersion = detailQuery.data?.schema_version;
+  const schemaQuery = useQuery({
+    queryKey: ["alertSchema", schemaVersion ?? "active"],
+    queryFn: () =>
+      schemaVersion === null || schemaVersion === undefined
+        ? getActiveAlertSchema()
+        : getAlertSchemaVersion(schemaVersion),
+    enabled: Boolean(detailQuery.data),
+  });
+  const { role } = useRole();
+  const canReadRaw = role === "manager" || role === "release_manager";
+  const rawQuery = useQuery({
+    queryKey: ["alertRaw", id],
+    queryFn: () => getAlertRaw({ data: { alertId: id } }),
+    enabled: canReadRaw && tab === "raw",
+  });
   const detail = detailQuery.data;
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["alertDetail", id] });
     void queryClient.invalidateQueries({ queryKey: ["analystQueue"] });
   };
   const status = ALERT_STATUS[detail?.status ?? ""] ?? ALERT_STATUS.RECEIVED;
-  const dataRows = useMemo(() => (detail ? flatten(detail.payload) : []), [detail]);
-  const userRows = useMemo(
-    () => (detail ? flatten(enrichment(detail).customer_profile) : []),
-    [detail],
-  );
+  const schema = schemaQuery.data ?? null;
+  const missingFields =
+    schema?.fields.filter((field) => field.is_mandatory && detail?.input[field.field] == null) ??
+    [];
 
   return (
     <DashboardLayout>
@@ -823,6 +844,11 @@ function AlertaDetailPage() {
           </div>
           {detail && (
             <div className="flex items-center gap-3">
+              <span className="text-[11px] text-text-secondary">
+                Esquema v{detail.schema_version ?? schema?.version ?? "—"} · Config{" "}
+                {detail.configuration_ref?.configuration_id ?? "—"} v
+                {detail.configuration_ref?.version ?? "—"}
+              </span>
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-semibold ${status.className}`}
               >
@@ -861,8 +887,17 @@ function AlertaDetailPage() {
 
         {detail && (
           <>
+            {detail.status === "ESCALATED" && missingFields.length > 0 && (
+              <div className="mb-4 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 text-[12px] text-text-primary">
+                <strong>Campos faltantes del esquema:</strong>{" "}
+                {missingFields.map((field) => field.field_name || field.field).join(", ")}
+              </div>
+            )}
             <div className="flex gap-1 border-b border-border mb-6">
-              {TABS.map((t) => (
+              {[
+                ...TABS,
+                ...(canReadRaw ? [{ id: "raw" as const, label: "Evento original (ARIC)" }] : []),
+              ].map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setTab(t.id)}
@@ -876,26 +911,43 @@ function AlertaDetailPage() {
                 </button>
               ))}
             </div>
-            {tab === "resumen" && <ResumenTab detail={detail} />}
-            {tab === "razonamiento" && <RazonamientoTab detail={detail} />}
+            {tab === "resumen" && <ResumenTab detail={detail} schema={schema} />}
+            {tab === "razonamiento" && <RazonamientoTab detail={detail} schema={schema} />}
             {tab === "data" && (
               <div className="max-w-[860px]">
-                <KeyValueTable rows={dataRows} empty="La alerta no trae datos." />
+                <AlertSchemaView
+                  schema={schema}
+                  data={detail}
+                  alertId={detail.alert_id}
+                  canReport={role === "fraud_analyst" || role === "ops_analyst"}
+                />
               </div>
             )}
             {tab === "usuario" && (
               <div className="max-w-[860px]">
-                <KeyValueTable
-                  rows={userRows}
-                  empty="Sin perfil de cliente en el enriquecimiento."
+                <AlertSchemaView
+                  schema={schema}
+                  data={detail}
+                  mode="user"
+                  alertId={detail.alert_id}
+                  canReport={role === "fraud_analyst" || role === "ops_analyst"}
                 />
               </div>
             )}
-            {tab === "historial" && <HistorialTab detail={detail} />}
+            {tab === "historial" && <HistorialTab detail={detail} schema={schema} />}
+            {tab === "raw" && (
+              <div className="max-w-[1180px] rounded-xl bg-[#0f172a] text-[#cbd5e1] p-4 overflow-auto">
+                <pre className="text-[11px] whitespace-pre-wrap">
+                  {rawQuery.isLoading
+                    ? "Cargando evento original…"
+                    : JSON.stringify(rawQuery.data, null, 2)}
+                </pre>
+              </div>
+            )}
           </>
         )}
       </div>
-      {detail && <AnalystBar detail={detail} onChanged={refresh} />}
+      {detail && <AnalystBar detail={detail} schema={schema} onChanged={refresh} />}
     </DashboardLayout>
   );
 }

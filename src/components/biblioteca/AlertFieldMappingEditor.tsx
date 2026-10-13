@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useRole } from "@/hooks/useRole";
 
 import {
   Dialog,
@@ -35,6 +36,8 @@ export function AlertFieldMappingEditor({
   open: boolean;
   onClose: () => void;
 }) {
+  const { role } = useRole();
+  const canEdit = role === "manager" || role === "release_manager";
   const queryClient = useQueryClient();
   const [pairs, setPairs] = useState<MappingPair[]>([]);
 
@@ -108,11 +111,11 @@ export function AlertFieldMappingEditor({
     >
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Mapeo de campos de alerta: {datasetName}</DialogTitle>
+          <DialogTitle>Exportar a formato externo: {datasetName}</DialogTitle>
           <DialogDescription>
-            Define cómo cada campo del payload de una alerta corresponde a una columna de este
-            dataset, para que curar una alerta produzca valores útiles aunque los nombres no
-            coincidan textualmente.
+            Define cómo los campos de la alerta canónica se traducen a columnas de este dataset al
+            exportar a un formato externo. La curación al dataset usa entrada, etiquetas y versión
+            del esquema, sin este mapeo.
           </DialogDescription>
         </DialogHeader>
 
@@ -125,6 +128,12 @@ export function AlertFieldMappingEditor({
 
         {mappingQuery.isSuccess && summaryQuery.isSuccess && (
           <div className="space-y-2">
+            {!canEdit && (
+              <p className="rounded-md bg-surface px-3 py-2 text-[12px] text-text-secondary">
+                Solo manager y release manager pueden editar el formato de exportación. Vista de
+                solo lectura.
+              </p>
+            )}
             {pairs.length === 0 && (
               <p className="text-[12px] text-text-secondary">
                 Sin campos mapeados todavía. Agrega uno con el botón de abajo.
@@ -133,6 +142,7 @@ export function AlertFieldMappingEditor({
             {pairs.map((pair, index) => (
               <div key={index} className="flex items-center gap-2">
                 <input
+                  disabled={!canEdit}
                   type="text"
                   value={pair.alertField}
                   onChange={(e) => updatePair(index, { alertField: e.target.value })}
@@ -141,6 +151,7 @@ export function AlertFieldMappingEditor({
                 />
                 <span className="text-text-secondary text-[12px]">→</span>
                 <select
+                  disabled={!canEdit}
                   value={pair.datasetColumn}
                   onChange={(e) => updatePair(index, { datasetColumn: e.target.value })}
                   className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
@@ -154,6 +165,7 @@ export function AlertFieldMappingEditor({
                 </select>
                 <button
                   type="button"
+                  disabled={!canEdit}
                   onClick={() => removePair(index)}
                   className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                 >
@@ -161,13 +173,15 @@ export function AlertFieldMappingEditor({
                 </button>
               </div>
             ))}
-            <button
-              type="button"
-              onClick={addPair}
-              className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary"
-            >
-              <Plus className="h-3.5 w-3.5" /> Agregar campo
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={addPair}
+                className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary"
+              >
+                <Plus className="h-3.5 w-3.5" /> Agregar campo
+              </button>
+            )}
           </div>
         )}
 
@@ -185,15 +199,17 @@ export function AlertFieldMappingEditor({
           >
             Cancelar
           </button>
-          <button
-            type="button"
-            disabled={saveMutation.isPending || !mappingQuery.isSuccess}
-            onClick={handleSave}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white disabled:opacity-50"
-          >
-            {saveMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {saveMutation.isPending ? "Guardando…" : "Guardar"}
-          </button>
+          {canEdit && (
+            <button
+              type="button"
+              disabled={saveMutation.isPending || !mappingQuery.isSuccess}
+              onClick={handleSave}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white disabled:opacity-50"
+            >
+              {saveMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {saveMutation.isPending ? "Guardando…" : "Guardar"}
+            </button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

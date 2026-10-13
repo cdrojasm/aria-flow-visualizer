@@ -83,13 +83,6 @@ export type ApiDeterministicRule = ApiRuleCondition & {
   decision: "risk_suspected" | "risk";
   aric_action: "soft_block" | "hard_block";
 };
-export type ApiAlertParserField = {
-  id: string;
-  source_field: string;
-  alias: string;
-  type: "string" | "number" | "boolean" | "date" | "datetime";
-};
-export type ApiAlertParserConfig = { fields: ApiAlertParserField[] };
 export type ApiDeterministicConfig = {
   alert_filter: ApiFilterGroup;
   field_enrichment: FeatureConfiguration;
@@ -103,10 +96,26 @@ export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition
 // configuration_port.py, which this mirrors 1:1). Membership direction for
 // a selected watchlist isn't carried here - it's read off the watchlist
 // itself (its list_type).
-export type ApiResearchAgentConfig = { enabled: boolean; max_delegations: number; timeout_seconds: number; max_result_items: number };
+export type ApiResearchAgentConfig = {
+  enabled: boolean;
+  max_delegations: number;
+  timeout_seconds: number;
+  max_result_items: number;
+};
 export type ApiDelegatedResearchSettings = {
-  vector_store: ApiResearchAgentConfig & { vector_store_instance_id: string | null; similarity_threshold: number; max_documents_per_query: number; allowed_asset_types: string[] };
-  history_pandas: ApiResearchAgentConfig & { max_history_rows: number; window_days: number; max_analysis_operations: number; allowed_columns: string[]; allowed_operations: string[] };
+  vector_store: ApiResearchAgentConfig & {
+    vector_store_instance_id: string | null;
+    similarity_threshold: number;
+    max_documents_per_query: number;
+    allowed_asset_types: string[];
+  };
+  history_pandas: ApiResearchAgentConfig & {
+    max_history_rows: number;
+    window_days: number;
+    max_analysis_operations: number;
+    allowed_columns: string[];
+    allowed_operations: string[];
+  };
 };
 // Backend AgentToolsConfigSchema - identical for the four ReAct steps.
 export type ApiToolPickerFields = {
@@ -163,7 +172,6 @@ export type ApiExecutorConfig = {
 };
 
 export type ApiAgentSettings = {
-  parser: ApiAlertParserConfig;
   deterministic: ApiDeterministicConfig;
   profiling: ApiProfilingConfig;
   rubrics: ApiRubric[];
@@ -268,7 +276,11 @@ export type ConfigurationDeployRequest = {
 
 export type ConfigurationDeployRequestPreview = Pick<
   ConfigurationDeployRequest,
-  "target_configuration_id" | "target_version" | "current_configuration_id" | "current_version" | "changes"
+  | "target_configuration_id"
+  | "target_version"
+  | "current_configuration_id"
+  | "current_version"
+  | "changes"
 >;
 
 // --- Client functions -------------------------------------------------------
@@ -378,7 +390,10 @@ export function approveConfigurationDeployRequest({
 }: {
   data: { requestId: string };
 }): Promise<ConfigurationDeployRequest> {
-  return apiFetch(`/api/v0/configuration-deploy-requests/${encodeURIComponent(data.requestId)}/approve`, {
-    method: "POST",
-  });
+  return apiFetch(
+    `/api/v0/configuration-deploy-requests/${encodeURIComponent(data.requestId)}/approve`,
+    {
+      method: "POST",
+    },
+  );
 }

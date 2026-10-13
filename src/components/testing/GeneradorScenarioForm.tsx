@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, Eye, Loader2, Play, Plus, Trash2 } from "lucide-react";
 
@@ -9,12 +9,15 @@ import {
   deleteScenario,
   previewScenario,
   startScenario,
+  seedScenarioFromDataset,
   type FieldGenerator,
   type GeneratorKind,
   type OutputMode,
   type RateInterval,
   type SimulationScenario,
 } from "@/lib/api/eventSimulation.functions";
+import { getDatasets } from "@/lib/api/datasets.functions";
+import { getActiveAlertSchema } from "@/lib/api/alertSchema.functions";
 
 /* ─── Generador strategy: simulador de alertas por microservicio ─────────
    Flow forced by the backend (see previewScenario's docstring in
@@ -88,6 +91,23 @@ function newFieldSpec(name = "", kind: GeneratorKind = "CONSTANT", value = ""): 
   };
 }
 
+function fieldSpecFromGenerator(name: string, generator: FieldGenerator): FieldSpecRow {
+  const params = generator.params ?? {};
+  return {
+    ...newFieldSpec(name, generator.kind, String(generator.value ?? "")),
+    weights: Object.entries(generator.weights ?? {}).map(([key, weight]) => ({
+      id: createId(),
+      key,
+      weight: String(weight),
+    })),
+    low: String(params.low ?? ""),
+    high: String(params.high ?? ""),
+    mu: String(params.mu ?? ""),
+    sigma: String(params.sigma ?? ""),
+    lambda: String(params.lambda ?? ""),
+  };
+}
+
 function buildFieldGenerator(row: FieldSpecRow): FieldGenerator {
   switch (row.kind) {
     case "CONSTANT":
@@ -137,11 +157,43 @@ export function GeneradorScenarioForm({ onClose }: { onClose: () => void }) {
   const [outputMode, setOutputMode] = useState<OutputMode>("DATASET");
   const [targetDatasetName, setTargetDatasetName] = useState("");
   const [rateSchedule, setRateSchedule] = useState<RateIntervalRow[]>([newRateInterval()]);
-  const [fieldSpecs, setFieldSpecs] = useState<FieldSpecRow[]>([
-    newFieldSpec("channel", "CONSTANT", "app"),
-  ]);
+  const [fieldSpecs, setFieldSpecs] = useState<FieldSpecRow[]>([newFieldSpec()]);
   const [scenario, setScenario] = useState<SimulationScenario | null>(null);
   const [previewRows, setPreviewRows] = useState<Record<string, unknown>[] | null>(null);
+  const [seedDatasetName, setSeedDatasetName] = useState("");
+  const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: getDatasets });
+  const schemaQuery = useQuery({ queryKey: ["activeAlertSchema"], queryFn: getActiveAlertSchema });
+
+  useEffect(() => {
+    if (fieldSpecs.length !== 1 || fieldSpecs[0].name || !schemaQuery.data) return;
+    const defaults = schemaQuery.data.fields
+      .filter(
+        (field) =>
+          field.data_source === "aric" && field.is_alert && !field.is_label && field.field_ds_loc,
+      )
+      .map((field) =>
+        fieldSpecFromGenerator(
+          field.field_ds_loc,
+          (field.type === "number"
+            ? { kind: "NORMAL", params: { mu: 0, sigma: 1 } }
+            : field.type === "bool"
+              ? { kind: "CATEGORICAL", weights: { true: 1, false: 1 } }
+              : { kind: "CONSTANT", value: "" }) as FieldGenerator,
+        ),
+      );
+    if (defaults.length) setFieldSpecs(defaults);
+  }, [fieldSpecs, schemaQuery.data]);
+
+  const seedMutation = useMutation({
+    mutationFn: (datasetName: string) =>
+      seedScenarioFromDataset({ data: { dataset_name: datasetName } }),
+    onSuccess: (generators) =>
+      setFieldSpecs(
+        Object.entries(generators).map(([name, generator]) =>
+          fieldSpecFromGenerator(name, generator),
+        ),
+      ),
+  });
 
   const canCreate =
     name.trim().length > 0 &&
@@ -336,15 +388,47 @@ export function GeneradorScenarioForm({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between mb-1.5">
           <label className="text-[11px] text-text-secondary">Campos generados por evento</label>
           {!locked && (
-            <button
-              type="button"
-              onClick={() => setFieldSpecs((rows) => [...rows, newFieldSpec()])}
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-            >
-              <Plus className="h-3 w-3" /> Agregar campo
-            </button>
+            <div className="flex items-center gap-3">
+              <select
+                aria-label="Dataset para sembrar"
+                value={seedDatasetName}
+                disabled={seedMutation.isPending || !datasetsQuery.data?.length}
+                onChange={(event) => setSeedDatasetName(event.target.value)}
+                className="h-8 rounded-md border border-border bg-background px-2 text-[11px]"
+              >
+                <option value="">Selecciona un dataset…</option>
+                {(datasetsQuery.data ?? []).map((dataset) => (
+                  <option key={dataset.name} value={dataset.name}>
+                    {dataset.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!seedDatasetName || seedMutation.isPending}
+                onClick={() => seedMutation.mutate(seedDatasetName)}
+                className="h-8 rounded-md border border-primary/30 px-2 text-[11px] font-medium text-primary hover:bg-primary/10 disabled:opacity-40"
+              >
+                Sembrar desde dataset
+              </button>
+              <button
+                type="button"
+                onClick={() => setFieldSpecs((rows) => [...rows, newFieldSpec()])}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              >
+                <Plus className="h-3 w-3" /> Agregar campo
+              </button>
+            </div>
           )}
         </div>
+        {!locked && (
+          <p className="text-[10px] text-text-secondary mb-2">
+            Las distribuciones quedan cargadas para revisión antes de crear el borrador.
+          </p>
+        )}
+        {seedMutation.isError && (
+          <p className="text-[11px] text-danger mb-2">{(seedMutation.error as Error).message}</p>
+        )}
         <div className="space-y-3">
           {fieldSpecs.map((row) => (
             <FieldSpecEditor

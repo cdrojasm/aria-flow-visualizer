@@ -19,6 +19,7 @@ export type TestRunConfig = {
   model_overrides: Record<string, string>;
   max_feedback_iterations: number;
   configuration_ref: ConfigurationRef | null;
+  schema_version: number | null;
 };
 
 export type TestRunResponse = {
@@ -115,6 +116,22 @@ export type TestCaseDetailResponse = {
   input_tokens: number;
   output_tokens: number;
   steps: WorkflowStepResponse[];
+  schema_comparison: {
+    active: {
+      schema_version: number;
+      input: Record<string, unknown>;
+      labels: Record<string, unknown>;
+      history_prev_alerta: Record<string, unknown>[];
+    };
+    candidate: {
+      schema_version: number;
+      input: Record<string, unknown>;
+      labels: Record<string, unknown>;
+      history_prev_alerta: Record<string, unknown>[];
+    };
+  } | null;
+  schema_version: number | null;
+  configuration_ref: ConfigurationRef | null;
 };
 
 export function listTestRuns({
@@ -158,6 +175,7 @@ export type StartTestRunRequest = {
     // instead of whatever is active at dispatch time - lets multiple test
     // runs each target a different configuration concurrently.
     configuration_ref?: { configuration_id: string; version: number } | null;
+    schema_version?: number | null;
   };
   // Omit both = every row. sample_size alone = stratified by the dataset's
   // own no-risk/risk-suspected/risk proportions. Both = stratified by these

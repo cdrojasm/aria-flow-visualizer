@@ -104,6 +104,17 @@ export function createScenario({
   return apiFetch("/api/v0/scenarios", { method: "POST", body: JSON.stringify(data) });
 }
 
+export function seedScenarioFromDataset({
+  data,
+}: {
+  data: { dataset_name: string };
+}): Promise<Record<string, FieldGenerator>> {
+  return apiFetch("/api/v0/scenarios/seed-from-dataset", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export function listScenarios({
   data,
 }: {
@@ -145,11 +156,7 @@ export function stopScenario({ data }: { data: { id: string } }): Promise<Simula
   return apiFetch(`/api/v0/scenarios/${encodeURIComponent(data.id)}/stop`, { method: "POST" });
 }
 
-export function getScenarioStatus({
-  data,
-}: {
-  data: { id: string };
-}): Promise<SimulationStatus> {
+export function getScenarioStatus({ data }: { data: { id: string } }): Promise<SimulationStatus> {
   return apiFetch(`/api/v0/scenarios/${encodeURIComponent(data.id)}/status`);
 }
 

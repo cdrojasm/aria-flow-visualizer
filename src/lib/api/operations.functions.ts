@@ -41,9 +41,6 @@ export type ApiOperationalSettings = {
   // contiguous, non-overlapping and cover 0 -> inf (else 422). Response:
   // always the full current list.
   amount_tiers: ApiAmountTier[] | null;
-  // Read-only: bumped server-side on every amount_tiers change, ignored on
-  // requests.
-  amount_tier_set_version: number;
   // Share (0..1) of finished alerts sent to the reasoning LLM-judge; 0
   // disables it.
   reasoning_evaluation_sample_rate: number;
@@ -72,7 +69,6 @@ export type OperationalSettings = {
   queueAllowedTriggeredRules: string[];
   queueDiscardBehavior: ShortageBehavior;
   amountTiers: AmountTier[];
-  amountTierSetVersion: number;
   reasoningEvaluationSampleRate: number;
   // Round-tripped untouched - edited elsewhere / not yet in this panel.
   passthrough: Pick<
@@ -116,7 +112,6 @@ export function operationalSettingsFromApi(api: ApiOperationalSettings): Operati
       minInclusive: tier.min_inclusive,
       maxExclusive: tier.max_exclusive,
     })),
-    amountTierSetVersion: api.amount_tier_set_version,
     reasoningEvaluationSampleRate: api.reasoning_evaluation_sample_rate,
     passthrough: {
       max_instances: api.max_instances,
@@ -154,7 +149,7 @@ export function operationalSettingsToApi(s: OperationalSettings): ApiOperational
       resolution_tag: s.queueDiscardBehavior.resolutionTag,
       resolution_method_id: s.queueDiscardBehavior.resolutionMethodId ?? null,
     },
-    // Always the full list: the backend only bumps amount_tier_set_version
+    // Always the full list.
     // when it actually differs from the stored one.
     amount_tiers: s.amountTiers.map((tier) => ({
       code: tier.code.trim(),
@@ -162,7 +157,6 @@ export function operationalSettingsToApi(s: OperationalSettings): ApiOperational
       min_inclusive: tier.minInclusive,
       max_exclusive: tier.maxExclusive,
     })),
-    amount_tier_set_version: s.amountTierSetVersion,
     reasoning_evaluation_sample_rate: s.reasoningEvaluationSampleRate,
   };
 }
@@ -247,7 +241,12 @@ export type AnalystQueueAlert = {
   status: string;
   customer_id: string | null;
   created_at: string;
-  payload: Record<string, unknown>;
+  schema_version: number | null;
+  configuration_ref: { configuration_id: string; version: number } | null;
+  input: Record<string, unknown>;
+  labels: Record<string, unknown>;
+  history_prev_alerta: Record<string, unknown>[];
+  agent_output: Record<string, unknown>;
   reservation: ResourceReservation | null;
 };
 

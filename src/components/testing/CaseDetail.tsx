@@ -11,6 +11,7 @@ import { CaseStepData } from "./CaseStepDetail";
 import { ExecutionMarkers } from "./ExecutionMarkers";
 import { Hint } from "./Hint";
 import { EDGE_LINES } from "./surfaceStyles";
+import { SchemaComparison } from "./SchemaComparison";
 
 export function CaseDetail({
   summary,
@@ -67,6 +68,7 @@ export function CaseDetail({
         executionCount={executions.length}
         silentFailureStep={silentFailureStep}
       />
+      <SchemaComparison comparison={detail.schema_comparison} />
       <CaseClassificationLoop steps={detail.steps} />
     </div>
   );
@@ -77,6 +79,10 @@ function CaseTitle({ detail }: { detail: TestCaseDetailResponse }) {
   return (
     <h4 className="flex items-baseline gap-1.5 text-[13px] font-semibold text-text-primary">
       Pipeline
+      <span className="text-[10px] font-normal text-text-secondary">
+        Esquema {detail.schema_version ? `v${detail.schema_version}` : "activo"} · Configuración{" "}
+        {detail.configuration_ref ? `v${detail.configuration_ref.version}` : "activa"}
+      </span>
       <span className="text-[12px] font-normal text-text-secondary">
         (
         <Hint content="Tokens del LLM (Azure OpenAI) usados por este caso, entrada / salida. Miden el costo y tamaño del procesamiento.">

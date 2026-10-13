@@ -29,15 +29,32 @@ import {
   type SegmentMonitoringConfig,
   type SegmentSettings,
   defaultSegmentAgent,
-  defaultAlertParserConfig,
   defaultSegments,
 } from "@/data/configs";
 
 function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearchSettings {
-  const base = (v: ResearchAgentConfig) => ({ enabled: v.enabled, max_delegations: v.maxDelegations, timeout_seconds: v.timeoutSeconds, max_result_items: v.maxResultItems });
+  const base = (v: ResearchAgentConfig) => ({
+    enabled: v.enabled,
+    max_delegations: v.maxDelegations,
+    timeout_seconds: v.timeoutSeconds,
+    max_result_items: v.maxResultItems,
+  });
   return {
-    vector_store: { ...base(research.vectorStore), vector_store_instance_id: research.vectorStore.vectorStoreInstanceId, similarity_threshold: research.vectorStore.similarityThreshold, max_documents_per_query: research.vectorStore.maxDocumentsPerQuery, allowed_asset_types: research.vectorStore.allowedAssetTypes },
-    history_pandas: { ...base(research.historyPandas), max_history_rows: research.historyPandas.maxHistoryRows, window_days: research.historyPandas.windowDays, max_analysis_operations: research.historyPandas.maxAnalysisOperations, allowed_columns: research.historyPandas.allowedColumns, allowed_operations: research.historyPandas.allowedOperations },
+    vector_store: {
+      ...base(research.vectorStore),
+      vector_store_instance_id: research.vectorStore.vectorStoreInstanceId,
+      similarity_threshold: research.vectorStore.similarityThreshold,
+      max_documents_per_query: research.vectorStore.maxDocumentsPerQuery,
+      allowed_asset_types: research.vectorStore.allowedAssetTypes,
+    },
+    history_pandas: {
+      ...base(research.historyPandas),
+      max_history_rows: research.historyPandas.maxHistoryRows,
+      window_days: research.historyPandas.windowDays,
+      max_analysis_operations: research.historyPandas.maxAnalysisOperations,
+      allowed_columns: research.historyPandas.allowedColumns,
+      allowed_operations: research.historyPandas.allowedOperations,
+    },
   };
 }
 
@@ -46,12 +63,35 @@ function researchFromApi(
   fallback: DelegatedResearchSettings,
 ): DelegatedResearchSettings {
   if (!research) return fallback;
-  const base = (v: Partial<ApiResearchAgentConfig> | undefined, d: ResearchAgentConfig): ResearchAgentConfig => ({ enabled: v?.enabled ?? d.enabled, maxDelegations: v?.max_delegations ?? d.maxDelegations, timeoutSeconds: v?.timeout_seconds ?? d.timeoutSeconds, maxResultItems: v?.max_result_items ?? d.maxResultItems });
+  const base = (
+    v: Partial<ApiResearchAgentConfig> | undefined,
+    d: ResearchAgentConfig,
+  ): ResearchAgentConfig => ({
+    enabled: v?.enabled ?? d.enabled,
+    maxDelegations: v?.max_delegations ?? d.maxDelegations,
+    timeoutSeconds: v?.timeout_seconds ?? d.timeoutSeconds,
+    maxResultItems: v?.max_result_items ?? d.maxResultItems,
+  });
   const vs = research.vector_store;
   const hp = research.history_pandas;
   return {
-    vectorStore: { ...base(vs, fallback.vectorStore), vectorStoreInstanceId: vs?.vector_store_instance_id ?? null, similarityThreshold: vs?.similarity_threshold ?? fallback.vectorStore.similarityThreshold, maxDocumentsPerQuery: vs?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery, allowedAssetTypes: vs?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes },
-    historyPandas: { ...base(hp, fallback.historyPandas), maxHistoryRows: hp?.max_history_rows ?? fallback.historyPandas.maxHistoryRows, windowDays: hp?.window_days ?? fallback.historyPandas.windowDays, maxAnalysisOperations: hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations, allowedColumns: hp?.allowed_columns ?? fallback.historyPandas.allowedColumns, allowedOperations: hp?.allowed_operations ?? fallback.historyPandas.allowedOperations },
+    vectorStore: {
+      ...base(vs, fallback.vectorStore),
+      vectorStoreInstanceId: vs?.vector_store_instance_id ?? null,
+      similarityThreshold: vs?.similarity_threshold ?? fallback.vectorStore.similarityThreshold,
+      maxDocumentsPerQuery:
+        vs?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery,
+      allowedAssetTypes: vs?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes,
+    },
+    historyPandas: {
+      ...base(hp, fallback.historyPandas),
+      maxHistoryRows: hp?.max_history_rows ?? fallback.historyPandas.maxHistoryRows,
+      windowDays: hp?.window_days ?? fallback.historyPandas.windowDays,
+      maxAnalysisOperations:
+        hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations,
+      allowedColumns: hp?.allowed_columns ?? fallback.historyPandas.allowedColumns,
+      allowedOperations: hp?.allowed_operations ?? fallback.historyPandas.allowedOperations,
+    },
   };
 }
 
@@ -242,14 +282,6 @@ function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
     },
   };
   return {
-    parser: {
-      fields: a.parser.fields.map((field) => ({
-        id: field.id,
-        source_field: field.sourceField,
-        alias: field.alias,
-        type: field.type,
-      })),
-    },
     deterministic,
     profiling,
     rubrics: a.rubrics.map((rubric) => ({
@@ -279,16 +311,6 @@ function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
   // configuration contract.
   const defaults = defaultSegmentAgent();
   return {
-    parser: a.parser
-      ? {
-          fields: a.parser.fields.map((field) => ({
-            id: field.id,
-            sourceField: field.source_field,
-            alias: field.alias,
-            type: field.type,
-          })),
-        }
-      : defaults.parser,
     deterministic: a.deterministic
       ? {
           alertFilter: filterGroupFromApi(a.deterministic.alert_filter),
@@ -412,12 +434,9 @@ export function toCreateConfigurationRequest(
 ): CreateConfigurationRequest {
   const segments: Record<string, ApiSegmentSettings> = {};
   for (const [code, segment] of Object.entries(settings.segments)) {
-    // The parser runs before a channel is resolved. The API still stores it
-    // under each segment for backwards compatibility, so persist the same
-    // general schema to every channel.
     segments[code] = segmentToApi({
       ...segment,
-      agent: { ...segment.agent, parser: settings.alertSchema },
+      agent: segment.agent,
     });
   }
   return {
@@ -454,10 +473,6 @@ export function settingsFromConfigurationDetail(
   for (const [code, segment] of Object.entries(detail.segments)) {
     segments[code as SegmentCode] = segmentFromApi(segment);
   }
-  const firstSegment = Object.values(detail.segments)[0];
-  const alertSchema = firstSegment
-    ? agentFromApi(firstSegment.agent).parser
-    : defaultAlertParserConfig();
   return {
     migrationWindowEnabled: detail.general.migration_window_enabled,
     migrationWindowDatetime: detail.general.migration_window_datetime,
@@ -471,7 +486,6 @@ export function settingsFromConfigurationDetail(
     experimentTimeoutMinutes: detail.test.experiment_timeout_minutes,
     maxStoredTestRuns: detail.test.max_stored_test_runs,
     testCleanupPolicy: detail.test.test_cleanup_policy,
-    alertSchema,
     segments,
   };
 }

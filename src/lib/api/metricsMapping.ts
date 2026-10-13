@@ -98,7 +98,7 @@ export function worstMaturation(periods: { maturation: ApiMaturation }[]): ApiMa
 const WARNING_TEXT: Record<ApiMetricsWarning["code"], string> = {
   partial_period:
     "Más de 90 días atrás los datos sólo se guardan por mes/año: estos periodos se cuentan completos e incluyen alertas fuera del rango pedido.",
-  amount_tier_set_changed:
+  schema_changed:
     "El rango cruza más de un juego de rangos de monto: cada alerta conserva el rango con el que se clasificó al llegar.",
   fraud_label_maturing:
     "Los falsos positivos y el fraude no detectado aún pueden cambiar en estos periodos: las correcciones llegan hasta ~6 meses después (~98 % en 4 días).",

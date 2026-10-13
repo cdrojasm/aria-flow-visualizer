@@ -17,11 +17,9 @@ function parseBound(raw: string): number {
 export function AmountTierEditor({
   value,
   onChange,
-  version,
 }: {
   value: AmountTier[];
   onChange: (tiers: AmountTier[]) => void;
-  version: number;
 }) {
   const errors = validateAmountTiers(value);
   const update = (index: number, changes: Partial<AmountTier>) =>
@@ -40,7 +38,7 @@ export function AmountTierEditor({
         <p>
           <span className="font-semibold">Sólo aplica a alertas nuevas.</span> Cada alerta guarda el
           rango con el que se clasificó al llegar; las ya recibidas no se reclasifican. Juego de
-          rangos vigente: <span className="font-semibold tabular-nums">v{version}</span>.
+          rangos vigente.
         </p>
       </div>
 

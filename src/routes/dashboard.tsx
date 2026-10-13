@@ -32,8 +32,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   getLiveAlertFunnel,
   getMetricsOverview,
+  getVersionEvents,
   type ApiDimensionBucket,
   type ApiMetricsOverview,
+  type ApiVersionEvent,
 } from "@/lib/api/metrics.functions";
 import {
   averageSeconds,
@@ -438,6 +440,41 @@ const hourLabel = (h: unknown) => `${String(h).padStart(2, "0")}:00`;
 const AXIS = { tick: { fontSize: 11, fill: "#6b7280" }, tickLine: false } as const;
 const TOOLTIP_STYLE = { fontSize: 12, borderRadius: 8, borderColor: "#e2e5ef" };
 
+function versionEventLabel(event: ApiVersionEvent): string {
+  return event.kind === "schema"
+    ? `${event.label} v${event.version}`
+    : `Config ${event.label} v${event.version}`;
+}
+
+function VersionEventLines({
+  events,
+  x,
+}: {
+  events: ApiVersionEvent[];
+  x: (event: ApiVersionEvent) => number | string;
+}) {
+  return (
+    <>
+      {events.map((event) => (
+        <ReferenceLine
+          key={`${event.kind}-${event.configuration_id ?? "schema"}-${event.version}-${event.at}`}
+          x={x(event)}
+          stroke="#f59e0b"
+          strokeDasharray="3 3"
+          label={{
+            value: versionEventLabel(event),
+            position: "insideTop",
+            fill: "#92400e",
+            fontSize: 10,
+          }}
+        >
+          <title>{`${versionEventLabel(event)} · ${format(new Date(event.at), "yyyy-MM-dd HH:mm")}`}</title>
+        </ReferenceLine>
+      ))}
+    </>
+  );
+}
+
 function DashboardPage() {
   const [range, setRange] = useState<RangeState>(() => initialRange());
   const [filters, setFilters] = useState<FilterSelection>({});
@@ -446,7 +483,12 @@ function DashboardPage() {
     queryKey: ["metrics", "overview", { from: range.from, to: range.to }, query.filters],
     queryFn: () => getMetricsOverview({ data: query }),
   });
+  const versionEventsQuery = useQuery({
+    queryKey: ["metrics", "version-events", { from: range.from, to: range.to }],
+    queryFn: () => getVersionEvents({ data: { from: range.from, to: range.to } }),
+  });
   const data = overviewQuery.data;
+  const versionEvents = versionEventsQuery.data ?? [];
 
   const q = data?.fraud_quality;
   const rt = data?.resolution_time;
@@ -654,6 +696,10 @@ function DashboardPage() {
                                 : "Fraude no detectado",
                           ]}
                         />
+                        <VersionEventLines
+                          events={versionEvents}
+                          x={(event) => format(new Date(event.at), "yyyy-MM-dd")}
+                        />
                         <Bar dataKey="alerts" fill="rgb(0,17,148)" />
                         <Bar dataKey="false_positives" fill="#fbbf24" />
                         <Bar dataKey="undetected_fraud" fill="#f87171" />
@@ -733,6 +779,10 @@ function DashboardPage() {
                   ]}
                   labelFormatter={hourLabel}
                   contentStyle={TOOLTIP_STYLE}
+                />
+                <VersionEventLines
+                  events={versionEvents}
+                  x={(event) => new Date(event.at).getHours()}
                 />
                 <ReferenceLine
                   y={SLA_TARGET_MINUTES}

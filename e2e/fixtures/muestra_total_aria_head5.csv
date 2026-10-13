@@ -1,0 +1,6 @@
+eventid,eventtype,channel,integrationpoint,amount_value,fecha_transaccion,customerid,tipo,marcacion_final,biocatch_score
+e2e-alert-0001,paymentRT,OM,patchPaymentRequest,19411000.0,2026-07-21 16:25:56.000,e2e-customer-0001,NoFraude,no-risk,0.93
+e2e-alert-0002,paymentRT,OM,patchPaymentRequest,19410000.0,2026-07-21 16:10:18.000,e2e-customer-0001,NoFraude,no-risk,0.21
+e2e-alert-0003,paymentRT,OM,patchPaymentRequest,19412000.0,2026-07-21 16:32:54.000,e2e-customer-0002,NoFraude,no-risk,0.11
+e2e-alert-0004,paymentRT,OM,patchPaymentRequest,30000000.0,2026-07-21 13:42:51.000,e2e-customer-0003,Fraude,risk-suspected,0.99
+e2e-alert-0005,paymentRT,OM,patchPaymentRequest,352000.0,2026-07-10 14:19:03.000,e2e-customer-0004,Fraude,risk-suspected,0.97

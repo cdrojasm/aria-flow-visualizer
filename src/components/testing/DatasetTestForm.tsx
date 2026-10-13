@@ -18,6 +18,7 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { startTestRun } from "@/lib/api/testing.functions";
 import { getDatasets, uploadDataset } from "@/lib/api/datasets.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
+import { listAlertSchemaVersions, type AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
 import { downloadSampleDatasetCsv } from "@/lib/sampleDataset";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
@@ -68,6 +69,7 @@ export function DatasetTestForm({
   // null = latest version of the selected lineage (default). Set when the
   // user expands a lineage's version history and picks an older one.
   const [selectedConfigVersion, setSelectedConfigVersion] = useState<number | null>(null);
+  const [selectedSchemaVersion, setSelectedSchemaVersion] = useState<number | null>(null);
   const [expandedConfigId, setExpandedConfigId] = useState<string | null>(null);
   const [configSelectionHydrated, setConfigSelectionHydrated] = useState(false);
 
@@ -125,6 +127,10 @@ export function DatasetTestForm({
     queryFn: () => listConfigurationVersions({ data: { configurationId: expandedConfigId! } }),
     enabled: !!expandedConfigId,
   });
+  const schemaVersionsQuery = useQuery({
+    queryKey: ["alertSchemaVersions"],
+    queryFn: listAlertSchemaVersions,
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = useMutation({
@@ -172,6 +178,7 @@ export function DatasetTestForm({
                   version: selectedConfiguration.version,
                 }
               : undefined,
+            schema_version: selectedSchemaVersion ?? undefined,
           },
           sample_size: parsedSampleSize,
         },
@@ -196,6 +203,29 @@ export function DatasetTestForm({
             placeholder="Ej: Regresión semanal"
             className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
           />
+        </div>
+
+        <div>
+          <label className="text-[11px] text-text-secondary block mb-1">
+            Esquema para reprocesar
+          </label>
+          <select
+            value={selectedSchemaVersion ?? ""}
+            onChange={(e) =>
+              setSelectedSchemaVersion(e.target.value ? Number(e.target.value) : null)
+            }
+            className="w-full rounded-md border border-border px-3 py-2 text-[13px] bg-background"
+          >
+            <option value="">Activo (por defecto)</option>
+            {(schemaVersionsQuery.data ?? []).map((schema: AlertSchemaVersion) => (
+              <option key={schema.version} value={schema.version}>
+                v{schema.version} · {schema.status}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-text-secondary mt-1">
+            Los borradores y propuestas también se pueden comparar con el activo.
+          </p>
         </div>
 
         <div>

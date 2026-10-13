@@ -38,7 +38,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfigurationVersionGuide } from "@/components/configuracion/ConfigurationVersionGuide";
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
-import { SegmentParserSection } from "@/components/configuracion/SegmentParserSection";
+import { AlertSchemaEditor } from "@/components/configuracion/schema/AlertSchemaEditor";
 import { rubricValidationErrors } from "@/components/configuracion/SegmentRubricsSection";
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
@@ -262,10 +262,12 @@ const isDraftShapeValid = (draft: DraftState): boolean => {
 };
 
 function ConfiguracionPage() {
-  const { role } = useRole();
+  const { role, user } = useRole();
   const isChannelManager = role === "channel_manager";
   const isReleaseManager = role === "release_manager";
   const isManager = role === "manager";
+  const canManageSchema =
+    (isManager || isReleaseManager) && Boolean(user?.permissions.includes("alert_schema"));
   const isDeployApprover = isManager || isReleaseManager;
   const canManageChannelMembership = role === "manager" || isReleaseManager;
   const canEditConfiguration = role === "manager" || isChannelManager || isReleaseManager;
@@ -321,7 +323,8 @@ function ConfiguracionPage() {
       setActiveTab("general");
     if (isChannelManager && (activeTab === "general" || activeTab === "infra" || activeTab === "ops" || activeTab === "test" || activeTab === "schema"))
       setActiveTab("segmento");
-  }, [activeTab, isChannelManager]);
+    if (!canManageSchema && activeTab === "schema") setActiveTab("general");
+  }, [activeTab, isChannelManager, canManageSchema]);
 
   const [localConfigs, setLocalConfigs] = useState<
     { id: string; name: string; description: string }[]
@@ -1788,7 +1791,9 @@ function ConfiguracionPage() {
         {/* Tabs */}
         <SectionTabs
           label="Secciones de configuración"
-          items={(isChannelManager ? SEGMENT_CONFIGURATION_TAB_META : isReleaseManager ? RELEASE_TAB_META : GENERAL_TAB_META).map((tab) => ({
+          items={(isChannelManager ? SEGMENT_CONFIGURATION_TAB_META : isReleaseManager ? RELEASE_TAB_META : GENERAL_TAB_META)
+            .filter((tab) => tab.key !== "schema" || canManageSchema)
+            .map((tab) => ({
             ...tab,
             dirty: selectedConfig.dirtyTabs.includes(tab.key),
           }))}
@@ -2049,14 +2054,8 @@ function ConfiguracionPage() {
           </fieldset>
         )}
 
-        {(isReleaseManager || isManager) && activeTab === "schema" && (
-          <fieldset disabled={locked} className="contents">
-            <SegmentParserSection
-              value={settings.alertSchema}
-              onChange={(alertSchema) => patchSettings("schema", { alertSchema })}
-              disabled={locked}
-            />
-          </fieldset>
+        {canManageSchema && activeTab === "schema" && (
+          <AlertSchemaEditor />
         )}
 
         {(isChannelManager || isReleaseManager) && activeTab === "segmentoAgente" && (

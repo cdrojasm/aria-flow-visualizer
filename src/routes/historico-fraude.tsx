@@ -309,8 +309,6 @@ function HistoricoFraudePage() {
                           {item.amount === null ? "—" : formatAmount(item.amount)}
                           <div className="text-[11px] text-text-secondary">
                             {item.amount_tier === "unknown" ? "sin rango" : item.amount_tier}
-                            {item.amount_tier_set_version !== null &&
-                              ` · v${item.amount_tier_set_version}`}
                           </div>
                         </td>
                       )}

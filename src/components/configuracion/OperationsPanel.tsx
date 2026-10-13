@@ -50,7 +50,6 @@ const SETTING_LABELS: Record<string, string> = {
   voicebot_enabled: "Estado del voicebot",
   voicebot_max_concurrent_calls: "Slots de voicebot",
   amount_tiers: "Rangos de monto",
-  amount_tier_set_version: "Versión de rangos de monto",
   reasoning_evaluation_sample_rate: "Muestreo de evaluación de razonamiento",
 };
 
@@ -511,12 +510,11 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
 
         <Section
           title="Rangos de monto"
-          description="Rangos con los que se clasifica el monto de cada alerta al llegar. Alimentan el filtro de monto de Dashboard, Monitor e Histórico; cada cambio crea una nueva versión del juego de rangos."
+          description="Rangos con los que se clasifica el monto de cada alerta al llegar. Alimentan el filtro de monto de Dashboard, Monitor e Histórico."
         >
           <div className="p-6">
             <AmountTierEditor
               value={draft.amountTiers}
-              version={draft.amountTierSetVersion}
               onChange={(amountTiers) => patch({ amountTiers })}
             />
           </div>

@@ -150,14 +150,6 @@ export type DeterministicRule = RuleCondition & {
   decision: DeterministicDecision;
   aricAction: AricAction;
 };
-export type AlertFieldType = "string" | "number" | "boolean" | "date" | "datetime";
-export type AlertParserField = {
-  id: string;
-  sourceField: string;
-  alias: string;
-  type: AlertFieldType;
-};
-export type AlertParserConfig = { fields: AlertParserField[] };
 export type DeterministicConfig = {
   alertFilter: FilterGroup;
   fieldEnrichment: FeatureConfiguration;
@@ -195,7 +187,6 @@ export const defaultDeterministicConfig = (): DeterministicConfig => ({
   fieldEnrichment: emptyConfiguration,
   rules: [],
 });
-export const defaultAlertParserConfig = (): AlertParserConfig => ({ fields: [] });
 
 /* ─── Classification + Adversarial (Phase 4) ────────────
    Mirrors backend's ClassificationConfig/AdversarialConfig - both carry
@@ -241,18 +232,61 @@ export const defaultToolPickerFields = (): ToolPickerFields => ({
   delegatedResearch: defaultDelegatedResearchSettings(),
 });
 
-export type ResearchAgentConfig = { enabled: boolean; maxDelegations: number; timeoutSeconds: number; maxResultItems: number };
+export type ResearchAgentConfig = {
+  enabled: boolean;
+  maxDelegations: number;
+  timeoutSeconds: number;
+  maxResultItems: number;
+};
 // vectorStore: the agent calls it as a tool; maxDelegations = max
 // interactions per step. historyPandas ("Análisis de historial"): selector
 // = allowedColumns (vacío = todas) + windowDays (0 = sin límite) +
 // maxHistoryRows (las más recientes).
 export type DelegatedResearchSettings = {
-  vectorStore: ResearchAgentConfig & { vectorStoreInstanceId: string | null; similarityThreshold: number; maxDocumentsPerQuery: number; allowedAssetTypes: string[] };
-  historyPandas: ResearchAgentConfig & { maxHistoryRows: number; windowDays: number; maxAnalysisOperations: number; allowedColumns: string[]; allowedOperations: string[] };
+  vectorStore: ResearchAgentConfig & {
+    vectorStoreInstanceId: string | null;
+    similarityThreshold: number;
+    maxDocumentsPerQuery: number;
+    allowedAssetTypes: string[];
+  };
+  historyPandas: ResearchAgentConfig & {
+    maxHistoryRows: number;
+    windowDays: number;
+    maxAnalysisOperations: number;
+    allowedColumns: string[];
+    allowedOperations: string[];
+  };
 };
 export const defaultDelegatedResearchSettings = (): DelegatedResearchSettings => ({
-  vectorStore: { enabled: false, maxDelegations: 3, timeoutSeconds: 8, maxResultItems: 10, vectorStoreInstanceId: null, similarityThreshold: .7, maxDocumentsPerQuery: 8, allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"] },
-  historyPandas: { enabled: false, maxDelegations: 1, timeoutSeconds: 8, maxResultItems: 10, maxHistoryRows: 50, windowDays: 30, maxAnalysisOperations: 4, allowedColumns: [], allowedOperations: ["filter", "group_by", "aggregate", "distribution", "trend", "outlier", "comparison"] },
+  vectorStore: {
+    enabled: false,
+    maxDelegations: 3,
+    timeoutSeconds: 8,
+    maxResultItems: 10,
+    vectorStoreInstanceId: null,
+    similarityThreshold: 0.7,
+    maxDocumentsPerQuery: 8,
+    allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"],
+  },
+  historyPandas: {
+    enabled: false,
+    maxDelegations: 1,
+    timeoutSeconds: 8,
+    maxResultItems: 10,
+    maxHistoryRows: 50,
+    windowDays: 30,
+    maxAnalysisOperations: 4,
+    allowedColumns: [],
+    allowedOperations: [
+      "filter",
+      "group_by",
+      "aggregate",
+      "distribution",
+      "trend",
+      "outlier",
+      "comparison",
+    ],
+  },
 });
 
 export type ClassificationConfig = ToolPickerFields & {
@@ -404,7 +438,6 @@ export const defaultExecutorConfig = (): ExecutorConfig => ({
 });
 
 export type SegmentAgentConfig = {
-  parser: AlertParserConfig;
   deterministic: DeterministicConfig;
   profiling: ProfilingConfig;
   rubrics: Rubric[];
@@ -461,7 +494,6 @@ export const defaultSegmentMonitoring = (): SegmentMonitoringConfig => ({
 });
 
 export const defaultSegmentAgent = (): SegmentAgentConfig => ({
-  parser: defaultAlertParserConfig(),
   deterministic: defaultDeterministicConfig(),
   profiling: defaultProfilingConfig(),
   rubrics: [],
@@ -572,7 +604,6 @@ export type ConfigSettings = {
   testCleanupPolicy: TestCleanupPolicy;
   // The alert input contract applies before channel routing, so it is shared
   // by every segment rather than belonging to an individual agent pipeline.
-  alertSchema: AlertParserConfig;
   segments: Record<SegmentCode, SegmentSettings>;
 };
 
@@ -778,7 +809,6 @@ export const defaultSettings = (): ConfigSettings => ({
   experimentTimeoutMinutes: 30,
   maxStoredTestRuns: 20,
   testCleanupPolicy: "oldest",
-  alertSchema: defaultAlertParserConfig(),
   segments: {
     ...defaultSegments(),
     canales_digitales: {

@@ -110,6 +110,20 @@ function TestRunDetailPage() {
               </nav>
               <p className="mt-0.5 text-[12px] text-text-secondary truncate">
                 Archivo: <span className="font-medium text-text-primary">{run.dataset_name}</span>
+                <span className="ml-3">
+                  Esquema:{" "}
+                  <span className="font-medium text-text-primary">
+                    {run.config.schema_version ? `v${run.config.schema_version}` : "activo"}
+                  </span>
+                </span>
+                <span className="ml-3">
+                  Configuración:{" "}
+                  <span className="font-medium text-text-primary">
+                    {run.config.configuration_ref
+                      ? `v${run.config.configuration_ref.version}`
+                      : "activa"}
+                  </span>
+                </span>
               </p>
             </div>
             <div className="flex items-center gap-3 shrink-0">

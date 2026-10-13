@@ -8,6 +8,7 @@ import {
   saveAlertFieldMapping,
 } from "@/lib/api/datasets.functions";
 import { listVariables } from "@/lib/api/variable.functions";
+import { useRole } from "@/hooks/useRole";
 
 type Pair = { alertField: string; datasetField: string };
 
@@ -22,6 +23,8 @@ function mappingsToPairs(mappings: Record<string, string>): Pair[] {
 }
 
 export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
+  const { role } = useRole();
+  const canEdit = role === "manager" || role === "release_manager";
   const queryClient = useQueryClient();
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
@@ -89,6 +92,16 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
 
   return (
     <div className="space-y-3">
+      <h3 className="text-[13px] font-semibold text-text-primary">Exportar a formato externo</h3>
+      <p className="text-[12px] text-text-secondary">
+        Este mapeo solo se usa al exportar la alerta canónica a un formato externo. La acción "Al
+        dataset" no lo usa: llena entrada, etiquetas y la versión del esquema.
+      </p>
+      {!canEdit && (
+        <p className="rounded-md bg-surface px-3 py-2 text-[12px] text-text-secondary">
+          Solo manager y release manager pueden editar este formato. Vista de solo lectura.
+        </p>
+      )}
       <p className="text-[12px] text-text-secondary">
         Este mapeo traduce la data de <strong className="text-text-primary">este dataset</strong> al
         formato interno con el que ARIA representa una alerta: cada fila indica de qué campo del
@@ -126,6 +139,7 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
         {pairs.map((p, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_32px] gap-2 px-3 py-2 items-center">
             <input
+              disabled={!canEdit}
               value={p.alertField}
               onChange={(e) => updatePair(i, { alertField: e.target.value })}
               placeholder="ej: transaccion.monto"
@@ -133,6 +147,7 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
               className="h-8 rounded-md border border-border px-2 text-[12px] font-mono focus:outline-none focus:border-primary"
             />
             <input
+              disabled={!canEdit}
               value={p.datasetField}
               onChange={(e) => updatePair(i, { datasetField: e.target.value })}
               placeholder="ej: monto"
@@ -141,6 +156,7 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
             />
             <button
               type="button"
+              disabled={!canEdit}
               onClick={() => removePair(i)}
               className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger justify-self-center"
             >
@@ -150,13 +166,15 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={addPair}
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-      >
-        <Plus className="h-3.5 w-3.5" /> Agregar mapeo
-      </button>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={addPair}
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+        >
+          <Plus className="h-3.5 w-3.5" /> Agregar mapeo
+        </button>
+      )}
 
       {saveMutation.isError && (
         <p className="text-[12px] text-danger">{(saveMutation.error as Error).message}</p>
@@ -171,14 +189,16 @@ export function DatasetMappingTab({ datasetName }: { datasetName: string }) {
             ? `Última actualización: ${new Date(mappingQuery.data.updated_at).toLocaleString()}`
             : "Sin guardar todavía."}
         </p>
-        <button
-          type="button"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-          className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-primary text-white disabled:opacity-50"
-        >
-          {saveMutation.isPending ? "Guardando…" : "Guardar mapeo"}
-        </button>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="px-3 py-1.5 rounded-md text-[12px] font-medium bg-primary text-white disabled:opacity-50"
+          >
+            {saveMutation.isPending ? "Guardando…" : "Guardar mapeo"}
+          </button>
+        )}
       </div>
     </div>
   );

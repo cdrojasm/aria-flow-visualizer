@@ -79,6 +79,7 @@ import { ConfirmVectorStoreDocumentsDialog } from "@/components/ui/confirm-vecto
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { usePagination } from "@/hooks/usePagination";
 import { useRole } from "@/hooks/useRole";
+import { getActiveAlertSchema, type AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
 
 export const Route = createFileRoute("/biblioteca")({
   head: () => ({
@@ -131,7 +132,7 @@ const EVENT_CATALOG_OPTIONS: TagCategory[] = [
 ];
 
 type BibliotecaTab =
-  "conocimiento" | "eventos" | "canales" | "listas" | "datasets";
+  "conocimiento" | "eventos" | "canales" | "listas" | "datasets" | "schema";
 type KnowledgeTab =
   | "vector-store"
   | "taxonomias"
@@ -145,7 +146,43 @@ const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
   { key: "canales", label: "Canales" },
   { key: "listas", label: "Listas negras/blancas" },
   { key: "datasets", label: "Datasets" },
+  { key: "schema", label: "Esquema de alerta" },
 ];
+
+function AlertSchemaLibraryView({ schema }: { schema: AlertSchemaVersion | null }) {
+  const fields = schema?.fields.filter((field) => field.is_alert && !field.is_history) ?? [];
+  return (
+    <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+      <div className="px-6 py-4 border-b border-border">
+        <h2 className="text-[14px] font-semibold text-text-primary">Esquema de alerta</h2>
+        <p className="text-[12px] text-text-secondary mt-1">
+          Catálogo de solo lectura de la versión activa para consultar campos de entrada y etiquetas.
+        </p>
+      </div>
+      <div className="px-6 py-4">
+        <p className="text-[12px] text-text-secondary mb-3">
+          Versión activa: <strong className="text-text-primary">v{schema?.version ?? "—"}</strong>
+        </p>
+        {fields.length === 0 ? (
+          <p className="text-[13px] text-text-secondary">No hay una versión activa con campos.</p>
+        ) : (
+          <div className="border border-border rounded-lg divide-y divide-border">
+            {fields.map((field) => (
+              <div key={field.id} className="grid grid-cols-[minmax(0,1fr)_120px_minmax(0,2fr)] gap-3 px-4 py-3 text-[12px]">
+                <div>
+                  <p className="font-medium text-text-primary">{field.field_name || field.field}</p>
+                  <p className="font-mono text-[11px] text-text-secondary">{field.field}</p>
+                </div>
+                <span className="text-text-secondary">{field.is_label ? "Etiqueta" : "Entrada"}</span>
+                <p className="text-text-secondary">{field.description || "Sin descripción."}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 const KNOWLEDGE_TABS: { key: KnowledgeTab; label: string }[] = [
   { key: "vector-store", label: "Vector store" },
   { key: "taxonomias", label: "Taxonomías de fraude" },
@@ -169,7 +206,7 @@ type PersistedBibliotecaTabs = {
 const BIBLIOTECA_TABS_STORAGE_KEY = "aria.biblioteca.activeTab.v1";
 
 function BibliotecaPage() {
-  const { user } = useRole();
+  const { user, role } = useRole();
   const currentUserName = user?.name ?? "";
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<BibliotecaTab>("conocimiento");
@@ -182,6 +219,14 @@ function BibliotecaPage() {
   // effect's setState calls above take effect - same flag pattern as
   // configuracion.tsx's editorStateHydrated.
   const [tabsHydrated, setTabsHydrated] = useState(false);
+  const schemaQuery = useQuery({
+    queryKey: ["activeAlertSchema"],
+    queryFn: getActiveAlertSchema,
+    enabled: role === "data_analyst",
+  });
+  const visibleBibliotecaTabs = BIBLIOTECA_TABS.filter(
+    (tab) => tab.key !== "schema" || role === "data_analyst",
+  );
 
   useEffect(() => {
     try {
@@ -750,7 +795,7 @@ function BibliotecaPage() {
         </header>
 
         <div className="flex items-center gap-1 border-b border-border">
-          {BIBLIOTECA_TABS.map((t) => (
+          {visibleBibliotecaTabs.map((t) => (
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
@@ -886,6 +931,10 @@ function BibliotecaPage() {
         {activeTab === "listas" && <WatchlistManager />}
 
         {activeTab === "datasets" && <DatasetLibraryManager />}
+
+        {activeTab === "schema" && role === "data_analyst" && (
+          <AlertSchemaLibraryView schema={schemaQuery.data ?? null} />
+        )}
 
         {showChannelForm && editingChannel && (
           <div

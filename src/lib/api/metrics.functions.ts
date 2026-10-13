@@ -21,7 +21,7 @@ export type ApiMetricsRange = {
   from: string;
   to: string;
   timezone: string;
-  amount_tier_set_versions: string[];
+  schema_versions: string[];
 };
 
 // MetricsPeriodSchema
@@ -42,8 +42,7 @@ export type ApiMetricsPeriod = {
 };
 
 // MetricsWarningSchema
-export type ApiMetricsWarningCode =
-  "partial_period" | "amount_tier_set_changed" | "fraud_label_maturing";
+export type ApiMetricsWarningCode = "partial_period" | "schema_changed" | "fraud_label_maturing";
 export type ApiMetricsWarning = {
   code: ApiMetricsWarningCode;
   message: string;
@@ -121,7 +120,7 @@ export type ApiMetricsOverview = {
   fraud_quality: ApiFraudQualityStats;
   resolution_time: ApiResolutionTimeStats;
   // Keyed by ALERT_DIMENSIONS (origin, segment, channel, subchannel,
-  // amount_tier, amount_tier_set_version, status, configuration_id,
+  // amount_tier, schema_version, status, configuration_id,
   // resolution_method, mark, fraud_label).
   distributions: Record<string, ApiDimensionBucket[]>;
   hourly_profile: ApiHourlyProfileSlot[];
@@ -263,6 +262,14 @@ export type ApiLiveAlertFunnel = {
   measured_at: string;
 };
 
+export type ApiVersionEvent = {
+  kind: "schema" | "configuration";
+  label: string;
+  version: number;
+  configuration_id?: string | null;
+  at: string;
+};
+
 // --- Query ------------------------------------------------------------------
 
 // Filters accepted by /metrics/* and /alerts/history (metrics_query_params.py);
@@ -324,4 +331,8 @@ export function getTechnicalMetrics({
 
 export function getLiveAlertFunnel(): Promise<ApiLiveAlertFunnel> {
   return apiFetch("/api/v0/metrics/live");
+}
+
+export function getVersionEvents({ data }: { data: MetricsQuery }): Promise<ApiVersionEvent[]> {
+  return apiFetch(withQuery("/api/v0/metrics/version-events", metricsSearchParams(data)));
 }

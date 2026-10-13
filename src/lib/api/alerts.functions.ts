@@ -81,7 +81,7 @@ export type ApiAlertHistoryItem = {
   subchannel: string | null;
   amount: number | null;
   amount_tier: string;
-  amount_tier_set_version: number | null;
+  schema_version: number | null;
   configuration_id: string | null;
   resolution_method: "aria" | "analyst" | "voicebot" | "bidi" | null;
   mark: ApiMark;

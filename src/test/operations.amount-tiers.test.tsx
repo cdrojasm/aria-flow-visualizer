@@ -50,7 +50,6 @@ const settings = {
     { code: "bajo", label: "Bajo", min_inclusive: 0, max_exclusive: 1000 },
     { code: "alto", label: "Alto", min_inclusive: 1000, max_exclusive: null },
   ],
-  amount_tier_set_version: 3,
   reasoning_evaluation_sample_rate: 0.05,
 };
 
@@ -70,7 +69,7 @@ const server = setupServer(
   http.get("*/api/v0/tags", () => HttpResponse.json([])),
   http.put("*/api/v0/operational-settings", async ({ request }) => {
     putBody = (await request.json()) as { settings: typeof settings };
-    return HttpResponse.json({ ...putBody.settings, amount_tier_set_version: 4 });
+    return HttpResponse.json(putBody.settings);
   }),
 );
 

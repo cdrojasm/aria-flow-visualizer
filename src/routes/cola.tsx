@@ -15,6 +15,8 @@ import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { usePagination } from "@/hooks/usePagination";
 import { segmentoBadgeClass, type Canal, type Segmento } from "@/data/channels";
 import { useRole } from "@/hooks/useRole";
+import { getActiveAlertSchema, type AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
+import { formatSchemaValue } from "@/components/alert/AlertSchemaView";
 import {
   getOperationsCapacity,
   listAnalystQueue,
@@ -171,33 +173,50 @@ function num(value: unknown): number | null {
 // Maps an escalated alert (backend AnalystQueueAlert) onto the table row.
 // Payload shape follows ARIC's event (amount.baseValue, channel,
 // object.triggeredRules[].name); anything missing renders as "—".
-function toPendingRow(alert: AnalystQueueAlert, userId: string | undefined): PendingRow {
-  const p = alert.payload as {
-    amount?: number | { baseValue?: number };
-    channel?: string;
-    eventType?: string;
-    object?: { triggeredRules?: { name?: string }[] | string };
+function toPendingRow(
+  alert: AnalystQueueAlert,
+  userId: string | undefined,
+  schema: AlertSchemaVersion | null,
+): PendingRow {
+  const fieldForRole = (role: string) => {
+    const id = schema?.field_roles[role];
+    return schema?.fields.find((field) => field.id === id);
   };
+  const valueForRole = (role: string) => {
+    const field = fieldForRole(role);
+    return field ? alert.input[field.field] : undefined;
+  };
+  const amountField = fieldForRole("amount");
+  const channelField = fieldForRole("channel");
+  const entrypointField = fieldForRole("entrypoint");
   const created = new Date(alert.created_at);
-  const amount = num(typeof p.amount === "object" ? p.amount?.baseValue : p.amount);
-  // Parser payloads carry [{name}]; CSV-loaded alerts carry "RULE-1;RULE-2".
-  const rawRules = p.object?.triggeredRules ?? [];
-  const rules = (
-    typeof rawRules === "string"
-      ? rawRules.split(/[;,]/).map((r) => r.trim())
-      : Array.isArray(rawRules)
-        ? rawRules.map((r) => r?.name)
-        : []
-  ).filter(Boolean) as string[];
+  const amount = num(valueForRole("amount"));
+  const rulesField = schema?.fields.find((field) => field.field === "rules");
+  const rulesValue = rulesField ? alert.input[rulesField.field] : undefined;
+  const rules = Array.isArray(rulesValue)
+    ? rulesValue.map(String)
+    : rulesValue
+      ? [String(rulesValue)]
+      : [];
   return {
     alertId: alert.alert_id,
     id: alert.alert_id.slice(0, 8),
     userId: alert.customer_id ?? "—",
     arrival: created.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" }),
     queueMinutes: Math.max(0, Math.round((Date.now() - created.getTime()) / 60000)),
-    amount: amount === null ? "—" : `$ ${amount.toLocaleString("es-CO")}`,
-    canal: (p.channel ?? "—") as BaseRow["canal"],
-    subcanal: String(p.eventType ?? alert.event_type ?? "—"),
+    amount:
+      amount === null
+        ? "—"
+        : formatSchemaValue(
+            amount,
+            amountField ?? { type: "number", use_locale: true, locale_type: "es-CO" },
+          ),
+    canal: (channelField
+      ? formatSchemaValue(valueForRole("channel"), channelField)
+      : "—") as BaseRow["canal"],
+    subcanal: entrypointField
+      ? formatSchemaValue(valueForRole("entrypoint"), entrypointField)
+      : "—",
     segmento: "—" as BaseRow["segmento"],
     reglas: rules,
     verdict: "Escalada",
@@ -380,6 +399,7 @@ function ColaPage() {
     queryKey: ["analystQueue"],
     queryFn: () => listAnalystQueue(),
   });
+  const schemaQuery = useQuery({ queryKey: ["activeAlertSchema"], queryFn: getActiveAlertSchema });
   const capacityQuery = useQuery({
     queryKey: ["operationsCapacity"],
     queryFn: () => getOperationsCapacity(),
@@ -391,8 +411,11 @@ function ColaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lastRefresh]);
   const pendingRows = useMemo(
-    () => (queueQuery.data ?? []).map((alert) => toPendingRow(alert, user?.id)),
-    [queueQuery.data, user?.id],
+    () =>
+      (queueQuery.data ?? []).map((alert) =>
+        toPendingRow(alert, user?.id, schemaQuery.data ?? null),
+      ),
+    [queueQuery.data, schemaQuery.data, user?.id],
   );
   const [takeError, setTakeError] = useState<string | null>(null);
   const takeMutation = useMutation({
