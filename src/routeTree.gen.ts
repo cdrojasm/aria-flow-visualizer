@@ -18,6 +18,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ColaRouteImport } from './routes/cola'
 import { Route as BibliotecaRouteImport } from './routes/biblioteca'
+import { Route as BackupsRouteImport } from './routes/backups'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestingIndexRouteImport } from './routes/testing.index'
 import { Route as TestingRunIdRouteImport } from './routes/testing.$runId'
@@ -69,6 +70,11 @@ const BibliotecaRoute = BibliotecaRouteImport.update({
   path: '/biblioteca',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BackupsRoute = BackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -98,6 +104,7 @@ const TestingScenariosScenarioIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
@@ -196,6 +208,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BackupsRoute: typeof BackupsRoute
   BibliotecaRoute: typeof BibliotecaRoute
   ColaRoute: typeof ColaRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
@@ -273,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/backups': {
+      id: '/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof BackupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -328,6 +348,7 @@ const TestingRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BackupsRoute: BackupsRoute,
   BibliotecaRoute: BibliotecaRoute,
   ColaRoute: ColaRoute,
   ConfiguracionRoute: ConfiguracionRoute,

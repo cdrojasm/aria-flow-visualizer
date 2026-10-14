@@ -24,7 +24,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  manager: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/configuracion"],
+  manager: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/configuracion", "/backups"],
   release_manager: [
     "/dashboard",
     "/cola",

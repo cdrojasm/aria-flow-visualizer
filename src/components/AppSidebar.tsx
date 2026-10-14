@@ -13,6 +13,7 @@ import {
   Library,
   BrainCircuit,
   LogOut,
+  Archive,
 } from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
 import type { AuthUser } from "@/lib/api/auth.functions";
@@ -27,6 +28,7 @@ const nav = [
   { to: "/biblioteca", label: "Biblioteca", icon: Library },
   { to: "/modelos", label: "Modelos", icon: BrainCircuit },
   { to: "/configuracion", label: "Configuración", icon: Settings },
+  { to: "/backups", label: "Respaldos", icon: Archive },
 ];
 
 export function AppSidebar({
