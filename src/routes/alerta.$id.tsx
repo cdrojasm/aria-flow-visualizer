@@ -833,7 +833,7 @@ function AlertaDetailPage() {
           <div>
             <nav className="flex items-center gap-1.5 text-[12px] text-text-secondary mb-2">
               <Link to="/cola" className="hover:text-primary">
-                In Progress
+                Alertas en progreso
               </Link>
               <ChevronRight className="h-3 w-3" />
               <span className="text-text-primary font-medium">Alerta #{id.slice(0, 8)}</span>

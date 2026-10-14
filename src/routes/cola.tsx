@@ -485,7 +485,7 @@ function ColaPage() {
         {/* Header */}
         <div className="sticky top-0 z-20 -mx-8 px-8 py-4 mb-6 bg-background border-b border-border flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <h1 className="text-[20px] font-bold text-text-primary">In Progress</h1>
+            <h1 className="text-[20px] font-bold text-text-primary">Alertas en progreso</h1>
             <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold tabular-nums">
               {activeCount}
             </span>
