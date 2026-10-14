@@ -548,7 +548,7 @@ function DatasetModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-card rounded-xl border border-border shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto bg-card rounded-xl border border-border shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">

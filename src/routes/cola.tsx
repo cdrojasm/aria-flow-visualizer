@@ -133,7 +133,7 @@ const procesoRows: ProcesoRow[] = [
     userId: "USR-***7788",
     arrival: "09:58",
     queueMinutes: 9,
-    amount: "$ 800.00 USD",
+    amount: "$ 800,00 USD",
     canal: "ATM",
     subcanal: "Retiro",
     segmento: "Tarjeta",

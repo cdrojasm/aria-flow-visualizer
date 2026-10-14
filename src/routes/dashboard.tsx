@@ -469,6 +469,9 @@ function VersionEventLines({
           }}
         >
           <title>{`${versionEventLabel(event)} · ${format(new Date(event.at), "yyyy-MM-dd HH:mm")}`}</title>
+          <desc data-testid="dashboard-version-event">
+            {`${versionEventLabel(event)} · ${format(new Date(event.at), "yyyy-MM-dd HH:mm")}`}
+          </desc>
         </ReferenceLine>
       ))}
     </>
@@ -680,6 +683,15 @@ function DashboardPage() {
                     <h3 className="text-[13px] font-semibold text-text-primary mb-3">
                       Alertas por periodo
                     </h3>
+                    {versionEvents.map((event) => (
+                      <p
+                        key={`version-event-${event.kind}-${event.version}-${event.at}`}
+                        data-testid="dashboard-version-event"
+                        className="mb-2 text-[11px] font-medium text-amber-800"
+                      >
+                        {`${versionEventLabel(event)} · ${format(new Date(event.at), "yyyy-MM-dd")}`}
+                      </p>
+                    ))}
                     <ResponsiveContainer width="100%" height={220}>
                       <BarChart data={periods} margin={{ top: 5, right: 12, bottom: 0, left: -20 }}>
                         <CartesianGrid stroke="#e2e5ef" vertical={false} />

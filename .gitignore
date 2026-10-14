@@ -33,3 +33,4 @@ dist-ssr
 
 #testing folders and files
 test-results/
+.e2e-alert-schema-checkpoint.json
