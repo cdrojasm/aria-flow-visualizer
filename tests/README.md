@@ -1,5 +1,47 @@
 # Pruebas de frontend
 
+## E04: gestión de datasets (API simulada)
+
+El E2E de Biblioteca recorre la carga de un CSV, el resumen y las filas,
+el mapping de exportación, la descarga de plantilla, la derivación filtrada,
+la creación de un dataset vacío y el borrado temporal. También verifica que un
+CSV con columnas incompatibles sea rechazado sin crear un dataset.
+
+```bash
+npm run test:e2e -- datasets
+```
+
+La prueba simula el borde HTTP; no valida la persistencia ni las reglas del
+backend real.
+
+### Escala con API real
+
+`e2e/datasets-real.spec.ts` toma una muestra aleatoria determinista de
+`training_dataset_xgboost.csv` (25, 100, 300 y 900 filas), comprueba que sus
+54 columnas coincidan con `dataset_ejemplo.csv` y que incluya los campos ARIA
+requeridos. Antes de cargar, anonimiza identificadores y datos de contacto,
+incluidos los campos anidados de transacciones. Las particiones se guardan en
+`/private/tmp/aria-e04-partitions` y se borran del backend al terminar. El test
+registra los tiempos de subida, análisis y lectura de filas en un artefacto
+JSON de Playwright.
+
+Si defines `E2E_MANAGER_EMAIL` y `E2E_MANAGER_PASSWORD`, el test usa esa cuenta.
+Si faltan, inicia el flujo local con `make -C ../backend local-auth-up`, crea o
+renueva por API un usuario reutilizable `manager` (`e04-datasets-e2e@aria.test`)
+y genera una contraseña aleatoria sólo en memoria. Para una fuente en otra ruta,
+define `E2E_DATASET_SOURCE` y `E2E_DATASET_SCHEMA_SAMPLE`:
+
+```bash
+E2E_MANAGER_EMAIL=... E2E_MANAGER_PASSWORD=... npm run test:e2e:datasets:real
+```
+
+La prueba usa el API real publicado en `http://localhost` (o
+`ARIA_E2E_BASE_URL`) y crea datasets temporales con nombres únicos. El backend
+no expone borrado de usuarios, así que la cuenta E2E local queda registrada y
+se reutiliza en ejecuciones futuras; el test sólo limpia los datasets que crea.
+El aprovisionamiento automático requiere Docker y sólo se permite con un API
+local. No ejecutes contra una base compartida o productiva.
+
 ## E00: login, navegación y autorización por rol (API real)
 
 Este recorrido usa la pantalla real de login y el backend real. Para cada cuenta

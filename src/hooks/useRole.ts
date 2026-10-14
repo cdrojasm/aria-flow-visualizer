@@ -24,7 +24,15 @@ export const ROLE_LABELS: Record<Role, string> = {
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  manager: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/configuracion", "/backups"],
+  manager: [
+    "/dashboard",
+    "/cola",
+    "/historico-fraude",
+    "/monitor",
+    "/configuracion",
+    "/backups",
+    "/biblioteca",
+  ],
   release_manager: [
     "/dashboard",
     "/cola",
@@ -32,6 +40,7 @@ export const ROLE_NAV: Record<Role, string[]> = {
     "/monitor",
     "/configuracion",
     "/testing",
+    "/biblioteca",
   ],
   channel_manager: [
     "/dashboard",

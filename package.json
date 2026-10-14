@@ -17,6 +17,7 @@
     "test:e2e:real": "ARIA_E2E_REAL=1 playwright test e2e/alert-schema-real-api.spec.ts",
     "test:e2e:auth:real": "ARIA_E2E_REAL=1 playwright test e2e/auth-real.spec.ts",
     "test:e2e:configuration:real": "ARIA_E2E_REAL=1 playwright test e2e/configuration-deploy-real.spec.ts",
+    "test:e2e:datasets:real": "python3 scripts/prepare_e04_dataset_partitions.py --source \"${E2E_DATASET_SOURCE:-/Users/davidrojas/Downloads/training_dataset_xgboost.csv}\" --schema-sample \"${E2E_DATASET_SCHEMA_SAMPLE:-/Users/davidrojas/Downloads/dataset_ejemplo.csv}\" --output \"${E2E_DATASET_PARTITIONS_DIR:-/private/tmp/aria-e04-partitions}\" && ARIA_E2E_REAL=1 playwright test e2e/datasets-real.spec.ts",
     "test:e2e:simulation": "playwright test e2e/event-simulation.spec.ts"
   },
   "dependencies": {

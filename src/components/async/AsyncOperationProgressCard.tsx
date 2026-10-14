@@ -34,7 +34,9 @@ export function AsyncOperationProgressCard({
   const rows = typeof result.processed_rows === "number" ? result.processed_rows : null;
   const totalRows = typeof result.total_rows === "number" ? result.total_rows : null;
   const datasetName =
-    typeof operation?.payload.dataset_name === "string" ? operation.payload.dataset_name : null;
+    typeof operation?.payload?.dataset_name === "string"
+      ? operation.payload.dataset_name
+      : null;
   const failed = operation?.status === "FAILED";
   const done = operation?.status === "SUCCEEDED";
   const notified = useRef(false);
