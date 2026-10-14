@@ -15,6 +15,7 @@
     "test:web:component": "vitest run src/test/biblioteca.vector-store.test.tsx",
     "test:e2e": "playwright test",
     "test:e2e:real": "ARIA_E2E_REAL=1 playwright test e2e/alert-schema-real-api.spec.ts",
+    "test:e2e:auth:real": "ARIA_E2E_REAL=1 playwright test e2e/auth-real.spec.ts",
     "test:e2e:simulation": "playwright test e2e/event-simulation.spec.ts"
   },
   "dependencies": {
