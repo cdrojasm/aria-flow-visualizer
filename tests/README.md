@@ -19,6 +19,29 @@ npm run test:e2e:auth:real
 La cobertura ejecutada depende de las cuentas configuradas. Para declarar E00
 completo, revisa que los seis casos aparezcan como aprobados y no omitidos.
 
+## E01: configuración, versiones y despliegue (API real)
+
+Este recorrido real consulta el historial de una versión probada e inactiva,
+solicita su despliegue con una cuenta `channel_manager` y la aprueba desde la
+interfaz con una cuenta `manager`. Después reactiva la versión que estaba activa
+al inicio para dejar el entorno en su estado previo. La solicitud aprobada queda
+en el historial de auditoría.
+
+Ejecuta la prueba únicamente contra un entorno E2E aislado. Configura
+`E2E_MANAGER_EMAIL`, `E2E_MANAGER_PASSWORD`, `E2E_CHANNEL_MANAGER_EMAIL`,
+`E2E_CHANNEL_MANAGER_PASSWORD`, `E2E_DEPLOY_CONFIGURATION_ID` y
+`E2E_DEPLOY_VERSION`. La versión indicada debe estar probada e inactiva; la
+versión activa actual también debe ser reactivable.
+
+```bash
+npm run test:e2e:configuration:real
+```
+
+El spec valida los prerrequisitos antes de crear la solicitud. La activación y
+la restauración son operaciones reales del backend; si la restauración falla,
+el entorno puede quedar en la versión objetivo y debe revisarse antes de volver
+a ejecutar la prueba.
+
 ## Vector Store: caso de uso cubierto
 
 La suite cubre el recorrido de un usuario autenticado que agrega una taxonomía
