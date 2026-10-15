@@ -147,12 +147,10 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     const deniedCreate = await analystApi.post(`${API}/backups`);
     expect(deniedCreate.status(), await deniedCreate.text()).toBe(403);
 
-    await page.goto("/");
-    await page.evaluate(
-      (token: string) => localStorage.setItem("aria.auth.accessToken", token),
-      managerToken,
-    );
-    await page.reload();
+    await page.addInitScript((token: string) => {
+      if (sessionStorage.getItem("e11-role") !== "analyst")
+        localStorage.setItem("aria.auth.accessToken", token);
+    }, managerToken);
     await page.goto("/backups");
     await expect(page.getByRole("heading", { name: "Respaldos" })).toBeVisible();
     let created: Backup | undefined;
@@ -212,7 +210,10 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
       await expect(backupRow.getByText(`Objetos: ${terminal!.object_storage_objects}`)).toBeVisible();
     }
 
-    await page.evaluate(() => localStorage.removeItem("aria.auth.accessToken"));
+    await page.evaluate(() => {
+      sessionStorage.setItem("e11-role", "analyst");
+      localStorage.removeItem("aria.auth.accessToken");
+    });
     await page.reload();
     await page.goto("/login");
     await page.getByLabel("Correo").fill(analystEmail);
@@ -221,7 +222,7 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     await expect(page).toHaveURL(/\/monitor$/);
     await expect(page.getByRole("link", { name: "Respaldos", exact: true })).toHaveCount(0);
     await page.goto("/backups");
-    await expect(page).toHaveURL(/\/login\?redirect=.*backups/);
+    await expect(page).toHaveURL(/\/monitor$/);
   } finally {
     await Promise.all([managerApi.dispose(), analystApi.dispose()]);
   }
