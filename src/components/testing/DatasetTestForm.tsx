@@ -224,7 +224,7 @@ export function DatasetTestForm({
             ))}
           </select>
           <p className="text-[10px] text-text-secondary mt-1">
-            Los borradores y propuestas también se pueden comparar con el activo.
+            El esquema seleccionado se fija al iniciar el test. Si eliges una versión histórica, se compara con el esquema activo capturado al inicio; si dejas Activo, se ejecuta con esa versión activa.
           </p>
         </div>
 

@@ -20,6 +20,7 @@ export type TestRunConfig = {
   max_feedback_iterations: number;
   configuration_ref: ConfigurationRef | null;
   schema_version: number | null;
+  active_schema_version?: number | null;
 };
 
 export type TestRunResponse = {

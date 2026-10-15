@@ -115,6 +115,12 @@ function TestRunDetailPage() {
                   <span className="font-medium text-text-primary">
                     {run.config.schema_version ? `v${run.config.schema_version}` : "activo"}
                   </span>
+                  {run.config.active_schema_version &&
+                    run.config.schema_version !== run.config.active_schema_version && (
+                      <span className="text-text-secondary">
+                        {` · comparación con activo v${run.config.active_schema_version}`}
+                      </span>
+                    )}
                 </span>
                 <span className="ml-3">
                   Configuración:{" "}
