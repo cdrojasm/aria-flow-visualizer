@@ -327,8 +327,11 @@ Monitor:
 2. Comprobar que los filtros actualizan ambas consultas con mismo rango.
 3. Verificar permisos por rol y respuesta sin datos.
 
-La UI actual descarga CSV desde Dashboard. Monitor no muestra descarga; no
-declarar esa exportación cubierta hasta que el producto la implemente.
+4. Descargar CSV y validar rango, zona horaria, filtros, métricas operativas,
+   métricas técnicas y encabezados acentuados.
+
+El E2E E10 valida la descarga del Dashboard y del Monitor frente a las
+respuestas de las APIs reales. El manager tiene permisos para ambos recursos.
 
 ### E11 — Respaldos
 
@@ -387,8 +390,7 @@ de entorno; nunca poner contraseñas en código.
 - Operaciones no autorizadas fallan según contrato en UI/ruta/API.
 - No hay credenciales ni datos productivos en repo, artefactos o logs.
 - La limpieza deja plataforma reutilizable.
-- El CSV de Dashboard se descarga y valida; Monitor queda pendiente hasta tener
-  exportación en UI.
+- Los CSV de Dashboard y Monitor se descargan y validan contra las APIs reales.
 - La suite real corre completa en entorno local documentado. --list, typecheck
   y suites con mocks no se reportan como validación real.
 

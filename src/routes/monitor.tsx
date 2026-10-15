@@ -12,7 +12,10 @@ import {
   Cpu,
   Search,
   Fingerprint,
+  Download,
 } from "lucide-react";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import {
@@ -31,6 +34,8 @@ import {
   type ApiMetricsWarning,
   type ApiResolutionMethod,
   type ApiResolutionMethodStats,
+  type ApiAgentMetrics,
+  type ApiTechnicalMetrics,
 } from "@/lib/api/metrics.functions";
 import {
   averageSeconds,
@@ -113,6 +118,25 @@ function MonitorPage() {
         : "ok";
   const fetching = agentQuery.isFetching || technicalQuery.isFetching;
 
+  const downloadReport = () => {
+    if (
+      !agent ||
+      !tech ||
+      fetching ||
+      agent.range.from !== tech.range.from ||
+      agent.range.to !== tech.range.to
+    )
+      return;
+    const csv = buildMonitorReportCsv(agent, tech, filters);
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reporte-monitor-${format(new Date(), "yyyy-MM-dd-HHmm")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <DashboardLayout>
       <div className="p-8 max-w-[1400px] space-y-6">
@@ -141,6 +165,22 @@ function MonitorPage() {
               canReadObservedValues={Boolean(user?.permissions.includes("dashboard"))}
             />
             <RangeControl value={range} onChange={setRange} />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-[30px] text-[11px] gap-1.5"
+              onClick={downloadReport}
+              disabled={
+                !agent ||
+                !tech ||
+                fetching ||
+                agent.range.from !== tech.range.from ||
+                agent.range.to !== tech.range.to
+              }
+            >
+              <Download className="h-3.5 w-3.5" />
+              Exportar reporte
+            </Button>
           </div>
         </div>
 
@@ -384,6 +424,151 @@ function MonitorPage() {
       </div>
     </DashboardLayout>
   );
+}
+
+function csvValue(value: string | number) {
+  const raw = String(value);
+  return /[",;\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+}
+
+function csvLine(values: (string | number)[]) {
+  return values.map(csvValue).join(",");
+}
+
+function buildMonitorReportCsv(
+  agent: ApiAgentMetrics,
+  tech: ApiTechnicalMetrics,
+  filters: FilterSelection,
+) {
+  const lines = [
+    "REPORTE DEL MONITOR ARIA",
+    csvLine(["Generado", format(new Date(), "yyyy-MM-dd HH:mm")]),
+    csvLine(["Desde", agent.range.from]),
+    csvLine(["Hasta", agent.range.to]),
+    csvLine(["Zona horaria", agent.range.timezone]),
+    "",
+    "FILTROS APLICADOS",
+  ];
+  for (const [name, value] of Object.entries(filters))
+    if (value) lines.push(csvLine([name, value]));
+  lines.push("", "ADVERTENCIAS DEL RANGO", csvLine(["Código", "Advertencia", "Periodos"]));
+  for (const warning of [...agent.warnings, ...tech.warnings])
+    lines.push(csvLine([warning.code, warning.message, warning.periods.join("; ")]));
+  lines.push(
+    "",
+    "INDICADORES DEL AGENTE",
+    csvLine(["Indicador", "Valor"]),
+    csvLine(["Alertas", agent.totals.alerts]),
+    csvLine(["Fraude no detectado", agent.fraud_quality.undetected_fraud]),
+    csvLine(["Falsos positivos", agent.fraud_quality.false_positives]),
+    csvLine(["Decididas", agent.fraud_quality.decided]),
+    csvLine(["Tiempo de resolución (s)", agent.resolution_time.sum_seconds]),
+    csvLine(["Dentro del SLA", agent.resolution_time.within_sla_count]),
+    "",
+    "PERIODOS DEL AGENTE",
+    csvLine([
+      "Periodo",
+      "Nivel",
+      "Parcial",
+      "Maduración",
+      "Alertas",
+      "Decididas",
+      "Falsos positivos",
+      "Fraude no detectado",
+    ]),
+  );
+  for (const period of agent.periods)
+    lines.push(
+      csvLine([
+        period.period,
+        period.level,
+        period.partial ? "sí" : "no",
+        period.maturation,
+        period.alerts,
+        period.decided,
+        period.false_positives,
+        period.undetected_fraud,
+      ]),
+    );
+  lines.push("", "MÉTODOS DE RESOLUCIÓN", csvLine(["Método", "Alertas", "Fraude", "Sin fraude"]));
+  for (const method of agent.by_resolution_method)
+    lines.push(
+      csvLine([method.resolution_method, method.alerts, method.fraud_marks, method.no_fraud_marks]),
+    );
+  lines.push(
+    "",
+    "PASOS DEL WORKFLOW",
+    csvLine(["Paso", "Ejecuciones", "Correctas", "Fallidas", "Reintentos", "Duración (s)"]),
+  );
+  for (const step of tech.workflow_steps_by_step)
+    lines.push(
+      csvLine([
+        step.step_name,
+        step.executions,
+        step.succeeded,
+        step.failed,
+        step.retries,
+        step.duration.sum_seconds,
+      ]),
+    );
+  lines.push(
+    "",
+    "LLAMADAS LLM",
+    csvLine(["Modelo", "Llamadas", "Errores", "Tokens entrada", "Tokens salida", "Latencia (s)"]),
+  );
+  for (const model of tech.llm_calls_by_model)
+    lines.push(
+      csvLine([
+        model.model,
+        model.calls,
+        model.errors,
+        model.input_tokens,
+        model.output_tokens,
+        model.latency.sum_seconds,
+      ]),
+    );
+  lines.push(
+    "",
+    "INVESTIGACIÓN DELEGADA",
+    csvLine(["Fuente", "Llamadas", "Correctas", "Fallidas", "Timeout"]),
+  );
+  for (const source of tech.research_calls_by_source)
+    lines.push(csvLine([source.source, source.calls, source.ok, source.failed, source.timeout]));
+  lines.push(
+    "",
+    "EVALUACIONES",
+    csvLine(["Evaluadas", "Alucinaciones", "Uso correcto de datos", "Inválidas"]),
+    csvLine([
+      tech.evaluations.evaluated,
+      tech.evaluations.hallucinations,
+      tech.evaluations.data_use_correct,
+      tech.evaluations.invalid,
+    ]),
+    "",
+    "PERIODOS TÉCNICOS",
+    csvLine([
+      "Periodo",
+      "Nivel",
+      "Parcial",
+      "Maduración",
+      "Ejecuciones",
+      "Fallidas",
+      "Llamadas LLM",
+    ]),
+  );
+  for (const period of tech.periods)
+    lines.push(
+      csvLine([
+        period.period,
+        period.level,
+        period.partial ? "sí" : "no",
+        period.maturation,
+        period.step_executions,
+        period.step_failed,
+        period.llm_calls,
+      ]),
+    );
+  return lines.join("\n");
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
