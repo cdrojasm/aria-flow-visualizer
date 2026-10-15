@@ -8,6 +8,16 @@ export type VectorStoreInstanceResponse = {
   promoted_version: number | null; promoted_at: string | null; promoted_by: string | null;
 };
 export type VectorStoreDocumentRelation = { relation_id: string; asset_type: "taxonomy" | "modus_operandi" | "yellow_flag" | "red_flag" | "similar_case"; asset_id: string; asset_version: number };
+export type VectorStoreSearchPipeline = "embedding_heavy" | "balanced" | "keyword_heavy";
+export type VectorStoreSearchDocumentType = "taxonomia" | "modus_operandi" | "similar_case" | "red_flag" | "yellow_flag";
+export type VectorStoreSearchResult = {
+  id: string;
+  type: VectorStoreSearchDocumentType;
+  text: string;
+  score: number;
+  vector_store_id: string;
+  vector_store_version: number;
+};
 
 export function listVectorStoreInstances(): Promise<VectorStoreInstanceResponse[]> { return apiFetch("/api/v0/vector-store-instances"); }
 export function createVectorStoreInstance(data: { name: string; description: string }): Promise<VectorStoreInstanceResponse> { return apiFetch("/api/v0/vector-store-instances", { method: "POST", body: JSON.stringify(data) }); }
@@ -18,6 +28,21 @@ export function createVectorStoreInstance(data: { name: string; description: str
 // this call having run at least once.
 export function promoteVectorStoreInstance(instanceId: string): Promise<VectorStoreInstanceResponse> { return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/promote`, { method: "POST" }); }
 export function listVectorStoreDocuments(instanceId: string): Promise<VectorStoreDocumentRelation[]> { return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/documents`); }
+export function queryVectorStoreInstance(input: {
+  instanceId: string;
+  query: string;
+  documentType: VectorStoreSearchDocumentType;
+  pipeline: VectorStoreSearchPipeline;
+  topK?: number;
+}): Promise<VectorStoreSearchResult[]> {
+  const params = new URLSearchParams({
+    query: input.query,
+    document_type: input.documentType,
+    pipeline: input.pipeline,
+    top_k: String(input.topK ?? 5),
+  });
+  return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(input.instanceId)}/query?${params}`);
+}
 export function addVectorStoreDocument(data: { instanceId: string; assetType: VectorStoreDocumentRelation["asset_type"]; assetId: string; assetVersion?: number }): Promise<VectorStoreDocumentRelation[]> {
   const { instanceId, assetType, assetId, assetVersion = 1 } = data;
   return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/documents`, { method: "POST", body: JSON.stringify({ asset_type: assetType, asset_id: assetId, asset_version: assetVersion }) });

@@ -32,11 +32,15 @@ const instance = {
   created_by: "Andrea Analista",
   updated_at: null,
   updated_by: null,
+  promoted_version: 2,
+  promoted_at: "2026-09-22T11:00:00Z",
+  promoted_by: "Andrea Analista",
 };
 
 let relations: Array<{ relation_id: string; asset_type: string; asset_id: string; asset_version: number }>;
 let addRequest: Record<string, unknown> | undefined;
 let createRequest: Record<string, unknown> | undefined;
+let queryRequest: Record<string, string> | undefined;
 
 const server = setupServer(
   http.get("*/api/v0/vector-store-instances", () => HttpResponse.json([instance])),
@@ -45,6 +49,24 @@ const server = setupServer(
     return HttpResponse.json({ ...instance, id: "vector-store-v2", version: 2, name: createRequest.name });
   }),
   http.get("*/api/v0/vector-store-instances/:instanceId/documents", () => HttpResponse.json(relations)),
+  http.get("*/api/v0/vector-store-instances/:instanceId/query", ({ request, params }) => {
+    const url = new URL(request.url);
+    queryRequest = {
+      instanceId: String(params.instanceId),
+      query: url.searchParams.get("query") ?? "",
+      document_type: url.searchParams.get("document_type") ?? "",
+      pipeline: url.searchParams.get("pipeline") ?? "",
+      top_k: url.searchParams.get("top_k") ?? "",
+    };
+    return HttpResponse.json([{
+      id: "hit-1",
+      type: "red_flag",
+      text: "Retiros inmediatos a múltiples destinos.",
+      score: 0.9234,
+      vector_store_id: String(params.instanceId),
+      vector_store_version: 2,
+    }]);
+  }),
   http.post("*/api/v0/vector-store-instances/:instanceId/documents/preflight", () => HttpResponse.json({
     instance_id: "vector-store-v1",
     will_add: [
@@ -91,6 +113,7 @@ beforeEach(() => {
   relations = [];
   addRequest = undefined;
   createRequest = undefined;
+  queryRequest = undefined;
 });
 
 describe("Base de conocimiento / Vector Store", () => {
@@ -129,5 +152,43 @@ describe("Base de conocimiento / Vector Store", () => {
     await user.click(screen.getByRole("button", { name: "Crear versión" }));
 
     await waitFor(() => expect(createRequest).toEqual({ name: "Candidato septiembre", description: "Validación antes de promover" }));
+  });
+
+  it("consulta la generación activa con tipo y perfil elegidos y muestra score", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      await screen.findByPlaceholderText("Describe qué conocimiento quieres recuperar"),
+      "retiros rápidos hacia varios destinos",
+    );
+    await user.selectOptions(screen.getByLabelText("Tipo de documento"), "red_flag");
+    await user.selectOptions(screen.getByLabelText("Perfil de búsqueda"), "embedding_heavy");
+    await user.click(screen.getByRole("button", { name: "Buscar" }));
+
+    expect(await screen.findByText("Retiros inmediatos a múltiples destinos.")).toBeInTheDocument();
+    expect(screen.getByText("score 0.923")).toBeInTheDocument();
+    expect(queryRequest).toEqual({
+      instanceId: "vector-store-v1",
+      query: "retiros rápidos hacia varios destinos",
+      document_type: "red_flag",
+      pipeline: "embedding_heavy",
+      top_k: "5",
+    });
+    expect(screen.getByText("Generación v2")).toBeInTheDocument();
+  });
+
+  it("explica que hace falta promover la instancia antes de consultar", async () => {
+    server.use(
+      http.get("*/api/v0/vector-store-instances", () =>
+        HttpResponse.json([{ ...instance, promoted_version: null, promoted_at: null, promoted_by: null }]),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("Promueve esta instancia para probar consultas sobre sus documentos."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Buscar" })).not.toBeInTheDocument();
   });
 });

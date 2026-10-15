@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store
+.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced
 
 .DEFAULT_GOAL := help
 
@@ -64,6 +64,13 @@ test-web-component-vector-store: test-web-prepare ## Run Vector Store component 
 
 test-e2e-vector-store: test-web-prepare ## Run Vector Store browser workflow tests
 	npm run test:e2e -- vector-store
+
+test-e2e-entities-advanced: ## Run advanced real API E2E for nested entities and vector stores via nginx localhost
+	@test -n "$(E2E_BOOTSTRAP_TOKEN)" || (echo "ERROR: set E2E_BOOTSTRAP_TOKEN for local E2E user provisioning"; exit 1)
+	@$(MAKE) -C ../backend local-api-build
+	@$(MAKE) down
+	@$(MAKE) run
+	E2E_BOOTSTRAP_TOKEN=$(E2E_BOOTSTRAP_TOKEN) npm run test:e2e:entities:advanced:real
 
 shell: ## Shell into running app container
 	docker compose exec web sh

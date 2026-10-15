@@ -76,6 +76,7 @@ import {
 import { apiPlaybookPath } from "@/lib/playbookPath";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { ConfirmVectorStoreDocumentsDialog } from "@/components/ui/confirm-vector-store-documents-dialog";
+import { VectorStoreSearchPanel } from "@/components/biblioteca/VectorStoreSearchPanel";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { usePagination } from "@/hooks/usePagination";
 import { useRole } from "@/hooks/useRole";
@@ -1190,6 +1191,11 @@ function BibliotecaPage() {
                           ID interno: {selectedVectorStore.id}
                         </span>
                       </div>
+                      <VectorStoreSearchPanel
+                        instanceId={selectedVectorStore.id}
+                        instanceName={`v${selectedVectorStore.version} · ${selectedVectorStore.name}`}
+                        promotedVersion={selectedVectorStore.promotedVersion}
+                      />
                       <div className="rounded-lg border border-border p-4 space-y-3">
                         <div>
                           <h4 className="text-[13px] font-medium text-text-primary">

@@ -7,7 +7,8 @@ export default defineConfig({
   fullyParallel: !realApi,
   use: {
     // Real E2E goes through nginx so /api/v0 exercises the same-origin proxy.
-    baseURL: process.env.ARIA_E2E_BASE_URL ?? (realApi ? "http://127.0.0.1" : "http://127.0.0.1:4173"),
+    baseURL:
+      process.env.ARIA_E2E_BASE_URL ?? (realApi ? "http://localhost" : "http://127.0.0.1:4173"),
     trace: "on-first-retry",
   },
   webServer: realApi

@@ -144,7 +144,61 @@ Para vector stores:
 6. Ejecutar flujo de agente configurado para consultar esa instancia y
    comprobar la versión referenciada.
 
-El E2E actual de vector store simula la API; este flujo real está pendiente.
+`e2e/vector-store.spec.ts` conserva la cobertura de UI con API simulada.
+`e2e/vector-store-real.spec.ts` crea o renueva por bootstrap un usuario E2E
+estable con contraseña aleatoria y usa la API por `http://localhost` (nginx).
+Genera taxonomía y modus operandi sintéticos por API, y los elimina al final.
+Comprueba nombres duplicados concurrentes, tipos inválidos sin escrituras,
+preflight stale frente a dos altas simultáneas (una gana y la otra recibe 409),
+unicidad de relaciones, retiro de la relación sin borrar la fuente y limpieza
+del árbol. Si existe una instancia vacía prueba que promoción devuelve 422 sin
+cambiarla; de lo contrario anota esa cobertura como no aplicable.
+
+Con `E2E_EMBEDDING_MOCK_CONTROL_URL` configura un endpoint de control de un mock
+Azure OpenAI compatible. El test lo usa para agotar los reintentos del SDK y
+comprobar rollback de creación y edición sin filas parciales/cambios. Sin esa
+variable cubre alta/edición exitosa y documenta la cobertura de rollback como
+ausente. El deployment local `asistentelupita-llm-work-emebed-3-large` responde
+correctamente; su dimensión (3072) debe coincidir con el mapping de OpenSearch.
+
+`e2e/entities-advanced-real.spec.ts` amplía el flujo sobre dos instancias E2E
+reutilizables y una taxonomía baseline. Crea una jerarquía con dos modus
+operandi, casos similares y una flag compartida; verifica propagación a ambas
+instancias, aislamiento al quitar/reagregar relaciones, carrera de altas,
+edición de playbook anidado y rollback de una edición inválida. Actualiza los
+embeddings de los documentos editados, promueve las dos instancias a OpenSearch
+y consulta la versión activa con los perfiles `embedding_heavy`, `balanced` y
+`keyword_heavy`, usando una paráfrasis del texto indexado. Al final elimina el
+árbol temporal y vuelve a promover el baseline para dejar limpio el índice de
+prueba. La API no ofrece borrado de instancias, por eso conserva las dos
+instancias E2E y el asset baseline entre ejecuciones.
+
+La ruta de consulta para operadores es
+`GET /api/v0/vector-store-instances/{instance_id}/query?query=...&document_type=modus_operandi&pipeline=balanced&top_k=5`.
+Requiere autenticación de escritor y sólo consulta la generación promovida; una
+instancia sin promover devuelve 409. Para evaluar retrieval con más rigor,
+mantener un corpus pequeño con queries etiquetadas por documento esperado,
+probar cada perfil, tipo documental e instancia, y registrar `Recall@k`,
+`MRR@k` y latencia. Incluir paráfrasis sin coincidencia léxica, consultas con
+términos exactos, queries sin resultados y cambios de corpus antes/después de
+una nueva promoción. Los tests de promoción también inyectan un fallo a mitad
+de escritura y verifican que la generación previa queda intacta y se eliminan
+los documentos parciales de la candidata. Otro test pausa la carga de una
+promoción y comprueba que la generación anterior siga disponible hasta que la
+nueva finalice.
+
+Para ejecutarlo, provisiona la API con un `AUTH_BOOTSTRAP_TOKEN` local y usa el
+mismo valor en `E2E_BOOTSTRAP_TOKEN`:
+
+```sh
+AUTH_BOOTSTRAP_TOKEN=<token> make -C ../backend local-docker-run
+E2E_BOOTSTRAP_TOKEN=<token> make test-e2e-entities-advanced
+```
+
+El escenario consulta resultados semánticos directamente en los tres perfiles
+de búsqueda y filtra por tipo documental. La búsqueda del agente completo sigue
+pendiente para comprobar selección de instancia y recuperación dentro del flujo
+de clasificación/revisión.
 
 ### E04 — Datasets
 
@@ -161,6 +215,13 @@ Desde Biblioteca y pantallas consumidoras:
 No confundir Al dataset de una alerta (curación de input + labels) con el
 mapping de exportación a formato externo: son flujos distintos y ambos deben
 probarse.
+
+`e2e/datasets.spec.ts` cubre el recorrido de Biblioteca con API simulada:
+subida CSV con operación asíncrona, resumen y filas, persistencia del mapping
+de exportación, descarga de plantilla CSV, derivación filtrada, creación de
+dataset vacío y borrado selectivo. También comprueba que una carga con columnas
+incompatibles falla sin añadir un dataset. La persistencia contra API real y
+las validaciones del backend aún requieren cobertura en un entorno E2E aislado.
 
 ### E05 — Entrenamiento y activación de modelos
 

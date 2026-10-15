@@ -202,6 +202,7 @@ type DraftState = {
   workingCopy: ConfigSettings;
   baseline?: ConfigSettings;
   dirtyTabs: TabKey[];
+  mergeConflicts?: { path: string[]; localValue: unknown; remoteValue: unknown }[];
   // Version this draft was seeded from — sent back as based_on_version so
   // the backend can reject the save (409) if the lineage moved on since.
   // undefined for a brand-new lineage (nothing to conflict with).
@@ -209,7 +210,6 @@ type DraftState = {
 };
 
 type PendingSave = {
-  forceNewVersion: boolean;
   request: CreateConfigurationRequest;
   preview: TestConfigurationResponse;
 };
@@ -226,6 +226,55 @@ type PersistedConfiguracionState = {
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+type MergeConflict = { path: string[]; localValue: unknown; remoteValue: unknown };
+
+const equalJson = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+
+function mergeConfigurationDraft(
+  baseline: unknown,
+  local: unknown,
+  remote: unknown,
+  path: string[] = [],
+  conflicts: MergeConflict[] = [],
+): unknown {
+  if (equalJson(local, baseline)) return structuredClone(remote);
+  if (equalJson(remote, baseline) || equalJson(local, remote)) return structuredClone(local);
+
+  if (isPlainObject(baseline) && isPlainObject(local) && isPlainObject(remote)) {
+    const merged: Record<string, unknown> = {};
+    const keys = new Set([...Object.keys(baseline), ...Object.keys(local), ...Object.keys(remote)]);
+    for (const key of keys) {
+      const value = mergeConfigurationDraft(
+        baseline[key],
+        local[key],
+        remote[key],
+        [...path, key],
+        conflicts,
+      );
+      if (value !== undefined) merged[key] = value;
+    }
+    return merged;
+  }
+
+  conflicts.push({ path, localValue: structuredClone(local), remoteValue: structuredClone(remote) });
+  return structuredClone(remote);
+}
+
+function replaceAtPath<T>(value: T, path: string[], replacement: unknown): T {
+  const result = structuredClone(value) as Record<string, unknown>;
+  let current = result;
+  for (const key of path.slice(0, -1)) {
+    current[key] = { ...(current[key] as Record<string, unknown>) };
+    current = current[key] as Record<string, unknown>;
+  }
+  const last = path.at(-1);
+  if (last !== undefined) {
+    if (replacement === undefined) delete current[last];
+    else current[last] = structuredClone(replacement);
+  }
+  return result as T;
+}
 
 // Recursively checks that every key present in `expected` also exists in
 // `actual` (missing entirely, not just falsy - a saved `null`/`0`/`""` is a
@@ -287,6 +336,7 @@ function ConfiguracionPage() {
   const activeQuery = useQuery({
     queryKey: ["activeConfiguration"],
     queryFn: () => getActiveConfiguration(),
+    refetchInterval: 10_000,
   });
   // Gates "Activar esta versión" below: test runs (src/routes/testing.index.tsx)
   // have no configuration_id link back to a draft yet, so this is a coarse
@@ -300,6 +350,7 @@ function ConfiguracionPage() {
     queryKey: ["configurationDeployRequests"],
     queryFn: () => listConfigurationDeployRequests(),
     enabled: isDeployApprover,
+    refetchInterval: isDeployApprover ? 10_000 : false,
   });
   const hasSucceededTestRun = (testRunsQuery.data ?? []).some((run) => run.status === "SUCCEEDED");
   // Segment keys come from this catalog now (see biblioteca.tsx's
@@ -357,6 +408,7 @@ function ConfiguracionPage() {
   const [deployRequestTitle, setDeployRequestTitle] = useState("");
   const [deployRequestMessage, setDeployRequestMessage] = useState("");
   const [deployRequestError, setDeployRequestError] = useState<string | null>(null);
+  const [deployApprovalError, setDeployApprovalError] = useState<string | null>(null);
   // Set when saveVersion's POST comes back 409 — the lineage moved on since
   // this draft was seeded. Cleared by reloadLatestVersion or a new save attempt.
   const [versionConflict, setVersionConflict] = useState(false);
@@ -408,6 +460,10 @@ function ConfiguracionPage() {
   const running = activeQuery.data
     ? { configId: activeQuery.data.configuration_id, version: activeQuery.data.version }
     : { configId: "", version: -1 };
+  const deployRequestIsStale = (request: NonNullable<typeof deployRequestsQuery.data>[number]) =>
+    activeQuery.isSuccess &&
+    (request.current_configuration_id !== (activeQuery.data?.configuration_id ?? null) ||
+      request.current_version !== (activeQuery.data?.version ?? null));
 
   // Version history for whichever config is picked as "Basada en" in the
   // New config modal - separate from versionsQuery above (that one tracks
@@ -555,6 +611,7 @@ function ConfiguracionPage() {
     queryKey: ["configurationVersions", selectedConfigId],
     queryFn: () => listConfigurationVersions({ data: { configurationId: selectedConfigId! } }),
     enabled: !!selectedConfigId && !isTempId(selectedConfigId),
+    refetchInterval: 10_000,
   });
 
   const historicalDetailQuery = useQuery({
@@ -599,6 +656,24 @@ function ConfiguracionPage() {
   }));
 
   const isDraftView = selectedVersion === "draft";
+  useEffect(() => {
+    if (
+      !canEditConfiguration ||
+      !isDraftView ||
+      selectedDraft?.basedOnVersion == null ||
+      !versionsQuery.data?.length
+    ) {
+      return;
+    }
+    const latestVersion = Math.max(...versionsQuery.data.map((entry) => entry.version));
+    if (latestVersion > selectedDraft.basedOnVersion) setVersionConflict(true);
+  }, [
+    canEditConfiguration,
+    isDraftView,
+    selectedDraft?.basedOnVersion,
+    selectedConfigId,
+    versionsQuery.data,
+  ]);
   const viewingVersion = isDraftView
     ? undefined
     : versions.find((v) => v.version === selectedVersion);
@@ -635,25 +710,6 @@ function ConfiguracionPage() {
     selectedDraft?.basedOnVersion != null
       ? versions.find((v) => v.version === selectedDraft.basedOnVersion)
       : undefined;
-  const canEditVersion = (version: number) => {
-    const entry = backendVersions.find((v) => v.version === version);
-    return (
-      !!entry &&
-      versionsQuery.isSuccess &&
-      testRunsQuery.isSuccess &&
-      activeQuery.isSuccess &&
-      version === Math.max(...backendVersions.map((v) => v.version)) &&
-      !entry.active &&
-      !entry.ever_activated &&
-      !(entry as typeof entry & { ever_tested?: boolean }).ever_tested &&
-      !(running.configId === selectedConfigId && running.version === version) &&
-      !(testRunsQuery.data ?? []).some(
-        (run) =>
-          run.config.configuration_ref?.configuration_id === selectedConfigId &&
-          run.config.configuration_ref.version === version,
-      )
-    );
-  };
   const selectedSavedVersion =
     !isDraftView && typeof selectedVersion === "number"
       ? backendVersions.find((version) => version.version === selectedVersion)
@@ -672,10 +728,6 @@ function ConfiguracionPage() {
     !!selectedSavedVersion &&
     !selectedSavedVersion.ever_tested &&
     !selectedSavedVersion.active;
-  const willOverwrite =
-    !unsaved &&
-    selectedDraft?.basedOnVersion != null &&
-    canEditVersion(selectedDraft.basedOnVersion);
   // Task 5 fix: only show the pseudo "Cambios sin guardar" row inside the
   // version dropdown for a config that has no real versions yet (brand-new,
   // never saved) — there's nothing else to list. Once real versions exist,
@@ -842,21 +894,19 @@ function ConfiguracionPage() {
   // live is a separate, explicit step via openDeploy/confirmDeploy below
   // (the same "Desplegar" flow every other saved version already uses),
   // which is where the real-test-run gate (hasSucceededTestRun) applies.
-  // forceNewVersion skips based_on_version so the backend always mints
-  // latest+1 instead of overwriting in place, even when the latest version
-  // was never activated (see create_configuration.py's `overwrite` rule).
-  const buildSaveRequest = (forceNewVersion: boolean): CreateConfigurationRequest => {
+  // Every persisted save is a new immutable version. Keep its base version
+  // in the request so concurrent saves from the same draft conflict server-side.
+  const buildSaveRequest = (): CreateConfigurationRequest => {
     const wasTemp = isTempId(selectedConfigId);
     return toCreateConfigurationRequest(selectedDraft?.workingCopy ?? settings, {
       name: selectedConfig.name,
       description: selectedConfig.description,
       configurationId: wasTemp ? null : selectedConfigId,
-      basedOnVersion:
-        wasTemp || forceNewVersion || !willOverwrite ? null : selectedDraft?.basedOnVersion,
+      basedOnVersion: wasTemp ? null : selectedDraft?.basedOnVersion,
     });
   };
 
-  const requestSave = async (forceNewVersion = false) => {
+  const requestSave = async () => {
     if (!isDraftView || !selectedConfigId || locked) return;
     setSavePreviewError(null);
     if (
@@ -872,15 +922,16 @@ function ConfiguracionPage() {
     setSavePreviewLoading(true);
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 5000);
-    const request = buildSaveRequest(forceNewVersion);
+    const request = buildSaveRequest();
     try {
       const preview = await testConfiguration({ data: request, signal: controller.signal });
       if (!preview.valid) throw new Error("La configuración propuesta no superó la validación.");
       setSaveConfirmText("");
-      setPendingSave({ forceNewVersion, request, preview });
+      setPendingSave({ request, preview });
     } catch (err) {
       if (err instanceof Error && err.message.includes("409")) {
         setVersionConflict(true);
+        void queryClient.invalidateQueries({ queryKey: ["configurationVersions", selectedConfigId] });
       } else if (err instanceof DOMException && err.name === "AbortError") {
         setSavePreviewError("La validación tardó más de 5 segundos. Intenta guardar nuevamente.");
       } else {
@@ -904,6 +955,7 @@ function ConfiguracionPage() {
     } catch (err) {
       if (err instanceof Error && err.message.includes("409")) {
         setVersionConflict(true);
+        void queryClient.invalidateQueries({ queryKey: ["configurationVersions", selectedConfigId] });
         return;
       }
       throw err;
@@ -968,30 +1020,68 @@ function ConfiguracionPage() {
   const reloadLatestVersion = () => {
     if (!selectedConfigId) return;
     const configId = selectedConfigId;
-    const latestVersion = configListItems.find((item) => item.id === configId)?.latestVersion;
-    if (latestVersion == null) return;
+    const latestVersion = Math.max(0, ...(versionsQuery.data ?? []).map((entry) => entry.version));
+    if (latestVersion < 1) return;
     setVersionConflict(false);
     void queryClient.fetchQuery({
       queryKey: ["configurationVersion", configId, latestVersion],
       queryFn: () =>
         getConfigurationVersion({ data: { configurationId: configId, version: latestVersion } }),
     }).then((latest) => {
+      const remoteBaseline = settingsFromConfigurationDetail(latest);
+      const mergeConflicts: MergeConflict[] = [];
       setDrafts((prev) => {
         const draft = prev[configId];
         if (!draft) return prev;
+        const workingCopy = draft.baseline
+          ? (mergeConfigurationDraft(
+              draft.baseline,
+              draft.workingCopy,
+              remoteBaseline,
+              [],
+              mergeConflicts,
+            ) as ConfigSettings)
+          : structuredClone(remoteBaseline);
         return {
           ...prev,
           [configId]: {
             ...draft,
-            baseline: settingsFromConfigurationDetail(latest),
+            workingCopy,
+            baseline: remoteBaseline,
             basedOnVersion: latestVersion,
+            mergeConflicts,
           },
         };
       });
+      setVersionConflict(false);
     }).catch((error) => {
       setVersionConflict(true);
       setSavePreviewError(error instanceof Error ? error.message : "No se pudo cargar la última versión.");
     });
+  };
+
+  const resolveDraftMergeConflict = (path: string[], useLocal: boolean) => {
+    if (!selectedConfigId) return;
+    const pathKey = JSON.stringify(path);
+    setDrafts((prev) => {
+      const draft = prev[selectedConfigId];
+      if (!draft) return prev;
+      const conflict = draft.mergeConflicts?.find((entry) => JSON.stringify(entry.path) === pathKey);
+      if (!conflict) return prev;
+      return {
+        ...prev,
+        [selectedConfigId]: {
+          ...draft,
+          workingCopy: useLocal
+            ? replaceAtPath(draft.workingCopy, path, conflict.localValue)
+            : draft.workingCopy,
+          mergeConflicts: draft.mergeConflicts?.filter(
+            (entry) => JSON.stringify(entry.path) !== pathKey,
+          ),
+        },
+      };
+    });
+    setVersionConflict(false);
   };
 
   const openDeploy = (configId: string, version: number) => {
@@ -1034,6 +1124,7 @@ function ConfiguracionPage() {
     }
   };
   const approveDeployRequest = async (requestId: string) => {
+    setDeployApprovalError(null);
     try {
       await approveDeployRequestMutation.mutateAsync(requestId);
       await Promise.all([
@@ -1042,7 +1133,18 @@ function ConfiguracionPage() {
         queryClient.invalidateQueries({ queryKey: ["configurations"] }),
       ]);
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "No se pudo aprobar la solicitud.");
+      const isConflict = error instanceof Error && error.message.includes("409");
+      setDeployApprovalError(
+        isConflict
+          ? "La producción cambió o alguien ya procesó esta solicitud. Se actualizará el estado; revisa antes de volver a solicitar el despliegue."
+          : error instanceof Error
+            ? error.message
+            : "No se pudo aprobar la solicitud.",
+      );
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["configurationDeployRequests"] }),
+        queryClient.invalidateQueries({ queryKey: ["activeConfiguration"] }),
+      ]);
     }
   };
   const closeDeploy = () => {
@@ -1192,20 +1294,12 @@ function ConfiguracionPage() {
   const versionLabel = showBasedOnVersion
     ? `${selectedConfig.name}:v${selectedDraft?.basedOnVersion}`
     : null;
-  const nextVersionLabel = `${selectedConfig.name}:v${Math.max(0, ...backendVersions.map((v) => v.version)) + 1}`;
   const validationSummary =
     dirtyTabLabels && versionLabel ? (
       <>
         Cambios sin guardar en <span className="font-medium">{dirtyTabLabels}</span>, basados en{" "}
-        <span className="font-medium">{versionLabel}</span>.{" "}
-        {willOverwrite ? (
-          <>
-            Guardar sobrescribe esa versión — usa &quot;Guardar como nueva versión&quot; para
-            conservarla y crear <span className="font-medium">{nextVersionLabel}</span> aparte.
-          </>
-        ) : (
-          "Guardar siempre crea una nueva versión; esa se conserva intacta."
-        )}
+        <span className="font-medium">{versionLabel}</span>. Guardar crea una versión nueva y
+        conserva la anterior.
       </>
     ) : dirtyTabLabels ? (
       <>
@@ -1214,22 +1308,12 @@ function ConfiguracionPage() {
     ) : versionLabel ? (
       <>
         <span className="font-medium">{versionLabel}</span>{" "}
-        {willOverwrite ? (
-          <>
-            es la última versión, sin producción ni pruebas — guardar la modifica; usa &quot;Guardar
-            como nueva versión&quot; para conservarla y crear{" "}
-            <span className="font-medium">{nextVersionLabel}</span> aparte.
-          </>
-        ) : (
-          "está protegida o es anterior — guardar crea una nueva versión; se conserva intacta."
-        )}
+        está guardada y solo lectura. Los cambios se guardan en una versión nueva.
       </>
     ) : null;
   const saveButtonLabel = savePreviewLoading
     ? "Validando cambios…"
-    : willOverwrite
-      ? `Guardar cambios en ${selectedConfig.name}:v${selectedDraft?.basedOnVersion}`
-      : "Guardar como nueva versión";
+    : "Guardar como nueva versión";
 
   const editorStatus = !selectedConfigId
     ? "Selecciona una configuración"
@@ -1237,9 +1321,7 @@ function ConfiguracionPage() {
       ? `Consultando configuración ${selectedConfig.name} · Versión ${selectedVersion}${viewingIsLive ? " · Producción" : ""} · Solo lectura`
       : unsaved
         ? `Creando configuración ${selectedConfig.name} · Versión 1`
-        : willOverwrite
-          ? `Modificando configuración ${selectedConfig.name} · Versión ${selectedDraft?.basedOnVersion}`
-          : `Creando nueva versión de configuración ${selectedConfig.name} · Basada en versión ${selectedDraft?.basedOnVersion ?? "…"}`;
+        : `Creando nueva versión de configuración ${selectedConfig.name} · Basada en versión ${selectedDraft?.basedOnVersion ?? "…"}`;
 
   const hasChanges =
     !!selectedDraft &&
@@ -1252,7 +1334,11 @@ function ConfiguracionPage() {
     ? rubricValidationErrors(selectedDraft.workingCopy.segments ?? {})
     : [];
   const canSave =
-    !locked && !!selectedConfigId && (unsaved || hasChanges) && rubricErrors.length === 0;
+    !locked &&
+    (selectedDraft?.mergeConflicts?.length ?? 0) === 0 &&
+    !!selectedConfigId &&
+    (unsaved || hasChanges) &&
+    rubricErrors.length === 0;
   const canRestore =
     isDraftView && !!selectedDraft && hasChanges && !saving && !restoring && !savePreviewLoading;
   const actionButtonClass =
@@ -1299,21 +1385,11 @@ function ConfiguracionPage() {
               >
                 <RotateCcw className="h-4 w-4" /> Restaurar cambios
               </button>
-              {willOverwrite && isDraftView && (
-                <button
-                  type="button"
-                  disabled={!canSave}
-                  onClick={() => requestSave(true)}
-                  className={`${actionButtonClass} border border-primary text-primary hover:bg-primary/5`}
-                >
-                  <Plus className="h-4 w-4" /> Guardar como nueva versión
-                </button>
-              )}
               <button
                 type="button"
                 disabled={!canSave}
                 title={saveButtonLabel}
-                onClick={() => requestSave(false)}
+                onClick={requestSave}
                 className={`${actionButtonClass} bg-primary text-white hover:bg-primary/90`}
               >
                 {saving || savePreviewLoading ? (
@@ -1325,9 +1401,7 @@ function ConfiguracionPage() {
                   ? "Guardando…"
                   : savePreviewLoading
                     ? "Validando…"
-                    : willOverwrite
-                      ? "Guardar cambios"
-                      : "Crear versión"}
+                    : "Crear versión"}
               </button>
             </div>
           )}
@@ -1395,9 +1469,7 @@ function ConfiguracionPage() {
                   className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-primary border border-primary/30 rounded-md px-2.5 py-1 hover:bg-primary/10 shrink-0"
                 >
                   <Pencil className="h-3.5 w-3.5" />{" "}
-                  {canEditVersion(selectedVersion as number)
-                    ? "Modificar"
-                    : "Crear nueva versión basada en"}{" "}
+                  Crear nueva versión basada en{" "}
                   {selectedConfig.name}:v{selectedVersion}
                 </button>
               </div>
@@ -1675,6 +1747,11 @@ function ConfiguracionPage() {
               </div>
               <ClipboardList className="h-5 w-5 text-primary" />
             </div>
+            {deployApprovalError && (
+              <p className="mb-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger" role="alert">
+                {deployApprovalError}
+              </p>
+            )}
             {deployRequestsQuery.isLoading ? (
               <p className="text-[13px] text-text-secondary">Cargando solicitudes…</p>
             ) : deployRequestsQuery.isError ? (
@@ -1698,11 +1775,17 @@ function ConfiguracionPage() {
                             : ""}
                           {` · ${request.changes.length} cambios`}
                         </p>
+                        {request.status === "pending" && deployRequestIsStale(request) && (
+                          <p className="mt-2 text-[12px] font-medium text-danger" role="alert">
+                            Obsoleta: producción cambió después de esta solicitud. Pide una nueva
+                            revisión antes de desplegar.
+                          </p>
+                        )}
                       </div>
                       {request.status === "pending" ? (
                         <button
                           type="button"
-                          disabled={approveDeployRequestMutation.isPending}
+                          disabled={approveDeployRequestMutation.isPending || deployRequestIsStale(request)}
                           onClick={() => void approveDeployRequest(request.id)}
                           className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
                         >
@@ -1752,20 +1835,57 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {isChannelManager && versionConflict && (
+        {canEditConfiguration && versionConflict && (
           <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
             <p className="text-[12px] text-text-primary">
-              Alguien más guardó una versión más nueva de esta configuración. Tus cambios siguen
-              guardados localmente. Puedes actualizar la versión base y conservar tus ediciones para
-              revisarlas antes de reintentar.
+              La configuración avanzó a una versión más nueva mientras editabas. Actualiza la base;
+              tus cambios se combinarán con los cambios independientes y podrás resolver los
+              campos que ambos modificaron.
             </p>
             <button
               onClick={reloadLatestVersion}
               className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-danger border border-danger/30 rounded-md px-2.5 py-1 hover:bg-danger/10 shrink-0"
             >
-              Actualizar base y conservar cambios
+              Actualizar y combinar
             </button>
+          </div>
+        )}
+
+        {canEditConfiguration && (selectedDraft?.mergeConflicts?.length ?? 0) > 0 && (
+          <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3" role="alert">
+            <div>
+              <p className="text-[13px] font-semibold text-text-primary">
+                Hay campos editados por ambas personas
+              </p>
+              <p className="mt-1 text-[12px] text-text-secondary">
+                El guardado está pausado. Elige qué valor conservar en cada conflicto.
+              </p>
+            </div>
+            {selectedDraft?.mergeConflicts?.map((conflict) => (
+              <div
+                key={JSON.stringify(conflict.path)}
+                className="flex flex-wrap items-center gap-2 border-t border-warning/20 pt-2"
+              >
+                <span className="mr-auto text-[12px] font-medium text-text-primary">
+                  {conflict.path.join(" · ")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => resolveDraftMergeConflict(conflict.path, false)}
+                  className="rounded border border-border px-2.5 py-1 text-[12px] hover:bg-surface"
+                >
+                  Usar valor actualizado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => resolveDraftMergeConflict(conflict.path, true)}
+                  className="rounded border border-primary/40 px-2.5 py-1 text-[12px] text-primary hover:bg-primary/5"
+                >
+                  Conservar mi valor
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -2212,11 +2332,7 @@ function ConfiguracionPage() {
             <div className="p-5 space-y-4">
               <p className="text-[12px] text-text-secondary">
                 Revisa los cambios antes de{" "}
-                {pendingSave.forceNewVersion
-                  ? "crear la nueva versión"
-                  : willOverwrite
-                    ? `sobrescribir ${selectedConfig.name}:v${selectedDraft?.basedOnVersion}`
-                    : "guardar la nueva versión"}
+                crear la nueva versión
                 .
               </p>
 
