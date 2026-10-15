@@ -108,6 +108,16 @@ export type CreateModelPayload = {
   training_config?: TrainingConfig;
 };
 
+export type ModelScoreResponse = {
+  model_id: string;
+  model_tag: string;
+  score: number;
+  score_raw: number;
+  threshold: number;
+  predicted_positive: boolean;
+  top_features: { feature: string; contribution: number; value: string }[];
+};
+
 export function getModels(): Promise<ModelResponse[]> {
   return apiFetch("/api/v0/models");
 }
@@ -138,4 +148,15 @@ export function trainModel({
 
 export function activateModel({ data }: { data: { id: string } }): Promise<ModelResponse> {
   return apiFetch(`/api/v0/models/${encodeURIComponent(data.id)}/activate`, { method: "POST" });
+}
+
+export function scoreModel({
+  data,
+}: {
+  data: { id: string; row: Record<string, unknown> };
+}): Promise<ModelScoreResponse> {
+  return apiFetch(`/api/v0/models/${encodeURIComponent(data.id)}/score`, {
+    method: "POST",
+    body: JSON.stringify({ row: data.row }),
+  });
 }

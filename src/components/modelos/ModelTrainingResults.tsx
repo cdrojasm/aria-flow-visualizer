@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { getModel } from "@/lib/api/models.functions";
+import { ModelContractTester } from "./ModelContractTester";
 const panel = "rounded-xl border border-border bg-card p-5 space-y-3";
 function Curve({
   title,
@@ -86,6 +87,7 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
             { key: "curves", label: "Curvas" },
             { key: "features", label: "Características" },
             { key: "config", label: "Ejecución y receta" },
+            { key: "contract", label: "Probar contrato" },
           ]}
           value={tab}
           onValueChange={setTab}
@@ -193,6 +195,7 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
               )}
             </>
           )}
+          {tab === "contract" && model.data && <ModelContractTester model={model.data} />}
           {tab === "curves" && report && (
             <div className="grid md:grid-cols-2 gap-5">
               <Curve
