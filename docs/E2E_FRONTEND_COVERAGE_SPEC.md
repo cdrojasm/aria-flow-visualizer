@@ -17,12 +17,18 @@ reglas de seed, limpieza, privacidad ni los siete roles del sistema.
 
 ## Estado de cobertura observado
 
-| Spec | Naturaleza | Cobertura actual |
-| --- | --- | --- |
-| e2e/alert-schema-real-api.spec.ts | API/UI real, sin mock de /api/v0 | C1–C6: gobierno y comparación del esquema, lote de cinco filas, alerta canónica/raw auditado/historial/exportación, métricas con corte visible de versión, sugerencias/campos de sistema y simulador. Verificado contra la API local: 6/6 pasaron. `E2E_FROM=1..6` permite reanudar sin limpiar; `E2E_FROM=0` ejecuta la suite completa desde cero. |
-| e2e/alert-schema-governance.spec.ts | UI con API simulada | Bloqueo de autoaprobación y recorrido de prueba con esquema candidato. |
-| e2e/event-simulation.spec.ts | UI con API simulada | Crear, previsualizar e iniciar escenario. |
-| e2e/vector-store.spec.ts | UI con API simulada | Agregar expansión de taxonomía y retirar relaciones de documentos. |
+| Spec                                | Naturaleza                       | Cobertura actual                                                                                                                                                                                                                                                                                                                                    |
+| ----------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| e2e/alert-schema-real-api.spec.ts   | API/UI real, sin mock de /api/v0 | C1–C6: gobierno y comparación del esquema, lote de cinco filas, alerta canónica/raw auditado/historial/exportación, métricas con corte visible de versión, sugerencias/campos de sistema y simulador. Verificado contra la API local: 6/6 pasaron. `E2E_FROM=1..6` permite reanudar sin limpiar; `E2E_FROM=0` ejecuta la suite completa desde cero. |
+| e2e/alert-schema-governance.spec.ts | UI con API simulada              | Bloqueo de autoaprobación y recorrido de prueba con esquema candidato.                                                                                                                                                                                                                                                                              |
+| e2e/event-simulation-real.spec.ts   | UI/API real, sin mock de /api/v0 | E06: seed y revisión de generadores, borrador/vista previa UI, escritura real al dataset, alerta `simulator` visible en histórico/detalle, pausa/reanudación/detención, rechazo de reinicio inválido y limpieza por API. Ejecutar con `npm run test:e2e:simulation`.                                                                                |
+| e2e/backups-real.spec.ts            | UI/API real, sin mock de /api/v0 | E11: prepara manager y data analyst dedicados, verifica solicitud por UI, polling del worker hasta `succeeded`, historial/conteos y 403/ocultación/redirección para rol no autorizado. Ejecutar con `npm run test:e2e:backups:real`. No restaura datos. |
+| e2e/event-simulation.mock.spec.ts   | UI con API simulada              | Regresión visual rápida de crear, previsualizar e iniciar escenario; no cuenta para E06 real.                                                                                                                                                                                                                                                       |
+| e2e/vector-store.spec.ts            | UI con API simulada              | Agregar expansión de taxonomía y retirar relaciones de documentos.                                                                                                                                                                                                                                                                                  |
+
+| Estado                                                                                  | ID  | Flujo                                                                                     |
+| --------------------------------------------------------------------------------------- | --- | ----------------------------------------------------------------------------------------- |
+| Corrida real local verificada: 1/1 pasó contra nginx/API y dataset reales, sin mocks. | E06 | Simulador de eventos — spec real en `e2e/event-simulation-real.spec.ts`, mocks separados. |
 
 Hay pruebas unitarias/de componentes para páginas de métricas, esquema,
 comparación de pruebas, vector store y helpers. No comprueban la integración
@@ -34,14 +40,14 @@ La suite usa un usuario distinto por rol; no cambia el rol en el cliente ni
 simula sus permisos. Cada fila se valida en navegación, ruta directa y API
 cuando el backend expone la operación.
 
-| Rol | Áreas que muestra actualmente la navegación | Acciones relevantes |
-| --- | --- | --- |
-| manager | Dashboard, cola, histórico de fraude, monitor, configuración y respaldos | Operación/configuración, esquema de alertas, acceso raw, revisión de fraude, reportes y respaldos. El backend limita respaldos a manager. |
-| release_manager | Áreas de manager excepto respaldos, más Testing | Aprobar propuestas de esquema y despliegues; ejecutar pruebas; no aprobar su propia propuesta. |
-| channel_manager | Dashboard, cola, histórico, monitor, Testing, Biblioteca, Configuración y Modelos | Configuración por segmento, biblioteca, features/modelos y revisión de fraude. No tiene permiso backend alert_schema. |
-| data_analyst | Monitor, Testing, Biblioteca y Modelos | Biblioteca, análisis/testing/modelos; no dashboard, cola, histórico ni configuración. |
-| fraud_analyst | Cola | Tomar, resolver y remitir alertas; no leer raw ni operar áreas administrativas. |
-| ops_analyst | Dashboard, cola y monitor | Consultar métricas operativas y cola; sin revisión de fraude ni administración. |
+| Rol             | Áreas que muestra actualmente la navegación                                       | Acciones relevantes                                                                                                                       |
+| --------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| manager         | Dashboard, cola, histórico de fraude, monitor, configuración y respaldos          | Operación/configuración, esquema de alertas, acceso raw, revisión de fraude, reportes y respaldos. El backend limita respaldos a manager. |
+| release_manager | Áreas de manager excepto respaldos, más Testing                                   | Aprobar propuestas de esquema y despliegues; ejecutar pruebas; no aprobar su propia propuesta.                                            |
+| channel_manager | Dashboard, cola, histórico, monitor, Testing, Biblioteca, Configuración y Modelos | Configuración por segmento, biblioteca, features/modelos y revisión de fraude. No tiene permiso backend alert_schema.                     |
+| data_analyst    | Monitor, Testing, Biblioteca y Modelos                                            | Biblioteca, análisis/testing/modelos; no dashboard, cola, histórico ni configuración.                                                     |
+| fraud_analyst   | Cola                                                                              | Tomar, resolver y remitir alertas; no leer raw ni operar áreas administrativas.                                                           |
+| ops_analyst     | Dashboard, cola y monitor                                                         | Consultar métricas operativas y cola; sin revisión de fraude ni administración.                                                           |
 
 Ocultar un enlace no basta como control: probar rutas y endpoints no permitidos
 y comprobar 403, redirección o estado denegado según el contrato real. Verificar
@@ -253,6 +259,9 @@ Con roles que tienen Testing:
 6. En modo pipeline vivo, localizar alerta generada y seguirla a cola/histórico;
    en modo dataset, verificar filas en destino.
 7. Eliminar escenario temporal por API y comprobar que no persiste.
+
+La cobertura real vive en `e2e/event-simulation-real.spec.ts`; los mocks de UI
+se mantienen aparte en `e2e/event-simulation.mock.spec.ts` y no satisfacen E06.
 
 ### E07 — Procesamiento y atención de alertas
 

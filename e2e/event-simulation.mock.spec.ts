@@ -82,7 +82,9 @@ test("crea, previsualiza e inicia un escenario generado por distribución", asyn
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("tab", { name: "Generador" }).click();
 
-  await page.getByPlaceholder("Ej: Pico de fraude BreB fin de mes").fill("E2E simulación categórica");
+  await page
+    .getByPlaceholder("Ej: Pico de fraude BreB fin de mes")
+    .fill("E2E simulación categórica");
   await page.getByRole("button", { name: "Pipeline en vivo" }).click();
   await page.getByRole("combobox").selectOption("CATEGORICAL");
   await page.getByRole("button", { name: "+ Agregar opción" }).click();

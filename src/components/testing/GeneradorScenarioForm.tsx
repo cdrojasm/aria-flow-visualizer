@@ -423,7 +423,7 @@ export function GeneradorScenarioForm({ onClose }: { onClose: () => void }) {
         </div>
         {!locked && (
           <p className="text-[10px] text-text-secondary mb-2">
-            Las distribuciones quedan cargadas para revisión antes de crear el borrador.
+            Las distribuciones inferidas quedan cargadas para revisión antes de crear el borrador.
           </p>
         )}
         {seedMutation.isError && (
@@ -548,7 +548,11 @@ function FieldSpecEditor({
   onRemove: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-border p-3 space-y-2.5">
+    <div
+      className="rounded-lg border border-border p-3 space-y-2.5"
+      data-testid="scenario-field-editor"
+      data-field-name={row.name}
+    >
       <div className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
         <div>
           <label className={LABEL_CLS}>Nombre del campo</label>
