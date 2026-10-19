@@ -83,9 +83,13 @@ export type MatureSamplerSchemaFieldOption = {
 };
 
 export type MatureSamplerSchemaConfiguration = {
+  initial_mark_fields: MatureSamplerSchemaFieldOption[];
+  initial_marking_date_fields: MatureSamplerSchemaFieldOption[];
   target_fields: MatureSamplerSchemaFieldOption[];
   marking_date_fields: MatureSamplerSchemaFieldOption[];
   mapping: {
+    initial_mark_field: string;
+    initial_marking_date_field: string;
     target_field: string;
     marking_date_field: string;
     label_value_mapping: Record<string, "fraud" | "no_fraud">;

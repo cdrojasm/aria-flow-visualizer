@@ -53,11 +53,6 @@ test("H6 real: los campos del muestreador vienen del esquema y la vista previa u
     `operational settings: ${await operationalResponse.text()}`,
   ).toBeTruthy();
   const originalOperational = (await operationalResponse.json()) as Record<string, unknown>;
-  const operationalUpdate = await request.put("/api/v0/operational-settings", {
-    headers,
-    data: { settings: { ...originalOperational, maturing_days: 0 } },
-  });
-  expect(operationalUpdate.ok(), `maturing_days=0: ${await operationalUpdate.text()}`).toBeTruthy();
   const poolResponse = await request.get("/api/v0/assistant-optimizer-settings/sampler/fields", {
     headers,
   });
@@ -65,24 +60,61 @@ test("H6 real: los campos del muestreador vienen del esquema y la vista previa u
   const pool = (await poolResponse.json()) as string[];
   test.skip(pool.length === 0, "El esquema compatible no tiene campos seleccionables.");
   const field = pool[0];
-  const targetField = originalSchemaConfiguration.target_fields[0]?.field as string | undefined;
-  const markingDateField = originalSchemaConfiguration.marking_date_fields[0]?.field as
+  const initialMarkField = originalSchemaConfiguration.initial_mark_fields[0]?.field as
     string | undefined;
-  test.skip(!targetField || !markingDateField, "El esquema no tiene etiqueta y fecha compatibles.");
+  const initialDateOption = originalSchemaConfiguration.initial_marking_date_fields[0];
+  const latestDateOption = originalSchemaConfiguration.marking_date_fields.find(
+    (option: { field: string }) => option.field !== initialDateOption?.field,
+  );
+  const initialMarkingDateField = initialDateOption?.field as string | undefined;
+  const targetField = originalSchemaConfiguration.target_fields[0]?.field as string | undefined;
+  const markingDateField = latestDateOption?.field as string | undefined;
+  test.skip(
+    !initialMarkField || !initialMarkingDateField || !targetField || !markingDateField,
+    "El esquema E2E no expone la marca inicial, etiqueta vigente y ambas fechas.",
+  );
 
   try {
-    const configuredSchema = await request.put(
-      "/api/v0/assistant-optimizer-settings/sampler/schema-configuration",
-      {
-        headers,
-        data: {
-          target_field: targetField,
-          marking_date_field: markingDateField,
-          label_value_mapping: { Fraude: "fraud", "No fraude": "no_fraud" },
-        },
-      },
-    );
-    expect(configuredSchema.ok(), `guardar mapeo: ${await configuredSchema.text()}`).toBeTruthy();
+    const operationalUpdate = await request.put("/api/v0/operational-settings", {
+      headers,
+      data: { settings: { ...originalOperational, maturing_days: 0 } },
+    });
+    expect(
+      operationalUpdate.ok(),
+      `maturing_days=0: ${await operationalUpdate.text()}`,
+    ).toBeTruthy();
+    await authenticatePage(page, token);
+    await page.goto("/configuracion");
+    await page.getByRole("button", { name: "Asistente y optimizador" }).click();
+    const sampler = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Muestreo de datos" }),
+    });
+    await expect(sampler).toBeVisible();
+    await sampler.getByLabel("Campo de marca inicial (esquema)").selectOption(initialMarkField!);
+    await sampler
+      .getByLabel("Fecha de marca inicial (esquema)")
+      .selectOption(initialMarkingDateField!);
+    await sampler.getByLabel("Etiqueta vigente (esquema)").selectOption(targetField!);
+    await sampler.getByLabel("Fecha de última marcación (esquema)").selectOption(markingDateField!);
+    await sampler
+      .getByLabel("Equivalencias de etiqueta (JSON)")
+      .fill(JSON.stringify({ Fraude: "fraud", "No fraude": "no_fraud" }, null, 2));
+    await sampler.getByRole("button", { name: "Guardar marcas, fechas y equivalencias" }).click();
+    await expect
+      .poll(async () => {
+        const response = await request.get(
+          "/api/v0/assistant-optimizer-settings/sampler/schema-configuration",
+          { headers },
+        );
+        const saved = await response.json();
+        return saved.mapping;
+      })
+      .toMatchObject({
+        initial_mark_field: initialMarkField,
+        initial_marking_date_field: initialMarkingDateField,
+        target_field: targetField,
+        marking_date_field: markingDateField,
+      });
     const alertResponse = await request.post("/api/v0/alerts/test", {
       headers,
       data: {
@@ -93,6 +125,8 @@ test("H6 real: los campos del muestreador vienen del esquema y la vista previa u
           channel: "web",
           amount_value: 120000,
           fecha_transaccion: new Date().toISOString(),
+          [initialMarkField!]: "risk-suspected",
+          [initialMarkingDateField!]: new Date().toISOString(),
           [targetField!]: "No fraude",
           [markingDateField!]: new Date().toISOString(),
           integrationpoint: "PSE",
@@ -108,17 +142,14 @@ test("H6 real: los campos del muestreador vienen del esquema y la vista previa u
       data: { fraud_label: "no_fraud", note: "H6 real E2E sample" },
     });
     expect(reviewResponse.ok(), `fraud review: ${await reviewResponse.text()}`).toBeTruthy();
-    await authenticatePage(page, token);
-    await page.goto("/configuracion");
-    await page.getByRole("button", { name: "Asistente y optimizador" }).click();
-    const sampler = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Muestreo de datos" }),
-    });
-    await expect(sampler).toBeVisible();
-    await expect(sampler.getByLabel("Campo objetivo (etiqueta del esquema)")).toHaveValue(
-      targetField!,
+    await expect(sampler.getByLabel("Campo de marca inicial (esquema)")).toHaveValue(
+      initialMarkField!,
     );
-    await expect(sampler.getByLabel("Fecha de marcación (del esquema)")).toHaveValue(
+    await expect(sampler.getByLabel("Fecha de marca inicial (esquema)")).toHaveValue(
+      initialMarkingDateField!,
+    );
+    await expect(sampler.getByLabel("Etiqueta vigente (esquema)")).toHaveValue(targetField!);
+    await expect(sampler.getByLabel("Fecha de última marcación (esquema)")).toHaveValue(
       markingDateField!,
     );
     await sampler.getByLabel(field, { exact: true }).check();

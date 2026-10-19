@@ -611,9 +611,51 @@ export function AgentSettingsPanel({ readOnly = false }: { readOnly?: boolean })
             )}
             {section.id === "sampler" && (
               <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
-                <Field label="Campo objetivo (etiqueta del esquema)">
+                <Field label="Campo de marca inicial (esquema)">
                   <select
-                    aria-label="Campo objetivo (etiqueta del esquema)"
+                    aria-label="Campo de marca inicial (esquema)"
+                    value={schemaMappingDraft?.initial_mark_field ?? ""}
+                    disabled={!canEdit || !schemaMappingDraft}
+                    onChange={(event) =>
+                      setSchemaMappingDraft((current) =>
+                        current ? { ...current, initial_mark_field: event.target.value } : current,
+                      )
+                    }
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-text-primary disabled:opacity-60"
+                  >
+                    <option value="">Selecciona la marca inicial</option>
+                    {samplerSchemaQuery.data?.initial_mark_fields.map(({ field, type }) => (
+                      <option key={field} value={field}>
+                        {field} ({type})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Fecha de marca inicial (esquema)">
+                  <select
+                    aria-label="Fecha de marca inicial (esquema)"
+                    value={schemaMappingDraft?.initial_marking_date_field ?? ""}
+                    disabled={!canEdit || !schemaMappingDraft}
+                    onChange={(event) =>
+                      setSchemaMappingDraft((current) =>
+                        current
+                          ? { ...current, initial_marking_date_field: event.target.value }
+                          : current,
+                      )
+                    }
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-text-primary disabled:opacity-60"
+                  >
+                    <option value="">Selecciona una fecha inicial</option>
+                    {samplerSchemaQuery.data?.initial_marking_date_fields.map(({ field, type }) => (
+                      <option key={field} value={field}>
+                        {field} ({type})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Etiqueta vigente (esquema)">
+                  <select
+                    aria-label="Etiqueta vigente (esquema)"
                     value={schemaMappingDraft?.target_field ?? ""}
                     disabled={!canEdit || !schemaMappingDraft}
                     onChange={(event) =>
@@ -631,9 +673,9 @@ export function AgentSettingsPanel({ readOnly = false }: { readOnly?: boolean })
                     ))}
                   </select>
                 </Field>
-                <Field label="Fecha de marcación (del esquema)">
+                <Field label="Fecha de última marcación (esquema)">
                   <select
-                    aria-label="Fecha de marcación (del esquema)"
+                    aria-label="Fecha de última marcación (esquema)"
                     value={schemaMappingDraft?.marking_date_field ?? ""}
                     disabled={!canEdit || !schemaMappingDraft}
                     onChange={(event) =>
@@ -692,7 +734,7 @@ export function AgentSettingsPanel({ readOnly = false }: { readOnly?: boolean })
                     ) : (
                       <Save className="h-3.5 w-3.5" />
                     )}
-                    Guardar etiqueta, fecha y equivalencias
+                    Guardar marcas, fechas y equivalencias
                   </button>
                 </div>
                 {samplerSchemaQuery.isError && (
