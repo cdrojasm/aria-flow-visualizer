@@ -43,6 +43,7 @@ import { rubricValidationErrors } from "@/components/configuracion/SegmentRubric
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
 import { OperationsPanel } from "@/components/configuracion/OperationsPanel";
+import { AgentSettingsPanel } from "@/components/configuracion/AgentSettingsPanel";
 import {
   defaultSettings,
   defaultSegmentAgent,
@@ -98,6 +99,7 @@ const GENERAL_TAB_META: { key: TabKey; label: string }[] = [
   { key: "general", label: "General" },
   { key: "infra", label: "Infraestructura" },
   { key: "ops", label: "Operación (inmediata)" },
+  { key: "agentSettings", label: "Asistente y optimizador" },
   { key: "test", label: "Test" },
   { key: "segmento", label: "Segmento" },
   { key: "schema", label: "Esquema" },
@@ -123,6 +125,7 @@ const CHANGE_SECTION_LABELS: Record<string, string> = {
   general: "General",
   infra: "Infraestructura",
   ops: "Operación",
+  agentSettings: "Asistente y optimizador",
   test: "Test",
   segments: "Segmentos",
 };
@@ -2087,6 +2090,8 @@ function ConfiguracionPage() {
         {/* Not versioned: reads/writes the OperationalSettings singleton and
             applies immediately, so it's outside the version lock above. */}
         {activeTab === "ops" && <OperationsPanel readOnly={apiDown} />}
+
+        {activeTab === "agentSettings" && <AgentSettingsPanel readOnly={apiDown} />}
 
         {activeTab === "test" && (
           <div className="space-y-6">

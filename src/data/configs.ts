@@ -53,6 +53,7 @@ export type TabKey =
   | "general"
   | "infra"
   | "ops"
+  | "agentSettings"
   | "test"
   | "segmento"
   | "schema"
