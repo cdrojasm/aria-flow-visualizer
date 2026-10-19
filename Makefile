@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced
+.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced test-e2e-agent
 
 .DEFAULT_GOAL := help
 
@@ -71,6 +71,20 @@ test-e2e-entities-advanced: ## Run advanced real API E2E for nested entities and
 	@$(MAKE) down
 	@$(MAKE) run
 	E2E_BOOTSTRAP_TOKEN=$(E2E_BOOTSTRAP_TOKEN) npm run test:e2e:entities:advanced:real
+
+test-e2e-agent: ## Run the real assistant chat and draft confirmation E2E through nginx localhost
+	@set -eu; \
+	while ! mkdir /tmp/aria-e2e.lock 2>/dev/null; do sleep 5; done; \
+	cleanup() { \
+		$(MAKE) down >/dev/null 2>&1 || true; \
+		$(MAKE) -C ../frontend_mockup run >/dev/null 2>&1 || true; \
+		rmdir /tmp/aria-e2e.lock; \
+	}; \
+	trap cleanup EXIT INT TERM; \
+	$(MAKE) build; \
+	$(MAKE) -C ../frontend_mockup down; \
+	$(MAKE) run; \
+	npm run test:e2e:agent:real
 
 shell: ## Shell into running app container
 	docker compose exec web sh

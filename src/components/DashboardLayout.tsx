@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useCanGoBack, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { AppSidebar } from "./AppSidebar";
+import { AgentPanel } from "./agent/AgentPanel";
 import { ROLE_NAV, useRole } from "@/hooks/useRole";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
@@ -100,6 +101,7 @@ export function DashboardLayout({
           </div>
         )}
       </main>
+      <AgentPanel permissions={user?.permissions ?? []} />
     </div>
   );
 }
