@@ -107,8 +107,8 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
   const sessions = sessionsQuery.data ?? [];
   const currentSession =
     sessions.find((item) => item.session_id === sessionId) ??
-    sessions.find((item) => item.mode === "assistant");
-  const activeSessionId = currentSession?.session_id ?? "";
+    (sessionId ? undefined : sessions.find((item) => item.mode === "assistant"));
+  const activeSessionId = sessionId || currentSession?.session_id || "";
   useEffect(() => {
     if (activeSessionId && activeSessionId !== sessionId) setSessionId(activeSessionId);
   }, [activeSessionId, sessionId]);
@@ -163,10 +163,9 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
     }
     return rows.sort((left, right) => left.seq - right.seq);
   }, [messages, pending]);
-  useEffect(
-    () => endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }),
-    [displayedMessages.length, open],
-  );
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [displayedMessages.length, open]);
 
   const createSession = useMutation({
     mutationFn: () => createAgentSession("assistant"),
