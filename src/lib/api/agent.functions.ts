@@ -9,6 +9,28 @@ export type AgentSession = {
   budget_limits: Record<string, number>;
   prompt_versions: Record<string, Record<string, string>>;
   rev: number;
+  scope?: { areas?: string[] };
+};
+
+export type AgentObjective = {
+  version: number;
+  success_label: string;
+  positive_label: string;
+  negative_label: string;
+  primary_metrics: string[];
+  precision_floor: number;
+  minimum_global_support: number;
+};
+
+export type AgentIteration = {
+  number: number;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  hypothesis: string | null;
+  decision: string | null;
+  reason: string | null;
+  specialists: string[];
 };
 
 export type AgentMessage = {
@@ -100,6 +122,66 @@ export function createAgentSession(mode: "assistant" | "optimization" = "assista
     method: "POST",
     body: JSON.stringify({ mode, scope: mode === "assistant" ? ["library"] : [] }),
   });
+}
+
+export function getActiveAgentObjective() {
+  return apiFetch<AgentObjective>("/api/v0/agent/objectives/active");
+}
+
+export function createOptimizerSession(areas: string[]) {
+  return apiFetch<AgentSession>(`${path}/sessions`, {
+    method: "POST",
+    body: JSON.stringify({ mode: "optimization", scope: areas }),
+  });
+}
+
+export function startOptimizerSession(sessionId: string) {
+  return apiFetch<AgentSession>(`${path}/sessions/${encodeURIComponent(sessionId)}/start`, {
+    method: "POST",
+  });
+}
+
+export function controlOptimizerSession(sessionId: string, action: "pause" | "resume" | "cancel") {
+  return apiFetch<AgentSession>(`${path}/sessions/${encodeURIComponent(sessionId)}/${action}`, {
+    method: "POST",
+  });
+}
+
+export function listAgentIterations(sessionId: string) {
+  return apiFetch<AgentIteration[]>(`${path}/sessions/${encodeURIComponent(sessionId)}/iterations`);
+}
+
+export function listAgentHypotheses(sessionId: string) {
+  return apiFetch<AgentHypothesis[]>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/hypotheses`,
+  );
+}
+
+export type AgentHypothesis = {
+  hypothesis_id: string;
+  statement: string;
+  scope: Record<string, string>;
+  priority: number;
+  status: string;
+  source_insight_id: string | null;
+};
+
+export function listAgentPackages(sessionId: string) {
+  return apiFetch<Array<{ package_id: string; status: string; iteration_number: number }>>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/packages`,
+  );
+}
+
+export function getAgentSessionBudget(sessionId: string) {
+  return apiFetch<{ spent: Record<string, number> }>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/budget`,
+  );
+}
+
+export function listAgentClaims(entityKey: string) {
+  return apiFetch<Array<{ session_id: string; reason: string; expires_at: string }>>(
+    `${path}/claims/${encodeURIComponent(entityKey)}`,
+  );
 }
 
 export function listAgentMessages(sessionId: string, afterSeq = 0) {

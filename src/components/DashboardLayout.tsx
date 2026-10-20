@@ -101,7 +101,7 @@ export function DashboardLayout({
           </div>
         )}
       </main>
-      <AgentPanel permissions={user?.permissions ?? []} />
+      <AgentPanel permissions={user?.permissions ?? []} role={user?.role} />
     </div>
   );
 }

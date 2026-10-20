@@ -28,6 +28,8 @@ import {
   type ModusOperandiDraft,
 } from "@/lib/api/agent.functions";
 import { listModusOperandiLibraryEntries } from "@/lib/api/knowledgeLibrary.functions";
+import { AgentOptimizerPanel } from "./AgentOptimizerPanel";
+import type { Role } from "@/lib/api/auth.functions";
 
 const MESSAGE_LIMIT = 8_000;
 const ALLOWED_ROUTES = ["/configuracion", "/testing", "/biblioteca", "/modelos"];
@@ -72,7 +74,7 @@ function summaryText(value: unknown): string {
   return value == null ? "Sin resumen disponible." : String(value);
 }
 
-export function AgentPanel({ permissions }: { permissions: string[] }) {
+export function AgentPanel({ permissions, role }: { permissions: string[]; role?: Role }) {
   const { location } = useRouterState();
   const queryClient = useQueryClient();
   const pathname = location.pathname;
@@ -81,6 +83,7 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
     permitted &&
     ALLOWED_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const [open, setOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<"assistant" | "optimizer">("assistant");
   const [sessionId, setSessionId] = useState("");
   const [composer, setComposer] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -101,7 +104,7 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
   const sessionsQuery = useQuery({
     queryKey: ["agentSessions"],
     queryFn: listAgentSessions,
-    enabled: visible && open,
+    enabled: visible,
     refetchInterval: 8_000,
   });
   const sessions = sessionsQuery.data ?? [];
@@ -285,6 +288,11 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
     draft.verifications.every((check) => check.status === "PASS"),
   );
   const waitingForUser = currentSession?.status === "WAITING_USER";
+  const optimizerAttention = sessions.filter(
+    (item) =>
+      item.mode === "optimization" &&
+      ["WAITING_USER", "WAITING_APPROVAL", "FAILED"].includes(item.status),
+  ).length;
 
   return (
     <>
@@ -296,6 +304,11 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
           className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/90"
         >
           <MessageCircle className="h-4 w-4" /> Asistente ARIA
+          {optimizerAttention > 0 && (
+            <span className="rounded-full bg-danger px-1.5 py-0.5 text-[10px] text-white">
+              {optimizerAttention}
+            </span>
+          )}
         </button>
       )}
       {open && (
@@ -319,6 +332,29 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
               <X className="h-4 w-4" />
             </button>
           </header>
+          <nav className="flex border-b border-border" aria-label="Pestañas del asistente">
+            <button
+              type="button"
+              aria-pressed={panelTab === "assistant"}
+              onClick={() => setPanelTab("assistant")}
+              className={`flex-1 px-4 py-3 text-xs font-semibold ${panelTab === "assistant" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
+            >
+              Asistente
+            </button>
+            <button
+              type="button"
+              aria-pressed={panelTab === "optimizer"}
+              onClick={() => setPanelTab("optimizer")}
+              className={`flex-1 px-4 py-3 text-xs font-semibold ${panelTab === "optimizer" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
+            >
+              Optimizador
+              {optimizerAttention > 0 && (
+                <span className="ml-1 rounded-full bg-danger px-1.5 py-0.5 text-[10px] text-white">
+                  {optimizerAttention}
+                </span>
+              )}
+            </button>
+          </nav>
           <div className="flex items-center gap-2 border-b border-border px-4 py-3">
             <label className="sr-only" htmlFor="agent-session">
               Conversación
@@ -596,6 +632,24 @@ export function AgentPanel({ permissions }: { permissions: string[] }) {
               </button>
             </div>
           </form>
+        </aside>
+      )}
+      {open && panelTab === "optimizer" && (
+        <aside
+          className="fixed inset-y-0 right-0 z-[55] flex w-full max-w-[460px] flex-col border-l border-border bg-background shadow-2xl lg:right-[460px]"
+          aria-label="Panel del optimizador"
+        >
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <span className="text-sm font-semibold">ARIA · Optimizador</span>
+            <button
+              type="button"
+              onClick={() => setPanelTab("assistant")}
+              className="rounded border border-border px-2 py-1 text-xs"
+            >
+              Volver al asistente
+            </button>
+          </div>
+          <AgentOptimizerPanel canLaunch={role === "channel_manager"} sessions={sessions} />
         </aside>
       )}
       {confirmOpen && draftItem && (
