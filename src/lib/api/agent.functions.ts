@@ -33,6 +33,16 @@ export type AgentIteration = {
   specialists: string[];
 };
 
+export type AgentPackageSummary = {
+  package_id: string;
+  session_id: string;
+  iteration_number: number;
+  status: string;
+  content_hash: string | null;
+  created_at: string | null;
+  sealed_at: string | null;
+};
+
 export type AgentMessage = {
   message_id: string;
   client_message_id: string;
@@ -167,7 +177,7 @@ export type AgentHypothesis = {
 };
 
 export function listAgentPackages(sessionId: string) {
-  return apiFetch<Array<{ package_id: string; status: string; iteration_number: number }>>(
+  return apiFetch<AgentPackageSummary[]>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/packages`,
   );
 }

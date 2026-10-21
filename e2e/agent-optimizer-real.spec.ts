@@ -216,9 +216,23 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     started.ok(),
     `iniciar optimizador: ${started.status()} ${await started.text()}`,
   ).toBeTruthy();
-  createdSessionId = ((await started.json()) as { session_id: string }).session_id;
-  await expect(page.getByRole("tablist", { name: "Sesiones del optimizador" })).toBeVisible();
+  const startedSession = (await started.json()) as {
+    session_id: string;
+    created_at: string;
+    updated_at: string;
+  };
+  createdSessionId = startedSession.session_id;
+  await expect(
+    page.getByRole("tablist", { name: "Historial de sesiones del optimizador" }),
+  ).toBeVisible();
   await expect(page.getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
+  const sessionHistory = page.getByText(/Historial · creada/);
+  await expect(sessionHistory).toContainText(
+    `creada ${new Date(startedSession.created_at).toLocaleString("es-CO")}`,
+  );
+  await expect(sessionHistory).toContainText(
+    `actualización ${new Date(startedSession.updated_at).toLocaleString("es-CO")}`,
+  );
   await expect(page.getByText("Gastado", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Restante", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Pausar optimizador" }).click();

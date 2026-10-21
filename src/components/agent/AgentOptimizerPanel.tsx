@@ -262,7 +262,7 @@ export function AgentOptimizerPanel({
       <section className="border-b border-border px-4 py-3">
         <div
           role="tablist"
-          aria-label="Sesiones del optimizador"
+          aria-label="Historial de sesiones del optimizador"
           className="flex gap-2 overflow-x-auto"
         >
           {optimizationSessions.map((item) => (
@@ -343,6 +343,10 @@ export function AgentOptimizerPanel({
                 );
               })}
             </div>
+            <p className="mt-2 text-[11px] text-text-secondary">
+              Historial · creada {new Date(session.created_at).toLocaleString("es-CO")} · última
+              actualización {new Date(session.updated_at).toLocaleString("es-CO")}
+            </p>
             {iterationsQuery.data?.at(-1)?.reason && (
               <p className="mt-2 text-xs text-text-secondary">
                 Motivo actual: {iterationsQuery.data.at(-1)?.reason}
@@ -350,12 +354,14 @@ export function AgentOptimizerPanel({
             )}
             <div className="mt-2 text-[11px] text-text-secondary">
               {(packagesQuery.data ?? []).length === 0 ? (
-                <p>Paquetes de experimento: 0</p>
+                <p>Experimentos acumulados: 0</p>
               ) : (
                 <ul aria-label="Estado de verificación de experimentos">
                   {packagesQuery.data?.map((item) => (
                     <li key={item.package_id}>
                       Experimento {item.iteration_number}: {item.status}
+                      {item.sealed_at &&
+                        ` · registrado ${new Date(item.sealed_at).toLocaleDateString("es-CO")}`}
                     </li>
                   ))}
                 </ul>
