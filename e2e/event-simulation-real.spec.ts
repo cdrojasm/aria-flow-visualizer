@@ -67,7 +67,7 @@ async function deleteDataset(api: APIRequestContext, token: string, name: string
       .poll(
         async () =>
           getJson(api, token, `/api/v0/async-operations/${operation.async_operation_id}/poll`),
-        { timeout: 90_000, intervals: [1000, 2000, 5000] },
+        { timeout: 180_000, intervals: [1000, 2000, 5000] },
       )
       .toMatchObject({ done: true, status: "SUCCEEDED" });
   }

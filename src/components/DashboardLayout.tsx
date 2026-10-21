@@ -101,7 +101,11 @@ export function DashboardLayout({
           </div>
         )}
       </main>
-      <AgentPanel permissions={user?.permissions ?? []} role={user?.role} />
+      <AgentPanel
+        permissions={user?.permissions ?? []}
+        role={user?.role}
+        hasBottomBar={Boolean(bottomBar)}
+      />
     </div>
   );
 }

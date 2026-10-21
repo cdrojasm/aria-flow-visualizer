@@ -74,7 +74,15 @@ function summaryText(value: unknown): string {
   return value == null ? "Sin resumen disponible." : String(value);
 }
 
-export function AgentPanel({ permissions, role }: { permissions: string[]; role?: Role }) {
+export function AgentPanel({
+  permissions,
+  role,
+  hasBottomBar = false,
+}: {
+  permissions: string[];
+  role?: Role;
+  hasBottomBar?: boolean;
+}) {
   const { location } = useRouterState();
   const queryClient = useQueryClient();
   const pathname = location.pathname;
@@ -301,7 +309,7 @@ export function AgentPanel({ permissions, role }: { permissions: string[]; role?
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Abrir asistente ARIA"
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/90"
+          className={`fixed ${hasBottomBar ? "bottom-24" : "bottom-6"} right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/90`}
         >
           <MessageCircle className="h-4 w-4" /> Asistente ARIA
           {optimizerAttention > 0 && (

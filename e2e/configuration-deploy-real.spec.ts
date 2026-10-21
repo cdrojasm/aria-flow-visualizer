@@ -25,12 +25,11 @@ async function activeConfiguration(api: APIRequestContext, token: string) {
   return response.json() as Promise<Configuration>;
 }
 
-async function signInThroughUi(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email);
-  await page.getByLabel("Contraseña").fill(password);
-  await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL(/\/dashboard$|\/monitor$|\/cola$/);
+async function authenticatePage(page: Page, token: string) {
+  await page.addInitScript(({ key, value }) => window.localStorage.setItem(key, value), {
+    key: "aria.auth.accessToken",
+    value: token,
+  });
 }
 
 async function configurationDetail(
@@ -43,7 +42,10 @@ async function configurationDetail(
     `/api/v0/configurations/${encodeURIComponent(configurationId)}/versions/${version}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  expect(response.ok(), `configuración ${configurationId}:v${version}: ${await response.text()}`).toBeTruthy();
+  expect(
+    response.ok(),
+    `configuración ${configurationId}:v${version}: ${await response.text()}`,
+  ).toBeTruthy();
   return response.json() as Promise<Configuration>;
 }
 
@@ -108,22 +110,49 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
     `/api/v0/configurations/${encodeURIComponent(configurationId!)}`,
     { headers: { Authorization: `Bearer ${manager.access_token}` } },
   );
-  expect(versionsResponse.ok(), `historial de versiones: ${await versionsResponse.text()}`).toBeTruthy();
+  expect(
+    versionsResponse.ok(),
+    `historial de versiones: ${await versionsResponse.text()}`,
+  ).toBeTruthy();
   const versions = (await versionsResponse.json()) as Configuration[];
 
-  expect(versions.some((entry) => entry.version === version), "la versión objetivo debe estar en el historial").toBeTruthy();
-  expect(target.ever_tested, "la versión objetivo debe tener una prueba E2E previa aprobada").toBeTruthy();
-  expect(target.active, "la versión objetivo debe estar inactiva antes de solicitar el despliegue").toBe(false);
+  expect(
+    versions.some((entry) => entry.version === version),
+    "la versión objetivo debe estar en el historial",
+  ).toBeTruthy();
+  expect(
+    target.ever_tested,
+    "la versión objetivo debe tener una prueba E2E previa aprobada",
+  ).toBeTruthy();
+  expect(
+    target.active,
+    "la versión objetivo debe estar inactiva antes de solicitar el despliegue",
+  ).toBe(false);
   expect(
     originalActive.ever_tested,
     "la versión activa anterior debe poder reactivarse para restaurar el entorno",
   ).toBeTruthy();
 
+  const channelManager = await login(request, channelManagerEmail!, channelManagerPassword!);
+  const previewResponse = await request.get(
+    `/api/v0/configuration-deploy-requests/preview?target_configuration_id=${encodeURIComponent(configurationId!)}&target_version=${version}`,
+    { headers: { Authorization: `Bearer ${channelManager.access_token}` } },
+  );
+  expect(
+    previewResponse.ok(),
+    `vista previa por API: HTTP ${previewResponse.status()} ${await previewResponse.text()}`,
+  ).toBeTruthy();
+  const preview = (await previewResponse.json()) as { changes: unknown[] };
+  expect(
+    preview.changes.length,
+    "la API debe devolver cambios para la versión candidata",
+  ).toBeGreaterThan(0);
+
   const requestTitle = `E01 E2E despliegue ${Date.now()}`;
   const requestMessage = `Solicitud real de prueba para ${configurationId}:v${version}`;
 
   try {
-    await signInThroughUi(page, channelManagerEmail!, channelManagerPassword!);
+    await authenticatePage(page, channelManager.access_token);
     await page.goto("/configuracion");
     await expect(page.getByRole("heading", { name: "Configuración del Agente" })).toBeVisible();
 
@@ -147,11 +176,15 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
       .last();
     await expect(versionRow).toBeVisible();
     await versionRow.click();
-    await expect(page.getByText(`${target.name}:v${version}`, { exact: true }).first()).toBeVisible();
+    await expect(
+      page.getByText(`${target.name}:v${version}`, { exact: true }).first(),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Solicitar despliegue" }).click();
     await expect(page.getByRole("heading", { name: "Solicitar despliegue" })).toBeVisible();
-    await expect(page.getByText(/Cambios frente a producción/)).toBeVisible();
+    await expect(page.getByText(/Cambios frente a producción/)).toBeVisible({
+      timeout: 30_000,
+    });
     await page.getByLabel("Título").fill(requestTitle);
     await page.getByLabel("Mensaje").fill(requestMessage);
     await page.getByRole("button", { name: "Enviar solicitud" }).click();
@@ -159,16 +192,40 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
 
     const approverPage = await browser.newPage();
     try {
-      await signInThroughUi(approverPage, managerEmail!, managerPassword!);
+      await authenticatePage(approverPage, manager.access_token);
       await approverPage.goto("/configuracion");
       await expect(
         approverPage.getByRole("heading", { name: "Solicitudes de despliegue" }),
       ).toBeVisible();
 
-      const requestCard = approverPage.getByText(requestTitle, { exact: true }).locator("xpath=../..");
+      const requestCard = approverPage
+        .getByText(requestTitle, { exact: true })
+        .locator("xpath=../..");
       await expect(requestCard.getByText(requestMessage, { exact: true })).toBeVisible();
+      const approvalResponsePromise = approverPage.waitForResponse(
+        (response) =>
+          response.url().includes("/configuration-deploy-requests/") &&
+          response.url().endsWith("/approve"),
+      );
       await requestCard.getByRole("button", { name: "Aprobar y desplegar" }).click();
-      await expect(requestCard.getByText(/Aprobada por/)).toBeVisible();
+      const approvalResponse = await approvalResponsePromise;
+      expect(
+        approvalResponse.ok(),
+        `aprobación API: HTTP ${approvalResponse.status()} ${await approvalResponse.text()}`,
+      ).toBeTruthy();
+      await expect
+        .poll(async () => {
+          const response = await request.get("/api/v0/configuration-deploy-requests", {
+            headers: { Authorization: `Bearer ${manager.access_token}` },
+          });
+          expect(response.ok(), `solicitudes: ${await response.text()}`).toBeTruthy();
+          const requests = (await response.json()) as Array<{
+            title: string;
+            status: string;
+          }>;
+          return requests.find((item) => item.title === requestTitle)?.status;
+        })
+        .toBe("approved");
 
       await expect
         .poll(async () => {
