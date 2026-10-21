@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 test.setTimeout(240_000);
 
 const API = "http://localhost";
-const USER_EMAIL = "e03-entities-advanced@aria.test";
+const USER_EMAIL = "e03-entities-advanced@example.com";
 const INSTANCE_NAMES = ["E2E Entidades Avanzado A", "E2E Entidades Avanzado B"];
 const BASELINE_CODE = "E03-ENTIDADES-ADV-BASE";
 

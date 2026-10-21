@@ -20,7 +20,12 @@ export type FraudMaturationProfile = {
   avg_days: number | null;
   min_days: number | null;
   max_days: number | null;
+  p50_days: number | null;
+  p75_days: number | null;
+  p90_days: number | null;
   p95_days: number | null;
+  p98_days: number | null;
+  p99_days: number | null;
 };
 
 // Only present when getDatasetSummary is called with all 5 mark-field

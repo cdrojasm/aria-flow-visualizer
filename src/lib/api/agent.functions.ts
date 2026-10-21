@@ -9,8 +9,123 @@ export type AgentSession = {
   budget_limits: Record<string, number>;
   prompt_versions: Record<string, Record<string, string>>;
   rev: number;
+  lease: {
+    status: "NONE" | "ACTIVE" | "EXPIRED";
+    expires_at: string | null;
+    heartbeat_at: string | null;
+  };
   scope?: { areas?: string[] };
 };
+
+export type AgentExperiment = {
+  session_id: string;
+  experiment_id: string;
+  iteration_number: number;
+  kind: "ISOLATED" | "COMBINATION";
+  status: "RUNNING" | "SUCCEEDED" | "REJECTED_GLOBAL_CONSTRAINT" | "FAILED";
+  components: Array<{
+    component: "model" | "configuration" | "library" | "vector_store";
+    entity_id: string;
+    version: string;
+    content_sha256: string;
+  }>;
+  baseline_components: Array<{
+    component: "model" | "configuration" | "library" | "vector_store";
+    entity_id: string;
+    version: string;
+    content_sha256: string;
+  }>;
+  snapshot_id: string | null;
+  snapshot_sha256: string | null;
+  objective_id: string;
+  objective_version: number;
+  created_at: string;
+  completed_at: string | null;
+  global_evaluation: {
+    status?: string;
+    sample?: Record<string, unknown>;
+    metrics?: Record<string, unknown>;
+    delta?: Record<string, unknown>;
+    uncertainty?: Record<string, unknown>;
+    segments?: Array<Record<string, unknown>>;
+    constraints?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  error_code: string | null;
+};
+
+export type AgentReleasePin = {
+  component: string;
+  entity_id: string;
+  version: string;
+  content_sha256: string;
+};
+export type RetrospectiveValidation = {
+  validation_id: string;
+  session_id: string;
+  experiment_id: string;
+  status: string;
+  snapshot_id: string;
+  snapshot_sha256: string;
+  component_pins: AgentReleasePin[];
+  baseline_component_pins: AgentReleasePin[];
+  evidence: Record<string, unknown>;
+  created_by: string;
+  created_by_id: string;
+  created_at: string;
+  error_code: string | null;
+};
+export type AgentRelease = {
+  release_id: string;
+  validation_id: string;
+  session_id: string;
+  experiment_id: string;
+  status: string;
+  candidate_component_pins: AgentReleasePin[];
+  previous_component_pins: AgentReleasePin[];
+  requested_by: string;
+  requested_by_id: string;
+  requested_at: string;
+  title: string;
+  reason: string;
+  snapshot_id: string;
+  snapshot_sha256: string;
+  rollout_policy_version: string;
+  version: number;
+  approved_by: string | null;
+  approved_by_id: string | null;
+  approved_at: string | null;
+  updated_at: string | null;
+  observations: { count?: number; disagreements?: number };
+  rollback_reason: string | null;
+};
+
+export type AgentAuditEvent = {
+  event_id: string;
+  occurred_at: string;
+  category: "session" | "iteration" | "specialist" | "tool" | "experiment" | "lease" | "release";
+  status: string;
+  reason_code: string | null;
+  duration_ms: number | null;
+  cost_micros: number | null;
+  specialist:
+    "optimizer" | "configuration" | "library" | "vector_store" | "model" | "dataset" | null;
+  tool:
+    | "read"
+    | "write"
+    | "evaluate"
+    | "search"
+    | "score"
+    | "persist"
+    | "dispatch"
+    | "configuration"
+    | "library"
+    | "vector_store"
+    | "xgboost"
+    | null;
+};
+
+export type AgentAuditPage = { items: AgentAuditEvent[]; next_cursor: string | null };
 
 export type AgentObjective = {
   version: number;
@@ -161,6 +276,25 @@ export function listAgentIterations(sessionId: string) {
   return apiFetch<AgentIteration[]>(`${path}/sessions/${encodeURIComponent(sessionId)}/iterations`);
 }
 
+export function listAgentExperiments(sessionId: string, limit = 50) {
+  return apiFetch<AgentExperiment[]>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/experiments?limit=${limit}`,
+  );
+}
+
+export function getAgentExperiment(sessionId: string, experimentId: string) {
+  return apiFetch<AgentExperiment>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/experiments/${encodeURIComponent(experimentId)}`,
+  );
+}
+
+export function listAgentAudit(sessionId: string, limit = 50, cursor?: string) {
+  const query = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
+  return apiFetch<AgentAuditPage>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/audit?${query}`,
+  );
+}
+
 export function listAgentHypotheses(sessionId: string) {
   return apiFetch<AgentHypothesis[]>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/hypotheses`,
@@ -189,9 +323,16 @@ export function getAgentSessionBudget(sessionId: string) {
 }
 
 export function listAgentClaims(entityKey: string) {
-  return apiFetch<Array<{ session_id: string; reason: string; expires_at: string }>>(
-    `${path}/claims/${encodeURIComponent(entityKey)}`,
-  );
+  return apiFetch<
+    Array<{
+      entity_key: string;
+      session_id: string;
+      claimed_at: string;
+      heartbeat_at: string;
+      expires_at: string;
+      reason: string;
+    }>
+  >(`${path}/claims/${encodeURIComponent(entityKey)}`);
 }
 
 export function listAgentMessages(sessionId: string, afterSeq = 0) {
@@ -249,5 +390,38 @@ export function confirmModusOperandiDraft(sessionId: string, packageId: string, 
   return apiFetch<AgentConfirmation>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/modus-operandi-drafts/${encodeURIComponent(packageId)}/confirm`,
     { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+export function validateAgentExperiment(sessionId: string, experimentId: string) {
+  return apiFetch<RetrospectiveValidation>("/api/v0/agent/releases/retrospective-validations", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId, experiment_id: experimentId }),
+  });
+}
+
+export function requestAgentRelease(data: {
+  validation_id: string;
+  title: string;
+  reason: string;
+}) {
+  return apiFetch<AgentRelease>("/api/v0/agent/releases", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function listAgentReleases() {
+  return apiFetch<AgentRelease[]>("/api/v0/agent/releases");
+}
+
+export function transitionAgentRelease(
+  releaseId: string,
+  action: "submit" | "approve" | "advance" | "rollback",
+  data: { expected_version: number; reason: string; target_stage?: string },
+) {
+  return apiFetch<AgentRelease>(
+    `/api/v0/agent/releases/${encodeURIComponent(releaseId)}/${action}`,
+    { method: "POST", body: JSON.stringify(data) },
   );
 }

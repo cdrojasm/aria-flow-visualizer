@@ -178,6 +178,7 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   page,
 }) => {
   const pageErrors: string[] = [];
+  const optimizerReadPaths: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.stack ?? error.message));
   page.on("console", (message) => {
     if (message.type() === "error") pageErrors.push(message.text());
@@ -188,6 +189,9 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     );
   });
   page.on("response", (response) => {
+    if (response.url().startsWith("http://localhost/api/v0/agent/sessions/")) {
+      optimizerReadPaths.push(new URL(response.url()).pathname);
+    }
     if (response.status() >= 500) {
       pageErrors.push(`HTTP_${response.status()} ${response.url()}`);
     }
@@ -206,6 +210,15 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   await page.getByRole("button", { name: "Revisar objetivo y presupuesto" }).click();
   expect((await objectiveResponse).ok()).toBeTruthy();
   await expect(page.getByText("Presupuesto asignado por el servidor.")).toBeVisible();
+  const overlapResponse = await api!.post("/api/v0/agent/sessions", {
+    headers: { Authorization: `Bearer ${channelManagerToken}` },
+    data: { mode: "optimization", scope: ["library"] },
+  });
+  expect(
+    overlapResponse.status(),
+    `crear sesión borrador para comprobar interferencia: ${await overlapResponse.text()}`,
+  ).toBe(201);
+  const overlapSession = await overlapResponse.json();
   const startResponse = page.waitForResponse(
     (response) =>
       response.url().includes("/api/v0/agent/sessions/") && response.url().endsWith("/start"),
@@ -220,6 +233,11 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     session_id: string;
     created_at: string;
     updated_at: string;
+    lease: {
+      status: "NONE" | "ACTIVE" | "EXPIRED";
+      expires_at: string | null;
+      heartbeat_at: string | null;
+    };
   };
   createdSessionId = startedSession.session_id;
   await expect(
@@ -233,6 +251,68 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   await expect(sessionHistory).toContainText(
     `actualización ${new Date(startedSession.updated_at).toLocaleString("es-CO")}`,
   );
+  const lease = page.getByLabel("Estado del lease");
+  await expect(lease).toBeVisible();
+  await expect(lease).toContainText(startedSession.lease.status);
+  const claimResponse = await checked(
+    await api!.get("/api/v0/agent/claims/scope%23library", {
+      headers: { Authorization: `Bearer ${channelManagerToken}` },
+    }),
+    "leer claim activo real por área",
+  );
+  const activeClaim = claimResponse.find(
+    (claim: { session_id: string }) => claim.session_id === startedSession.session_id,
+  );
+  expect(activeClaim).toBeTruthy();
+  const optimizerTabs = page.getByRole("tablist", {
+    name: "Historial de sesiones del optimizador",
+  });
+  const overlapTab = optimizerTabs.getByRole("tab", {
+    name: `Optimizador ${overlapSession.session_id} · Borrador`,
+  });
+  await expect(overlapTab).toBeVisible({ timeout: 15_000 });
+  await overlapTab.click();
+  const interference = page
+    .getByRole("status")
+    .filter({ hasText: "Hay otra sesión activa investigando" });
+  await expect(interference).toContainText(startedSession.session_id, { timeout: 15_000 });
+  await expect(interference).toContainText(
+    new Date(activeClaim.claimed_at).toLocaleString("es-CO"),
+  );
+  await optimizerTabs
+    .getByRole("tab", {
+      name: `Optimizador ${startedSession.session_id} · Ejecutando`,
+    })
+    .click();
+  const sessionIdEncoded = encodeURIComponent(startedSession.session_id);
+  const [experimentsResponse, auditResponse] = await Promise.all([
+    api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/experiments?limit=50`, {
+      headers: { Authorization: `Bearer ${channelManagerToken}` },
+    }),
+    api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/audit?limit=50`, {
+      headers: { Authorization: `Bearer ${channelManagerToken}` },
+    }),
+  ]);
+  expect(
+    experimentsResponse.ok(),
+    `experimentos: ${await experimentsResponse.text()}`,
+  ).toBeTruthy();
+  const experiments = await experimentsResponse.json();
+  expect(Array.isArray(experiments)).toBeTruthy();
+  expect(auditResponse.ok(), `auditoría: ${await auditResponse.text()}`).toBeTruthy();
+  const audit = await auditResponse.json();
+  expect(Array.isArray(audit.items)).toBeTruthy();
+  expect(audit).toHaveProperty("next_cursor");
+  await expect(
+    page.getByRole("region", { name: "Comparación baseline y experimentos" }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Auditoría de sesión" })).toBeVisible();
+  await expect(page.getByText("Baseline y experimentos", { exact: true })).toBeVisible();
+  await expect(page.getByText("Auditoría", { exact: true }).last()).toBeVisible();
+  await expect
+    .poll(() => optimizerReadPaths.some((url) => url.endsWith("/experiments")))
+    .toBeTruthy();
+  await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/audit"))).toBeTruthy();
   await expect(page.getByText("Gastado", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Restante", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Pausar optimizador" }).click();

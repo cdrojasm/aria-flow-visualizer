@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, Rocket, Square } from "lucide-react";
+import { AgentReleasePanel } from "./AgentReleasePanel";
 import {
   controlOptimizerSession,
   createOptimizerSession,
   getActiveAgentObjective,
+  listAgentAudit,
+  listAgentExperiments,
   getAgentSessionBudget,
   listAgentClaims,
   listAgentHypotheses,
@@ -38,9 +41,11 @@ function budgetLabel(resource: string, amount: number) {
 
 export function AgentOptimizerPanel({
   canLaunch,
+  role,
   sessions,
 }: {
   canLaunch: boolean;
+  role: string | undefined;
   sessions: AgentSession[];
 }) {
   const queryClient = useQueryClient();
@@ -50,6 +55,7 @@ export function AgentOptimizerPanel({
   const [composer, setComposer] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [auditCursor, setAuditCursor] = useState<string | undefined>();
   const objectiveQuery = useQuery({
     queryKey: ["agentActiveObjective"],
     queryFn: getActiveAgentObjective,
@@ -65,6 +71,18 @@ export function AgentOptimizerPanel({
     queryFn: () => listAgentIterations(sessionId),
     enabled: Boolean(sessionId),
     refetchInterval: 3_000,
+  });
+  const experimentsQuery = useQuery({
+    queryKey: ["agentExperiments", sessionId],
+    queryFn: () => listAgentExperiments(sessionId),
+    enabled: Boolean(sessionId),
+    refetchInterval: 5_000,
+  });
+  const auditQuery = useQuery({
+    queryKey: ["agentAudit", sessionId, auditCursor],
+    queryFn: () => listAgentAudit(sessionId, 50, auditCursor),
+    enabled: Boolean(sessionId),
+    refetchInterval: 5_000,
   });
   const hypothesesQuery = useQuery({
     queryKey: ["agentHypotheses", sessionId],
@@ -166,6 +184,7 @@ export function AgentOptimizerPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <AgentReleasePanel role={role} />
       {canLaunch && (
         <section className="border-b border-border p-4">
           <h2 className="text-sm font-semibold text-text-primary">Lanzar optimizador</h2>
@@ -270,6 +289,7 @@ export function AgentOptimizerPanel({
               key={item.session_id}
               type="button"
               role="tab"
+              aria-label={`Optimizador ${item.session_id} · ${formatState(item.status)}`}
               aria-selected={item.session_id === sessionId}
               onClick={() => setSelectedSessionId(item.session_id)}
               className={`shrink-0 rounded border px-2 py-2 text-xs ${item.session_id === sessionId ? "border-primary bg-primary/5 text-primary" : "border-border text-text-secondary"}`}
@@ -327,7 +347,15 @@ export function AgentOptimizerPanel({
                 role="status"
                 className="mt-2 rounded bg-amber-500/10 p-2 text-xs text-amber-800"
               >
-                Hay otra sesión activa investigando un área de este alcance.
+                <p>Hay otra sesión activa investigando un área de este alcance:</p>
+                <ul className="mt-1 space-y-1">
+                  {conflictingAreas.map((claim) => (
+                    <li key={`${claim.entity_key}:${claim.session_id}`}>
+                      {claim.session_id} · activa desde{" "}
+                      {new Date(claim.claimed_at).toLocaleString("es-CO")}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
             <div className="mt-3 grid grid-cols-3 gap-2 text-[11px]">
@@ -346,6 +374,13 @@ export function AgentOptimizerPanel({
             <p className="mt-2 text-[11px] text-text-secondary">
               Historial · creada {new Date(session.created_at).toLocaleString("es-CO")} · última
               actualización {new Date(session.updated_at).toLocaleString("es-CO")}
+            </p>
+            <p className="mt-1 text-[11px] text-text-secondary" aria-label="Estado del lease">
+              Lease: {session.lease?.status ?? "NONE"}
+              {session.lease?.expires_at &&
+                ` · vence ${new Date(session.lease.expires_at).toLocaleString("es-CO")}`}
+              {session.lease?.heartbeat_at &&
+                ` · heartbeat ${new Date(session.lease.heartbeat_at).toLocaleString("es-CO")}`}
             </p>
             {iterationsQuery.data?.at(-1)?.reason && (
               <p className="mt-2 text-xs text-text-secondary">
@@ -367,6 +402,88 @@ export function AgentOptimizerPanel({
                 </ul>
               )}
             </div>
+          </section>
+          <section
+            className="border-b border-border p-4"
+            aria-label="Comparación baseline y experimentos"
+          >
+            <h3 className="text-xs font-semibold">Baseline y experimentos</h3>
+            {(experimentsQuery.data ?? []).length === 0 ? (
+              <p className="mt-2 text-xs text-text-secondary">
+                Aún no hay evaluaciones de experimentos.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-3 text-xs">
+                {experimentsQuery.data?.map((experiment) => (
+                  <li key={experiment.experiment_id} className="rounded border border-border p-2">
+                    <p className="font-semibold">
+                      Experimento {experiment.iteration_number} · {experiment.status}
+                    </p>
+                    <p className="mt-1 text-text-secondary">
+                      Baseline:{" "}
+                      {experiment.baseline_components
+                        .map((pin) => `${pin.component} ${pin.version}`)
+                        .join(", ") || "—"}
+                    </p>
+                    <p className="text-text-secondary">
+                      Candidato:{" "}
+                      {experiment.components
+                        .map((pin) => `${pin.component} ${pin.version}`)
+                        .join(", ") || "—"}
+                    </p>
+                    <p className="text-text-secondary">
+                      Evaluación: {String(experiment.global_evaluation.status ?? "pendiente")}
+                    </p>
+                    <pre className="mt-1 overflow-auto whitespace-pre-wrap text-[10px]">
+                      {JSON.stringify(
+                        {
+                          sample: experiment.global_evaluation.sample,
+                          metrics: experiment.global_evaluation.metrics,
+                          delta: experiment.global_evaluation.delta,
+                          uncertainty: experiment.global_evaluation.uncertainty,
+                          segments: experiment.global_evaluation.segments,
+                          constraints: experiment.global_evaluation.constraints,
+                        },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section className="p-4" aria-label="Auditoría de sesión">
+            <h3 className="text-xs font-semibold">Auditoría</h3>
+            {(auditQuery.data?.items ?? []).length === 0 ? (
+              <p className="mt-2 text-xs text-text-secondary">
+                No hay eventos registrados para esta página.
+              </p>
+            ) : (
+              <ol className="mt-2 space-y-1 text-xs">
+                {auditQuery.data?.items.map((event) => (
+                  <li key={event.event_id} className="rounded border border-border px-2 py-1">
+                    {new Date(event.occurred_at).toLocaleString("es-CO")} · {event.category} ·{" "}
+                    {event.status}
+                    {event.reason_code && ` · ${event.reason_code}`}
+                    {event.duration_ms != null && ` · ${event.duration_ms} ms`}
+                    {event.cost_micros != null &&
+                      ` · $${(event.cost_micros / 1_000_000).toFixed(4)}`}
+                    {event.specialist && ` · ${event.specialist}`}
+                    {event.tool && ` · ${event.tool}`}
+                  </li>
+                ))}
+              </ol>
+            )}
+            {auditQuery.data?.next_cursor && (
+              <button
+                type="button"
+                className="mt-2 rounded border border-border px-2 py-1 text-xs"
+                onClick={() => setAuditCursor(auditQuery.data?.next_cursor ?? undefined)}
+              >
+                Cargar eventos anteriores
+              </button>
+            )}
           </section>
           <section className="border-b border-border p-4">
             <h3 className="text-xs font-semibold">Hipótesis y progreso</h3>

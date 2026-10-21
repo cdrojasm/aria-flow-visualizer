@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 
 test.setTimeout(180_000);
 
-const E2E_EMAIL = "e03-vector-store@aria.test";
+const E2E_EMAIL = "e03-vector-store@example.com";
 let bootstrapApi: APIRequestContext | undefined;
 let credentials: { email: string; password: string } | undefined;
 let fixtureTaxonomyId: string | undefined;
@@ -37,12 +37,19 @@ async function login(api: APIRequestContext, email: string, password: string): P
 }
 
 test.beforeAll(async ({ playwright }) => {
+  bootstrapApi = await playwright.request.newContext({ baseURL: "http://localhost" });
+  const preprovisionedEmail = process.env.E2E_DATA_ANALYST_EMAIL;
+  const preprovisionedPassword = process.env.E2E_DATA_ANALYST_PASSWORD;
+  if (preprovisionedEmail && preprovisionedPassword) {
+    credentials = { email: preprovisionedEmail, password: preprovisionedPassword };
+    await login(bootstrapApi, credentials.email, credentials.password);
+    return;
+  }
   const bootstrapToken = process.env.E2E_BOOTSTRAP_TOKEN;
   test.skip(
     !bootstrapToken,
     "Define E2E_BOOTSTRAP_TOKEN para provisionar o renovar el usuario E03 por nginx.",
   );
-  bootstrapApi = await playwright.request.newContext({ baseURL: "http://localhost" });
   const headers = { "X-Bootstrap-Token": bootstrapToken! };
   const listed = await bootstrapApi.get("/api/v0/auth/users", { headers });
   const users = await json<User[]>(listed, "listar usuarios para aprovisionamiento E03");
@@ -118,11 +125,21 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
   test.skip(!credentials, "No se aprovisionó usuario E03; configura E2E_BOOTSTRAP_TOKEN.");
   const { email, password } = credentials!;
   const { access_token: token } = await login(request, email, password);
-  const instances = await listInstances(request, token);
-  test.skip(
-    instances.length === 0,
-    "El entorno E2E debe tener al menos una instancia vector store.",
-  );
+  let instances = await listInstances(request, token);
+  if (instances.length === 0) {
+    await json<Instance>(
+      await request.post("/api/v0/vector-store-instances", {
+        ...auth(token),
+        data: {
+          name: `E03 E2E ${randomBytes(6).toString("hex")}`,
+          description: "Instancia temporal creada por E03 a través de la API real",
+        },
+      }),
+      "crear instancia vector store E03",
+    );
+    instances = await listInstances(request, token);
+  }
+  expect(instances.length, "la API debe devolver la instancia vector store E03").toBeGreaterThan(0);
   const initialSnapshots = await Promise.all(
     instances.map(async (candidate) => ({
       candidate,

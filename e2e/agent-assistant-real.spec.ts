@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
-test.setTimeout(180_000);
+test.setTimeout(300_000);
 
 const email = `e2e-agent-ui-${randomUUID()}@aria.test`;
 const title = `ARIA E2E modus operandi ${randomUUID().slice(0, 8)}`;
@@ -270,4 +270,75 @@ test("FP2/FP3 real: chat idempotente, contexto de página y borrador confirmado 
   const created = library.find((entry: { title: string }) => entry.title === title);
   expect(created).toBeTruthy();
   entityId = created.id as string;
+
+  const updatedTitle = `${title} actualizado`;
+  const updatePrompt = `Edita el modus operandi ${entityId}. Nuevo título exacto: ${updatedTitle}. Nueva narrativa: suplantación digital con validación reforzada. Conserva exactamente la taxonomía ${taxonomyId}, las variables canal y dispositivo y el playbook sin cambios: strategy validar identidad por canal alterno; resolution_tag primaria handle_by_aria, resolution_method_id null; if_no_voicebot scale_to_analyst, resolution_method_id null; if_no_analyst block_soft, resolution_method_id null.`;
+  await page.getByLabel("Mensaje para ARIA").fill(updatePrompt);
+  const updateMessageResponse = page.waitForResponse(
+    (candidate) =>
+      candidate
+        .url()
+        .includes(`/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/messages`) &&
+      candidate.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Enviar" }).click();
+  await checked(await updateMessageResponse, "enviar instrucción de edición");
+  const updateSource = page.locator("article").filter({ hasText: updatePrompt });
+  await updateSource.getByRole("button", { name: /Crear borrador de modus operandi/ }).click();
+  await expect(page.getByRole("heading", { name: "Borrador de modus operandi" })).toBeVisible({
+    timeout: 60_000,
+  });
+  await page.getByLabel("Operación del borrador").selectOption("update");
+  await page.getByLabel("Entrada de Biblioteca").selectOption(entityId);
+  const regenerateResponse = page.waitForResponse(
+    (candidate) =>
+      candidate
+        .url()
+        .endsWith(
+          `/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/modus-operandi-drafts`,
+        ) &&
+      candidate.request().method() === "POST" &&
+      candidate.request().postDataJSON()?.operation === "update",
+  );
+  await page.getByRole("button", { name: "Regenerar" }).click();
+  await checked(await regenerateResponse, "generar borrador de edición");
+  const updateVerifyButton = page.getByRole("button", { name: "Revisar diff y confirmar" });
+  await expect(updateVerifyButton).toBeEnabled({ timeout: 60_000 });
+  await updateVerifyButton.click();
+  const updateDialog = page.getByRole("alertdialog", { name: "Confirmar cambio en la Biblioteca" });
+  await expect(updateDialog).toContainText(updatedTitle);
+  const updateConfirmResponse = page.waitForResponse(
+    (candidate) =>
+      candidate
+        .url()
+        .includes(
+          `/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/modus-operandi-drafts/`,
+        ) &&
+      candidate.url().endsWith("/confirm") &&
+      candidate.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "Confirmar y aplicar" }).click();
+  await checked(await updateConfirmResponse, "confirmar edición asistida");
+  await expect(page.getByRole("alert")).toContainText("se confirmó y ya está en la Biblioteca");
+  const updatedLibrary = await checked(
+    await api!.get("/api/v0/library/modus-operandi?active_only=false", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "comprobar modus operandi editado",
+  );
+  expect(updatedLibrary.find((entry: { id: string }) => entry.id === entityId)?.title).toBe(
+    updatedTitle,
+  );
+  const confirmations = await checked(
+    await api!.get(`/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/confirmations`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "comprobar confirmaciones auditadas de create y update",
+  );
+  expect(confirmations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ action: "create", status: "CONFIRMED" }),
+      expect.objectContaining({ action: "update", status: "CONFIRMED" }),
+    ]),
+  );
 });

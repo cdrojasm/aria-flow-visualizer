@@ -529,14 +529,23 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
                         {markingResult.maturation.max_days} días
                       </p>
                     </div>
-                    <div className="border border-border rounded-lg p-2.5">
-                      <p className="text-[10px] text-text-secondary uppercase tracking-wider">
-                        P95
-                      </p>
-                      <p className="text-[16px] font-semibold text-text-primary tabular-nums">
-                        {markingResult.maturation.p95_days} días
-                      </p>
-                    </div>
+                    {[
+                      ["P50", markingResult.maturation.p50_days],
+                      ["P75", markingResult.maturation.p75_days],
+                      ["P90", markingResult.maturation.p90_days],
+                      ["P95", markingResult.maturation.p95_days],
+                      ["P98", markingResult.maturation.p98_days],
+                      ["P99", markingResult.maturation.p99_days],
+                    ].map(([label, value]) => (
+                      <div key={label} className="border border-border rounded-lg p-2.5">
+                        <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+                          {label}
+                        </p>
+                        <p className="text-[16px] font-semibold text-text-primary tabular-nums">
+                          {value} días
+                        </p>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

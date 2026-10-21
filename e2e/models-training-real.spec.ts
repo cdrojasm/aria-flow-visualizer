@@ -95,7 +95,7 @@ async function provisionDataAnalyst(playwright: Playwright) {
   const users = await expectJson<
     Array<{ id: string; email: string; role: string; is_active: boolean }>
   >(await bootstrapApi.get("/api/v0/auth/users", { headers }), "consultar usuarios para E05");
-  const email = process.env.E2E_MODEL_EMAIL ?? "e05-models-e2e@aria.test";
+  const email = process.env.E2E_MODEL_EMAIL ?? "e05-models-e2e@example.com";
   const existing = users.find((user) => user.email === email);
   if (existing && (existing.role !== "data_analyst" || !existing.is_active))
     throw new Error(

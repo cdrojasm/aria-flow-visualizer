@@ -114,7 +114,7 @@ async function createManagerThroughLocalAuth(playwright: Playwright) {
   const users = await responseJson<
     Array<{ id: string; email: string; role: string; is_active: boolean }>
   >(usersResponse, "listar usuarios locales para aprovisionar E04");
-  const email = process.env.E2E_DATASET_AUTO_EMAIL ?? "e04-datasets-e2e@aria.test";
+  const email = process.env.E2E_DATASET_AUTO_EMAIL ?? "e04-datasets-e2e@example.com";
   const existing = users.find((user) => user.email === email);
   if (existing && existing.role !== "manager") {
     throw new Error(

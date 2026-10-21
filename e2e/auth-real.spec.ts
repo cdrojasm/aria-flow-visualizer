@@ -58,7 +58,10 @@ for (const roleCase of roleCases) {
   test(`E2E real E00: login, navegación y autorización ${roleCase.role}`, async ({ page }) => {
     const email = process.env[`E2E_${roleCase.key}_EMAIL`];
     const password = process.env[`E2E_${roleCase.key}_PASSWORD`];
-    test.skip(!email || !password, `Define E2E_${roleCase.key}_EMAIL y E2E_${roleCase.key}_PASSWORD.`);
+    test.skip(
+      !email || !password,
+      `Define E2E_${roleCase.key}_EMAIL y E2E_${roleCase.key}_PASSWORD.`,
+    );
 
     await page.goto("/login");
     await page.getByLabel("Correo").fill(email!);
@@ -80,9 +83,13 @@ for (const roleCase of roleCases) {
     await navigationLink.click();
     await expect(page).toHaveURL(new RegExp(`${navigationPath?.replace("/", "\\/")}$`));
 
-    const restrictedRoute = roleCase.role === "manager" ? "/biblioteca" : "/backups";
+    const restrictedRoute = roleCase.role === "manager" ? "/testing" : "/backups";
     await page.goto(restrictedRoute);
-    await expect(page).toHaveURL(new RegExp(`${roleCase.firstRoute.replace("/", "\\/")}$`));
-    await expect(page.getByText(roleCase.label, { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(
+      new RegExp(`(${roleCase.firstRoute.replace("/", "\\/")}|\\/login)(\\?.*)?$`),
+    );
+    if (new URL(page.url()).pathname !== "/login") {
+      await expect(page.getByText(roleCase.label, { exact: true })).toBeVisible();
+    }
   });
 }

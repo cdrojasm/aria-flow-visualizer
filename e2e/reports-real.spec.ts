@@ -53,7 +53,7 @@ test.beforeAll(async ({ playwright }) => {
       const list = await bootstrapApi.get("/api/v0/auth/users", { headers });
       expect(list.ok()).toBeTruthy();
       const users = (await list.json()) as { id: string; email: string; role: string }[];
-      email = "e10-reports-e2e@aria.test";
+      email = "e10-reports-e2e@example.com";
       password = `E10-${randomBytes(32).toString("base64url")}-Aa9!`;
       const existing = users.find((user) => user.email === email);
       if (existing && existing.role !== "manager")

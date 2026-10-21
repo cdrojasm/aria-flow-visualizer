@@ -51,6 +51,9 @@ const SETTING_LABELS: Record<string, string> = {
   voicebot_max_concurrent_calls: "Slots de voicebot",
   amount_tiers: "Rangos de monto",
   reasoning_evaluation_sample_rate: "Muestreo de evaluación de razonamiento",
+  maturing_days: "Ventana de maduración",
+  expected_coverage_pct: "Cobertura esperada de fraude",
+  stable_months: "Meses hasta estabilidad",
 };
 
 function settingLabel(path: string): string {
@@ -67,8 +70,12 @@ function formatValue(value: unknown, path?: string): string {
     const codes = value.map((tier) => (tier as { code?: unknown }).code).filter(Boolean);
     return codes.length ? codes.join(", ") : "sin rangos";
   }
-  if (path === "reasoning_evaluation_sample_rate" && typeof value === "number") {
-    return `${(value * 100).toLocaleString("es-CO", { maximumFractionDigits: 2 })}%`;
+  if (
+    (path === "reasoning_evaluation_sample_rate" || path === "expected_coverage_pct") &&
+    typeof value === "number"
+  ) {
+    const percent = path === "reasoning_evaluation_sample_rate" ? value * 100 : value;
+    return `${percent.toLocaleString("es-CO", { maximumFractionDigits: 2 })}%`;
   }
   if (typeof value === "object") return "(editado)";
   return String(value);
@@ -205,7 +212,17 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
     Number.isFinite(draft.reasoningEvaluationSampleRate) &&
     draft.reasoningEvaluationSampleRate >= 0 &&
     draft.reasoningEvaluationSampleRate <= 1;
-  const canSave = dirty && tierErrors.length === 0 && sampleRateValid;
+  const maturationValid =
+    Number.isInteger(draft.maturingDays) &&
+    draft.maturingDays >= 0 &&
+    draft.maturingDays <= 365 &&
+    Number.isFinite(draft.expectedCoveragePct) &&
+    draft.expectedCoveragePct > 0 &&
+    draft.expectedCoveragePct <= 100 &&
+    Number.isInteger(draft.stableMonths) &&
+    draft.stableMonths >= 0 &&
+    draft.stableMonths <= 120;
+  const canSave = dirty && tierErrors.length === 0 && sampleRateValid && maturationValid;
   const patch = (changes: Partial<OperationalSettings>) =>
     setDraft((prev) => (prev ? { ...prev, ...changes } : prev));
   const capacity = capacityQuery.data;
@@ -253,6 +270,47 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
             </button>
           </div>
         </div>
+
+        <Section
+          title="Maduración del fraude"
+          description="La ventana afecta las etiquetas de madurez del monitoreo y las muestras futuras. La cobertura esperada es informativa."
+        >
+          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <LimitField
+              label="Ventana de maduración"
+              hint="Días desde la alerta para considerar que la etiqueta ya maduró."
+              value={draft.maturingDays}
+              onChange={(v) => patch({ maturingDays: v })}
+              min={0}
+              max={365}
+              suffix="días"
+            />
+            <LimitField
+              label="Cobertura esperada de fraude"
+              hint="Porcentaje de alertas de fraude que se espera que ya estén remarcadas dentro de la ventana."
+              value={draft.expectedCoveragePct}
+              onChange={(v) => patch({ expectedCoveragePct: v })}
+              min={0}
+              max={100}
+              suffix="%"
+            />
+            <LimitField
+              label="Meses hasta estabilidad"
+              hint="Después de este plazo, el monitoreo deja de marcar el periodo como susceptible a correcciones tardías."
+              value={draft.stableMonths}
+              onChange={(v) => patch({ stableMonths: v })}
+              min={0}
+              max={120}
+              suffix="meses"
+            />
+            {!maturationValid && (
+              <p className="md:col-span-3 text-[12px] text-danger">
+                Usa de 0 a 365 días, de 0 a 100 % y de 0 a 120 meses. La cobertura esperada debe ser
+                mayor que 0.
+              </p>
+            )}
+          </div>
+        </Section>
 
         <Section
           title="Estado del agente"

@@ -44,6 +44,9 @@ export type ApiOperationalSettings = {
   // Share (0..1) of finished alerts sent to the reasoning LLM-judge; 0
   // disables it.
   reasoning_evaluation_sample_rate: number;
+  maturing_days: number;
+  expected_coverage_pct: number;
+  stable_months: number;
 };
 
 // AmountTierSchema
@@ -70,6 +73,9 @@ export type OperationalSettings = {
   queueDiscardBehavior: ShortageBehavior;
   amountTiers: AmountTier[];
   reasoningEvaluationSampleRate: number;
+  maturingDays: number;
+  expectedCoveragePct: number;
+  stableMonths: number;
   // Round-tripped untouched - edited elsewhere / not yet in this panel.
   passthrough: Pick<
     ApiOperationalSettings,
@@ -113,6 +119,9 @@ export function operationalSettingsFromApi(api: ApiOperationalSettings): Operati
       maxExclusive: tier.max_exclusive,
     })),
     reasoningEvaluationSampleRate: api.reasoning_evaluation_sample_rate,
+    maturingDays: api.maturing_days,
+    expectedCoveragePct: api.expected_coverage_pct,
+    stableMonths: api.stable_months,
     passthrough: {
       max_instances: api.max_instances,
       auto_scale: api.auto_scale,
@@ -158,6 +167,9 @@ export function operationalSettingsToApi(s: OperationalSettings): ApiOperational
       max_exclusive: tier.maxExclusive,
     })),
     reasoning_evaluation_sample_rate: s.reasoningEvaluationSampleRate,
+    maturing_days: s.maturingDays,
+    expected_coverage_pct: s.expectedCoveragePct,
+    stable_months: s.stableMonths,
   };
 }
 

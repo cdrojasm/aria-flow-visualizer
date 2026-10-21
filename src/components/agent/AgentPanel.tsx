@@ -657,7 +657,11 @@ export function AgentPanel({
               Volver al asistente
             </button>
           </div>
-          <AgentOptimizerPanel canLaunch={role === "channel_manager"} sessions={sessions} />
+          <AgentOptimizerPanel
+            canLaunch={role === "channel_manager"}
+            role={role}
+            sessions={sessions}
+          />
         </aside>
       )}
       {confirmOpen && draftItem && (

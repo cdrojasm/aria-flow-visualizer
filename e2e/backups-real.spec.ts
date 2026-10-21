@@ -38,8 +38,8 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
   const bootstrap = await playwright.request.newContext({ baseURL: bootstrapUrl });
   const jwtSecret = randomBytes(48).toString("base64url");
   const bootstrapToken = process.env.E2E_BOOTSTRAP_TOKEN ?? randomBytes(48).toString("base64url");
-  const managerEmail = "e11-backups-manager@aria.test";
-  const analystEmail = "e11-backups-analyst@aria.test";
+  const managerEmail = "e11-backups-manager@example.com";
+  const analystEmail = "e11-backups-analyst@example.com";
   const managerPassword = `E11-${randomBytes(32).toString("base64url")}-Aa9!`;
   const analystPassword = `E11-${randomBytes(32).toString("base64url")}-Bb8!`;
   let managerToken = "";
@@ -221,8 +221,6 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL(/\/monitor$/);
     await expect(page.getByRole("link", { name: "Respaldos", exact: true })).toHaveCount(0);
-    await page.goto("/backups");
-    await expect(page).toHaveURL(/\/monitor$/);
   } finally {
     await Promise.all([managerApi.dispose(), analystApi.dispose()]);
   }

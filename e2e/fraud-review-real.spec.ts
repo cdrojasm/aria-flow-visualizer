@@ -9,12 +9,13 @@ const password = process.env.E2E_FRAUD_REVIEW_PASSWORD;
 const bootstrapToken = process.env.E2E_BOOTSTRAP_TOKEN;
 const userName = "ARIA E08 fraud-review E2E";
 
-async function login(page: Page) {
-  await page.goto("/login");
-  await page.getByLabel("Correo").fill(email!);
-  await page.getByLabel("Contraseña").fill(password!);
-  await page.getByRole("button", { name: "Ingresar" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
+async function openFraudHistory(page: Page, accessToken: string) {
+  await page.addInitScript(
+    (tokenValue) => localStorage.setItem("aria.auth.accessToken", tokenValue),
+    accessToken,
+  );
+  await page.goto("/historico-fraude");
+  await expect(page.getByPlaceholder("Buscar en lo cargado por alerta, evento o cliente…")).toBeVisible();
 }
 
 async function token(request: APIRequestContext) {
@@ -65,6 +66,9 @@ test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({
         eventId,
         eventType: "E2E fraud review",
         customerId: `E08-CUSTOMER-${Date.now()}`,
+        eventid: eventId,
+        eventtype: "E2E fraud review",
+        customerid: `E08-CUSTOMER-${Date.now()}`,
         fecha_transaccion: new Date().toISOString(),
         channel: "E2E",
         integrationpoint: "E08",
@@ -84,17 +88,27 @@ test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({
     expect(reviewed.ok(), await reviewed.text()).toBeTruthy();
   }
 
-  const history = await request.get(`${baseURL}/api/v0/alerts/history?limit=50`, { headers });
-  expect(history.ok(), history.ok() ? "" : await history.text()).toBeTruthy();
-  const historyPage = (await history.json()) as {
+  let historyPage: {
     items: Array<{ alert_id: string; event_id: string; fraud_review_count: number }>;
-  };
-  expect(historyPage.items).toContainEqual(
-    expect.objectContaining({ alert_id: alertId, event_id: eventId, fraud_review_count: 2 }),
-  );
+  } = { items: [] };
+  await expect
+    .poll(
+      async () => {
+        const history = await request.get(`${baseURL}/api/v0/alerts/history?limit=50`, { headers });
+        expect(history.ok(), history.ok() ? "" : await history.text()).toBeTruthy();
+        historyPage = (await history.json()) as typeof historyPage;
+        return historyPage.items.some(
+          (item) =>
+            item.alert_id === alertId &&
+            item.event_id === eventId &&
+            item.fraud_review_count === 2,
+        );
+      },
+      { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+    )
+    .toBe(true);
 
-  await login(page);
-  await page.goto("/historico-fraude");
+  await openFraudHistory(page, accessToken);
   const search = page.getByPlaceholder("Buscar en lo cargado por alerta, evento o cliente…");
   await search.fill(eventId);
   const row = page.getByRole("row").filter({ hasText: eventId });
