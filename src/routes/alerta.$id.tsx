@@ -37,6 +37,7 @@ import {
   type AlertStep,
   type AnalystResolution,
 } from "@/lib/api/operations.functions";
+import { STEP_LABELS } from "@/lib/alertSteps";
 import { RESOLUTION_TAG_LABELS, type ResolutionTag } from "@/data/configs";
 
 export const Route = createFileRoute("/alerta/$id")({
@@ -59,17 +60,10 @@ const TABS: { id: AlertTab; label: string }[] = [
   { id: "historial", label: "Historial" },
 ];
 
-const STEP_LABELS: Record<string, string> = {
-  pre_process: "Pre-proceso",
-  deterministic: "Reglas determinísticas",
-  profiling: "Perfilamiento",
-  detector: "Detector",
-  detector_adversarial: "Adversarial (detector)",
-  classification: "Clasificación",
-  adversarial: "Adversarial",
-  analyst: "Analista (agente)",
-  executor: "Ejecutor",
-  post_process: "Post-proceso",
+const RESOLUTION_LABELS: Record<string, string> = {
+  block: "Fraude confirmado (bloqueada)",
+  pass: "Falso positivo (dejada pasar)",
+  bidi: "Enviada a bidi",
 };
 
 const DECISION_LABELS: Record<string, string> = {
@@ -181,8 +175,34 @@ function ResumenTab({
   const amount = amountField ? detail.input[amountField.field] : undefined;
   const channelField = schema?.fields.find((field) => field.id === schema.field_roles.channel);
 
+  const resolution = detail.analyst_resolution;
+
   return (
     <div className="max-w-[1180px] space-y-6">
+      {resolution && (
+        <section
+          data-testid="analyst-resolution"
+          className="rounded-xl border border-success/40 bg-success/5 px-5 py-4 space-y-1"
+        >
+          <div className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-wider text-success">
+            <Check className="h-4 w-4" /> Resolución del analista
+          </div>
+          <p className="text-[14px] font-medium text-text-primary">
+            {RESOLUTION_LABELS[resolution.decision] ?? resolution.decision}
+          </p>
+          <p className="text-[12px] text-text-secondary">
+            {resolution.resolved_by_name ?? "Analista"}
+            {resolution.resolved_at
+              ? ` · ${new Date(resolution.resolved_at).toLocaleString("es-CO")}`
+              : ""}
+          </p>
+          {resolution.notes && (
+            <p className="text-[13px] text-text-primary whitespace-pre-wrap pt-1">
+              {resolution.notes}
+            </p>
+          )}
+        </section>
+      )}
       <section className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-5 items-start">
         <div className="rounded-xl border-2 border-primary/40 bg-gradient-to-br from-primary-light/60 via-primary-light/20 to-transparent p-6 space-y-3">
           <div className="flex items-center gap-2">
@@ -409,13 +429,25 @@ function HistorialTab({
 
 /* ────────────── analyst bar ────────────── */
 
-function ReservationCountdown({ expiresAt }: { expiresAt: string }) {
+function ReservationCountdown({
+  expiresAt,
+  onExpire,
+}: {
+  expiresAt: string;
+  onExpire: () => void;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
   const seconds = Math.max(0, Math.round((new Date(expiresAt).getTime() - now) / 1000));
+  // The reservation is already free server-side: refetch now instead of
+  // waiting for the 15 s poll, so the bar and any open modal drop the hold.
+  useEffect(() => {
+    if (seconds === 0) onExpire();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seconds === 0]);
   return (
     <span className={`tabular-nums ${seconds < 300 ? "text-danger" : "text-text-secondary"}`}>
       Tu reserva vence en {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
@@ -693,14 +725,27 @@ function AnalystBar({
     onError,
   });
 
+  // Losing the hold (expired, released elsewhere) closes the resolve modal.
+  useEffect(() => {
+    if (!mine) setResolving(null);
+  }, [mine]);
+
   let status: ReactNode = null;
   let actions: ReactNode = null;
-  if (detail.status !== "ESCALATED") {
+  if (detail.status === "CLOSED" && detail.analyst_resolution) {
+    const closed = detail.analyst_resolution;
+    status = (
+      <span className="text-text-secondary">
+        Cerrada por {closed.resolved_by_name ?? "un analista"} ·{" "}
+        {RESOLUTION_LABELS[closed.decision] ?? closed.decision}
+      </span>
+    );
+  } else if (detail.status !== "ESCALATED") {
     status = (
       <span className="text-text-secondary">Esta alerta no está esperando a un analista.</span>
     );
   } else if (mine) {
-    status = <ReservationCountdown expiresAt={reservation!.expires_at} />;
+    status = <ReservationCountdown expiresAt={reservation!.expires_at} onExpire={onChanged} />;
     actions = (
       <>
         {RESOLUTIONS.map((r) => (

@@ -272,7 +272,33 @@ export type AlertStep = {
   finished_at: string | null;
 };
 
+// How an analyst closed the alert (only on CLOSED alerts resolved by a human).
+export type AnalystResolutionRecord = {
+  decision: "block" | "pass" | "bidi";
+  notes: string;
+  resolved_by: string | null;
+  resolved_by_name: string | null;
+  resolved_at: string | null;
+};
+
+// Alert ARIA is still analysing (RECEIVED / PROCESSING) - GET
+// /analyst-queue/in-process.
+export type InProcessAlert = {
+  alert_id: string;
+  event_id: string;
+  event_type: string;
+  status: string;
+  customer_id: string | null;
+  created_at: string;
+  schema_version: number | null;
+  input: Record<string, unknown>;
+  workflow_status: string | null;
+  // Workflow step running now; null before the workflow starts.
+  current_step: string | null;
+};
+
 export type AlertDetail = AnalystQueueAlert & {
+  analyst_resolution: AnalystResolutionRecord | null;
   workflow_execution_id: string | null;
   workflow_status: string | null;
   workflow_output: Record<string, unknown> | null;
@@ -281,6 +307,10 @@ export type AlertDetail = AnalystQueueAlert & {
 
 export function listAnalystQueue(): Promise<AnalystQueueAlert[]> {
   return apiFetch("/api/v0/analyst-queue");
+}
+
+export function listInProcessAlerts(): Promise<InProcessAlert[]> {
+  return apiFetch("/api/v0/analyst-queue/in-process");
 }
 
 export function getAlertDetail({ data }: { data: { alertId: string } }): Promise<AlertDetail> {
