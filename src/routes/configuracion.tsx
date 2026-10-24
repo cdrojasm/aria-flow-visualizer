@@ -412,8 +412,8 @@ function ConfiguracionPage() {
   const [deployRequestMessage, setDeployRequestMessage] = useState("");
   const [deployRequestError, setDeployRequestError] = useState<string | null>(null);
   const [deployApprovalError, setDeployApprovalError] = useState<string | null>(null);
-  // Set when saveVersion's POST comes back 409 — the lineage moved on since
-  // this draft was seeded. Cleared by reloadLatestVersion or a new save attempt.
+  // A fresh version exists beyond this draft's base. Comparing it against the
+  // draft determines whether edits merge cleanly or need field-level choices.
   const [versionConflict, setVersionConflict] = useState(false);
   const [pendingAction, setPendingAction] = useState<"restore" | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -898,7 +898,7 @@ function ConfiguracionPage() {
   // (the same "Desplegar" flow every other saved version already uses),
   // which is where the real-test-run gate (hasSucceededTestRun) applies.
   // Every persisted save is a new immutable version. Keep its base version
-  // in the request so concurrent saves from the same draft conflict server-side.
+  // so the server can detect and safely merge edits made from an older snapshot.
   const buildSaveRequest = (): CreateConfigurationRequest => {
     const wasTemp = isTempId(selectedConfigId);
     return toCreateConfigurationRequest(selectedDraft?.workingCopy ?? settings, {
@@ -927,6 +927,17 @@ function ConfiguracionPage() {
     const timeout = window.setTimeout(() => controller.abort(), 5000);
     const request = buildSaveRequest();
     try {
+      if (request.configuration_id && request.based_on_version != null) {
+        const refreshed = await versionsQuery.refetch();
+        const latestVersion = Math.max(
+          0,
+          ...(refreshed.data ?? []).map((entry) => entry.version),
+        );
+        if (latestVersion > request.based_on_version) {
+          setVersionConflict(true);
+          return;
+        }
+      }
       const preview = await testConfiguration({ data: request, signal: controller.signal });
       if (!preview.valid) throw new Error("La configuración propuesta no superó la validación.");
       setSaveConfirmText("");
@@ -1005,6 +1016,20 @@ function ConfiguracionPage() {
     }
     setSaving(true);
     try {
+      const baseVersion = pendingSave.request.based_on_version;
+      if (selectedConfigId && baseVersion != null) {
+        const refreshed = await versionsQuery.refetch();
+        const latestVersion = Math.max(
+          0,
+          ...(refreshed.data ?? []).map((entry) => entry.version),
+        );
+        if (latestVersion > baseVersion) {
+          setPendingSave(null);
+          setSaveConfirmText("");
+          setVersionConflict(true);
+          return;
+        }
+      }
       await saveVersion(pendingSave.request);
       setPendingSave(null);
       setSaveConfirmText("");
@@ -1839,18 +1864,18 @@ function ConfiguracionPage() {
         )}
 
         {canEditConfiguration && versionConflict && (
-          <div className="flex items-center gap-2.5 bg-danger/10 border border-danger/30 rounded-lg px-4 py-2.5">
-            <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
+          <div className="flex items-center gap-2.5 bg-warning/10 border border-warning/30 rounded-lg px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
             <p className="text-[12px] text-text-primary">
-              La configuración avanzó a una versión más nueva mientras editabas. Actualiza la base;
-              tus cambios se combinarán con los cambios independientes y podrás resolver los
-              campos que ambos modificaron.
+              Hay una versión más nueva que la base de este borrador. Aún no sabemos si cambió los
+              mismos campos; compárala para incorporar los cambios independientes y mostrar solo los
+              conflictos que requieran una decisión.
             </p>
             <button
               onClick={reloadLatestVersion}
-              className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-danger border border-danger/30 rounded-md px-2.5 py-1 hover:bg-danger/10 shrink-0"
+              className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-medium text-warning border border-warning/30 rounded-md px-2.5 py-1 hover:bg-warning/10 shrink-0"
             >
-              Actualizar y combinar
+              Comparar y combinar
             </button>
           </div>
         )}
