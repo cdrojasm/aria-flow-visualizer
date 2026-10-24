@@ -1,11 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ChevronRight, History, Loader2, Search, ShieldCheck } from "lucide-react";
+import { ChevronRight, History, Loader2, ShieldCheck } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
-import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
+import {
+  ActionButton,
+  ActionLink,
+  DataTable,
+  TruncText,
+  type DataTableColumn,
+} from "@/components/ui/DataTable";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
-import { CARD, ErrorBox, RangeControl } from "@/components/metrics/MetricsShared";
+import { ErrorBox, RangeControl } from "@/components/metrics/MetricsShared";
 import { initialRange, type RangeState } from "@/lib/api/metricsMapping";
 import { FraudReviewDialog, FraudReviewTrailDialog } from "@/components/fraude/FraudReview";
 import { useFraudReviewImport } from "@/hooks/useFraudReviewImport";
@@ -42,33 +48,159 @@ export const Route = createFileRoute("/historico-fraude")({
 
 const PAGE_SIZE = 50;
 
-type ColKey =
-  | "fraude"
-  | "created_at"
-  | "event"
-  | "customer"
-  | "segment"
-  | "channel"
-  | "amount"
-  | "status"
-  | "resolution_method"
-  | "marked_at"
-  | "reviews"
-  | "resolution_time";
-
-const columns: { key: ColKey; label: string }[] = [
-  { key: "fraude", label: "Marca / resultado" },
-  { key: "created_at", label: "Llegada" },
-  { key: "event", label: "Alerta" },
-  { key: "customer", label: "Cliente" },
-  { key: "segment", label: "Segmento" },
-  { key: "channel", label: "Canal / subcanal" },
-  { key: "amount", label: "Monto" },
-  { key: "status", label: "Estado" },
-  { key: "resolution_method", label: "Método resolución" },
-  { key: "marked_at", label: "Marcada" },
-  { key: "reviews", label: "Revisiones" },
-  { key: "resolution_time", label: "Tiempo resolución" },
+const columns: DataTableColumn<ApiAlertHistoryItem>[] = [
+  {
+    key: "fraude",
+    label: "Marca / resultado",
+    minWidth: 150,
+    sortValue: (i) => MARK_LABELS[i.fraud_label],
+    render: (i) => <FraudCell item={i} />,
+  },
+  {
+    key: "created_at",
+    label: "Llegada",
+    minWidth: 150,
+    sortValue: (i) => (i.created_at ? new Date(i.created_at).getTime() : null),
+    render: (i) => (
+      <span className="text-text-secondary tabular-nums whitespace-nowrap">
+        {formatDate(i.created_at)}
+      </span>
+    ),
+  },
+  {
+    key: "event",
+    label: "Alerta",
+    minWidth: 100,
+    sortValue: (i) => i.event_id,
+    searchValue: (i) => `${i.alert_id} ${i.event_id}`,
+    render: (i) => (
+      <div title={i.alert_id}>
+        <TruncText
+          maxWidth={110}
+          maxChars={8}
+          className="text-[13px] font-medium text-text-primary tabular-nums"
+        >
+          {i.event_id}
+        </TruncText>
+        <TruncText maxWidth={180} className="text-[11px] text-text-secondary">
+          {i.event_type}
+        </TruncText>
+      </div>
+    ),
+  },
+  {
+    key: "customer",
+    label: "Cliente",
+    minWidth: 120,
+    sortValue: (i) => i.customer_id,
+    searchValue: (i) => i.customer_id,
+    render: (i) => (
+      <TruncText maxWidth={140} className="text-text-secondary tabular-nums">
+        {i.customer_id}
+      </TruncText>
+    ),
+  },
+  {
+    key: "segment",
+    label: "Segmento",
+    minWidth: 110,
+    sortValue: (i) => i.segment,
+    render: (i) =>
+      i.segment ? (
+        <span
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${segmentoBadgeClass(i.segment)}`}
+        >
+          {i.segment}
+        </span>
+      ) : (
+        "—"
+      ),
+  },
+  {
+    key: "channel",
+    label: "Canal / subcanal",
+    minWidth: 150,
+    sortValue: (i) => i.channel,
+    render: (i) => (
+      <div>
+        <TruncText maxWidth={160} className="text-text-primary">
+          {i.channel}
+        </TruncText>
+        <TruncText maxWidth={160} className="text-[11px] text-text-secondary">
+          {i.subchannel}
+        </TruncText>
+      </div>
+    ),
+  },
+  {
+    key: "amount",
+    label: "Monto",
+    minWidth: 110,
+    sortValue: (i) => i.amount,
+    render: (i) => (
+      <div className="tabular-nums whitespace-nowrap">
+        <div className="text-text-primary">{i.amount === null ? "—" : formatAmount(i.amount)}</div>
+        <div className="text-[11px] text-text-secondary">
+          {i.amount_tier === "unknown" ? "sin rango" : i.amount_tier}
+        </div>
+      </div>
+    ),
+  },
+  {
+    key: "status",
+    label: "Estado",
+    minWidth: 130,
+    sortValue: (i) => statusLabel(i.status),
+    render: (i) => <TruncText maxWidth={160}>{statusLabel(i.status)}</TruncText>,
+  },
+  {
+    key: "resolution_method",
+    label: "Método resolución",
+    minWidth: 150,
+    sortValue: (i) => resolutionMethodLabel(i.resolution_method),
+    render: (i) => (
+      <TruncText maxWidth={180}>{resolutionMethodLabel(i.resolution_method)}</TruncText>
+    ),
+  },
+  {
+    key: "marked_at",
+    label: "Marcada",
+    minWidth: 150,
+    sortValue: (i) => (i.marked_at ? new Date(i.marked_at).getTime() : null),
+    render: (i) => (
+      <span className="text-text-secondary tabular-nums whitespace-nowrap">
+        {formatDate(i.marked_at)}
+      </span>
+    ),
+  },
+  {
+    key: "reviews",
+    label: "Revisiones",
+    minWidth: 130,
+    sortValue: (i) => i.fraud_review_count,
+    render: (i) =>
+      i.fraud_review_count > 0 ? (
+        <div className="whitespace-nowrap">
+          <span className="font-medium tabular-nums">{i.fraud_review_count}</span>
+          <div className="text-[11px] text-text-secondary tabular-nums">
+            {formatDate(i.fraud_reviewed_at)}
+          </div>
+        </div>
+      ) : (
+        <span className="text-text-secondary">Sin revisar</span>
+      ),
+  },
+  {
+    key: "resolution_time",
+    label: "Tiempo resolución",
+    minWidth: 130,
+    sortValue: (i) => i.resolution_time_seconds,
+    render: (i) => (
+      <span className="tabular-nums whitespace-nowrap">
+        {i.resolution_time_seconds === null ? "—" : formatDuration(i.resolution_time_seconds)}
+      </span>
+    ),
+  },
 ];
 
 const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString("es-CO") : "—");
@@ -109,11 +241,8 @@ function HistoricoFraudePage() {
   const queryClient = useQueryClient();
   const [range, setRange] = useState<RangeState>(() => initialRange());
   const [filters, setFilters] = useState<FilterSelection>({});
-  const [search, setSearch] = useState("");
   const [reviewing, setReviewing] = useState<ApiAlertHistoryItem | null>(null);
   const [auditing, setAuditing] = useState<ApiAlertHistoryItem | null>(null);
-  const { hidden: hiddenCols, toggle: toggleCol } = useHiddenColumns<ColKey>("historico-fraude-v2");
-  const visibleColumns = useMemo(() => columns.filter((c) => !hiddenCols.has(c.key)), [hiddenCols]);
 
   const query = toMetricsQuery({ from: range.from, to: range.to }, filters);
   const queryKey = ["alertHistory", { from: range.from, to: range.to }, query.filters];
@@ -124,13 +253,6 @@ function HistoricoFraudePage() {
     getNextPageParam: (last) => last.next_cursor,
   });
   const items = useMemo(() => (history.data?.pages ?? []).flatMap((p) => p.items), [history.data]);
-  const term = search.trim().toLowerCase();
-  const shown = term
-    ? items.filter((i) =>
-        [i.alert_id, i.event_id, i.customer_id ?? ""].some((v) => v.toLowerCase().includes(term)),
-      )
-    : items;
-
   const onReviewed = (alertId: string, result: ApiFraudReviewResponse) => {
     queryClient.setQueryData<InfiniteData<ApiAlertHistoryPage>>(
       queryKey,
@@ -160,7 +282,6 @@ function HistoricoFraudePage() {
     void queryClient.invalidateQueries({ queryKey: ["metrics"] });
   }, [queryClient]);
   const importer = useFraudReviewImport(onImportFinished);
-  const show = (key: ColKey) => !hiddenCols.has(key);
 
   return (
     <DashboardLayout>
@@ -198,212 +319,74 @@ function HistoricoFraudePage() {
         {importer.panel}
         {history.isError && <ErrorBox error={history.error} what="el histórico de alertas" />}
 
-        <section className={`relative ${CARD}`}>
-          <div className="px-5 pt-4 pb-3 border-b border-border space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-[14px] font-semibold text-text-primary">
-                Alertas del rango{" "}
-                <span className="font-normal text-text-secondary">· más recientes primero</span>
-              </h2>
-              <ColumnVisibilityMenu columns={columns} hidden={hiddenCols} onToggle={toggleCol} />
-            </div>
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-secondary" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar en lo cargado por alerta, evento o cliente…"
-                className="w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-card text-[13px] text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-            </div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-text-secondary">
-                  {visibleColumns.map((col) => (
-                    <th key={col.key} className="font-normal py-3 px-5 whitespace-nowrap text-left">
-                      {col.label}
-                    </th>
-                  ))}
-                  <th className="text-right font-normal px-5 py-3">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.isLoading ? (
-                  <tr>
-                    <td
-                      colSpan={visibleColumns.length + 1}
-                      className="px-5 py-8 text-center text-[13px] text-text-secondary"
-                    >
-                      <Loader2 className="inline h-4 w-4 animate-spin mr-2" />
-                      Cargando histórico…
-                    </td>
-                  </tr>
-                ) : shown.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={visibleColumns.length + 1}
-                      className="px-5 py-8 text-center text-[13px] text-text-secondary"
-                    >
-                      {term
-                        ? "Ninguna alerta cargada coincide con la búsqueda."
-                        : "No hay alertas en el rango con esos filtros."}
-                    </td>
-                  </tr>
-                ) : (
-                  shown.map((item, i) => (
-                    <tr
-                      key={item.alert_id}
-                      className={`border-t border-border ${i % 2 === 1 ? "bg-surface" : "bg-card"}`}
-                    >
-                      {show("fraude") && (
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          <FraudCell item={item} />
-                        </td>
-                      )}
-                      {show("created_at") && (
-                        <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
-                          {formatDate(item.created_at)}
-                        </td>
-                      )}
-                      {show("event") && (
-                        <td
-                          className="px-5 py-3 text-[13px] font-medium text-text-primary tabular-nums whitespace-nowrap"
-                          title={item.alert_id}
-                        >
-                          {item.event_id}
-                          <div className="text-[11px] font-normal text-text-secondary">
-                            {item.event_type}
-                          </div>
-                        </td>
-                      )}
-                      {show("customer") && (
-                        <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
-                          {item.customer_id ?? "—"}
-                        </td>
-                      )}
-                      {show("segment") && (
-                        <td className="px-5 py-3 whitespace-nowrap">
-                          {item.segment ? (
-                            <span
-                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${segmentoBadgeClass(item.segment)}`}
-                            >
-                              {item.segment}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </td>
-                      )}
-                      {show("channel") && (
-                        <td className="px-5 py-3 text-[13px] text-text-primary whitespace-nowrap">
-                          {item.channel ?? "—"}
-                          {item.subchannel && (
-                            <div className="text-[11px] text-text-secondary">{item.subchannel}</div>
-                          )}
-                        </td>
-                      )}
-                      {show("amount") && (
-                        <td className="px-5 py-3 text-[13px] text-text-primary tabular-nums whitespace-nowrap">
-                          {item.amount === null ? "—" : formatAmount(item.amount)}
-                          <div className="text-[11px] text-text-secondary">
-                            {item.amount_tier === "unknown" ? "sin rango" : item.amount_tier}
-                          </div>
-                        </td>
-                      )}
-                      {show("status") && (
-                        <td className="px-5 py-3 text-[12px] whitespace-nowrap">
-                          {statusLabel(item.status)}
-                        </td>
-                      )}
-                      {show("resolution_method") && (
-                        <td className="px-5 py-3 text-[12px] whitespace-nowrap">
-                          {resolutionMethodLabel(item.resolution_method)}
-                        </td>
-                      )}
-                      {show("marked_at") && (
-                        <td className="px-5 py-3 text-[12px] text-text-secondary tabular-nums whitespace-nowrap">
-                          {formatDate(item.marked_at)}
-                        </td>
-                      )}
-                      {show("reviews") && (
-                        <td className="px-5 py-3 text-[12px] whitespace-nowrap">
-                          {item.fraud_review_count > 0 ? (
-                            <>
-                              <span className="font-medium tabular-nums">
-                                {item.fraud_review_count}
-                              </span>
-                              <div className="text-[11px] text-text-secondary tabular-nums">
-                                {formatDate(item.fraud_reviewed_at)}
-                              </div>
-                            </>
-                          ) : (
-                            <span className="text-text-secondary">Sin revisar</span>
-                          )}
-                        </td>
-                      )}
-                      {show("resolution_time") && (
-                        <td className="px-5 py-3 text-[12px] tabular-nums whitespace-nowrap">
-                          {item.resolution_time_seconds === null
-                            ? "—"
-                            : formatDuration(item.resolution_time_seconds)}
-                        </td>
-                      )}
-                      <td className="px-5 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1.5">
-                          {canReview && (
-                            <button
-                              type="button"
-                              onClick={() => setReviewing(item)}
-                              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-primary text-white text-[12px] font-medium hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              <ShieldCheck className="h-3.5 w-3.5" /> Revisar fraude
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setAuditing(item)}
-                            aria-label={`Auditoría de ${item.event_id}`}
-                            className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-border text-text-primary text-[12px] font-medium hover:bg-surface"
-                          >
-                            <History className="h-3.5 w-3.5" /> Auditoría
-                          </button>
-                          <Link
-                            to="/alerta/$id"
-                            params={{ id: item.alert_id }}
-                            className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-text-primary text-[12px] font-medium hover:bg-surface"
-                          >
-                            Ver <ChevronRight className="h-3.5 w-3.5" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-5 py-3 border-t border-border flex items-center justify-between text-[12px] text-text-secondary">
-            <span>
-              {items.length} alerta{items.length === 1 ? "" : "s"} cargada
-              {items.length === 1 ? "" : "s"}
-            </span>
-            {history.hasNextPage ? (
-              <button
-                type="button"
+        <DataTable
+          storageKey="historico-fraude-v3"
+          title={
+            <>
+              Alertas del rango{" "}
+              <span className="font-normal text-text-secondary">· más recientes primero</span>
+            </>
+          }
+          itemLabel="alerta"
+          rows={items}
+          rowKey={(i) => i.alert_id}
+          columns={columns}
+          defaultSort={{ key: "created_at", dir: "desc" }}
+          searchPlaceholder="Buscar en lo cargado por alerta, evento o cliente…"
+          isLoading={history.isLoading}
+          emptyLabel="No hay alertas en el rango con esos filtros."
+          noMatchLabel="Ninguna alerta cargada coincide con la búsqueda."
+          actionsWidth={230}
+          actions={(item) => (
+            <>
+              {canReview && (
+                <ActionButton
+                  tone="primary"
+                  aria-label="Revisar fraude"
+                  icon={<ShieldCheck className="h-3 w-3" />}
+                  onClick={() => setReviewing(item)}
+                >
+                  Revisar
+                </ActionButton>
+              )}
+              <ActionButton
+                icon={<History className="h-3 w-3" />}
+                aria-label={`Auditoría de ${item.event_id}`}
+                onClick={() => setAuditing(item)}
+              >
+                Auditoría
+              </ActionButton>
+              <ActionLink
+                to="/alerta/$id"
+                params={{ id: item.alert_id }}
+                icon={<ChevronRight className="h-3 w-3" />}
+              >
+                Ver
+              </ActionLink>
+            </>
+          )}
+          footerExtra={
+            history.hasNextPage ? (
+              <ActionButton
                 onClick={() => void history.fetchNextPage()}
                 disabled={history.isFetchingNextPage}
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-text-primary font-medium hover:bg-surface disabled:opacity-60"
+                icon={
+                  history.isFetchingNextPage ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : undefined
+                }
               >
-                {history.isFetchingNextPage && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Cargar más
-              </button>
+              </ActionButton>
             ) : (
-              !history.isLoading && <span>No hay más alertas en el rango.</span>
-            )}
-          </div>
-        </section>
+              !history.isLoading && (
+                <span className="text-[11px] text-text-secondary">
+                  No hay más alertas en el rango.
+                </span>
+              )
+            )
+          }
+        />
       </div>
 
       <FraudReviewDialog

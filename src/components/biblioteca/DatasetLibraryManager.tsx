@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Eye, Loader2, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
+import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   analyzeDatasetOnDemand,
@@ -43,15 +44,7 @@ export function DatasetLibraryManager() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingDeletionNames, setPendingDeletionNames] = useState<Set<string>>(new Set());
   const [trackedOperationIds, setTrackedOperationIds] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
   const visibleDatasets = datasets.filter((dataset) => !pendingDeletionNames.has(dataset.name));
-  const pageCount = Math.max(1, Math.ceil(visibleDatasets.length / pageSize));
-  const pageDatasets = visibleDatasets.slice((page - 1) * pageSize, page * pageSize);
-
-  useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
 
   function trackOperation(operationId: string | null) {
     if (!operationId) return;
@@ -100,174 +93,152 @@ export function DatasetLibraryManager() {
   }
 
   return (
-    <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border gap-3 flex-wrap">
-        <div>
-          <h2 className="text-[14px] font-semibold text-text-primary">Datasets</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Sube CSVs, deriva subconjuntos, o crea datasets vacíos para llenarlos progresivamente
-            (filas manuales, extracción, o curación desde alertas). Modelos y Testing solo eligen un
-            dataset — la gestión vive aquí.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => setShowUpload(true)}
-            className="inline-flex items-center gap-1.5 border border-border text-text-primary px-3 py-2 rounded-md text-[13px] font-medium hover:bg-surface"
-          >
-            <Upload className="h-4 w-4" /> Subir CSV
-          </button>
-          <button
-            onClick={() => setShowExtract(true)}
-            className="inline-flex items-center gap-1.5 border border-border text-text-primary px-3 py-2 rounded-md text-[13px] font-medium hover:bg-surface"
-          >
-            Extraer / derivar
-          </button>
-          <button
-            onClick={() => setShowCreateEmpty(true)}
-            className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4" /> Dataset vacío
-          </button>
-        </div>
-      </div>
-
-      {trackedOperationIds.length > 0 && (
-        <div className="px-6 py-4 border-b border-border space-y-2">
-          <p className="text-[12px] font-medium text-text-primary">Procesos en segundo plano</p>
-          {trackedOperationIds.map((id) => (
-            <AsyncOperationProgressCard
-              key={id}
-              operationId={id}
-              title="Proceso de dataset"
-              onCompleted={() => {
-                setTrackedOperationIds((current) =>
-                  current.filter((candidate) => candidate !== id),
-                );
-                invalidate();
-                queryClient.invalidateQueries({ queryKey: ["datasetSummary"] });
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {downloadError && <p className="px-6 pt-3 text-[12px] text-danger">{downloadError}</p>}
-      {deleteError && <p className="px-6 pt-3 text-[12px] text-danger">{deleteError}</p>}
-
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-text-secondary text-left border-b border-border">
-            <th className="px-6 py-2 font-medium">Nombre</th>
-            <th className="px-3 py-2 font-medium">Filas</th>
-            <th className="px-3 py-2 font-medium w-56"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {datasetsQuery.isLoading && (
-            <tr>
-              <td colSpan={3} className="px-6 py-8 text-center text-text-secondary">
-                Cargando datasets…
-              </td>
-            </tr>
-          )}
-          {datasetsQuery.isError && (
-            <tr>
-              <td colSpan={3} className="px-6 py-8 text-center text-danger">
+    <>
+      <DataTable
+        storageKey="biblioteca-datasets"
+        title="Datasets"
+        description="Sube CSVs, deriva subconjuntos, o crea datasets vacíos para llenarlos progresivamente (filas manuales, extracción, o curación desde alertas). Modelos y Testing solo eligen un dataset — la gestión vive aquí."
+        itemLabel="dataset"
+        rows={visibleDatasets}
+        rowKey={(d) => d.name}
+        isLoading={datasetsQuery.isLoading}
+        loadingLabel="Cargando datasets…"
+        emptyLabel="Sin datasets todavía."
+        defaultSort={{ key: "name", dir: "asc" }}
+        error={
+          <>
+            {datasetsQuery.isError && (
+              <p className="px-5 py-3 text-[12px] text-danger">
                 No se pudieron cargar los datasets.
-              </td>
-            </tr>
-          )}
-          {datasetsQuery.isSuccess &&
-            pageDatasets.map((d) => (
-              <tr
-                key={d.name}
-                className="border-b border-border last:border-0 hover:bg-surface align-top"
-              >
-                <td className="px-6 py-3 font-medium text-text-primary">{d.name}</td>
-                <td className="px-3 py-3 font-mono text-[12px] text-text-secondary">
-                  {d.row_count.toLocaleString("es-CO")}
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setDetailDataset(d.name)}
-                      title="Visualizar"
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-primary border border-primary/30 hover:bg-primary/10"
-                    >
-                      <Eye className="h-3.5 w-3.5" /> Visualizar
-                    </button>
-                    <button
-                      onClick={() => handleDownloadTemplate(d.name)}
-                      disabled={downloadingName === d.name}
-                      title="Descargar plantilla CSV (solo encabezados)"
-                      className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary disabled:opacity-40"
-                    >
-                      {downloadingName === d.name ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Download className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setAnalyzingName(d.name);
-                        analyzeMutation.mutate(d.name);
-                      }}
-                      disabled={analyzingName === d.name}
-                      title="Lanzar análisis estadístico"
-                      className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary disabled:opacity-40"
-                    >
-                      {analyzingName === d.name ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <RefreshCw className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setDeletingDataset(d)}
-                      title="Eliminar"
-                      className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          {datasetsQuery.isSuccess && visibleDatasets.length === 0 && (
-            <tr>
-              <td colSpan={3} className="px-6 py-8 text-center text-text-secondary">
-                Sin datasets todavía.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {visibleDatasets.length > pageSize && (
-        <div className="flex items-center justify-between px-6 py-3 border-t border-border text-[12px] text-text-secondary">
-          <span>
-            Mostrando {(page - 1) * pageSize + 1}–
-            {Math.min(page * pageSize, visibleDatasets.length)} de {visibleDatasets.length} datasets
-          </span>
-          <div className="flex gap-2">
-            <button
-              className="px-2 py-1 rounded border border-border disabled:opacity-40"
-              disabled={page === 1}
-              onClick={() => setPage((current) => current - 1)}
+              </p>
+            )}
+            {downloadError && <p className="px-5 py-3 text-[12px] text-danger">{downloadError}</p>}
+            {deleteError && <p className="px-5 py-3 text-[12px] text-danger">{deleteError}</p>}
+          </>
+        }
+        notice={
+          trackedOperationIds.length > 0 && (
+            <div className="px-5 py-3 border-b border-border space-y-2">
+              <p className="text-[12px] font-medium text-text-primary">Procesos en segundo plano</p>
+              {trackedOperationIds.map((id) => (
+                <AsyncOperationProgressCard
+                  key={id}
+                  operationId={id}
+                  title="Proceso de dataset"
+                  onCompleted={() => {
+                    setTrackedOperationIds((current) =>
+                      current.filter((candidate) => candidate !== id),
+                    );
+                    invalidate();
+                    queryClient.invalidateQueries({ queryKey: ["datasetSummary"] });
+                  }}
+                />
+              ))}
+            </div>
+          )
+        }
+        columns={[
+          {
+            key: "name",
+            label: "Nombre",
+            minWidth: 220,
+            sortValue: (d) => d.name,
+            searchValue: (d) => d.name,
+            render: (d) => (
+              <TruncText maxWidth={360} className="font-medium text-text-primary">
+                {d.name}
+              </TruncText>
+            ),
+          },
+          {
+            key: "row_count",
+            label: "Filas",
+            minWidth: 90,
+            align: "right",
+            sortValue: (d) => d.row_count,
+            render: (d) => (
+              <span className="font-mono text-[12px] text-text-secondary">
+                {d.row_count.toLocaleString("es-CO")}
+              </span>
+            ),
+          },
+        ]}
+        actionsWidth={300}
+        actions={(d) => (
+          <>
+            <ActionButton
+              tone="primary"
+              icon={<Eye className="h-3 w-3" />}
+              aria-label="Visualizar"
+              title="Visualizar"
+              onClick={() => setDetailDataset(d.name)}
             >
-              Anterior
-            </button>
-            <button
-              className="px-2 py-1 rounded border border-border disabled:opacity-40"
-              disabled={page === pageCount}
-              onClick={() => setPage((current) => current + 1)}
+              Ver
+            </ActionButton>
+            <ActionButton
+              icon={
+                downloadingName === d.name ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Download className="h-3 w-3" />
+                )
+              }
+              title="Descargar plantilla CSV (solo encabezados)"
+              disabled={downloadingName === d.name}
+              onClick={() => handleDownloadTemplate(d.name)}
             >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      )}
+              Plantilla
+            </ActionButton>
+            <ActionButton
+              icon={
+                analyzingName === d.name ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )
+              }
+              title="Lanzar análisis estadístico"
+              disabled={analyzingName === d.name}
+              onClick={() => {
+                setAnalyzingName(d.name);
+                analyzeMutation.mutate(d.name);
+              }}
+            >
+              Analizar
+            </ActionButton>
+            <ActionButton
+              tone="danger"
+              icon={<Trash2 className="h-3 w-3" />}
+              title="Eliminar"
+              onClick={() => setDeletingDataset(d)}
+            >
+              Borrar
+            </ActionButton>
+          </>
+        )}
+        tableActions={
+          <>
+            <ActionButton
+              size="md"
+              icon={<Upload className="h-3.5 w-3.5" />}
+              onClick={() => setShowUpload(true)}
+            >
+              Subir CSV
+            </ActionButton>
+            <ActionButton size="md" onClick={() => setShowExtract(true)}>
+              Extraer / derivar
+            </ActionButton>
+            <ActionButton
+              tone="primary"
+              size="md"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={() => setShowCreateEmpty(true)}
+            >
+              Dataset vacío
+            </ActionButton>
+          </>
+        }
+      />
 
       <UploadDatasetModal
         open={showUpload}
@@ -293,6 +264,6 @@ export function DatasetLibraryManager() {
           if (deletingDataset) deleteMutation.mutate(deletingDataset.name);
         }}
       />
-    </section>
+    </>
   );
 }

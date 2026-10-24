@@ -78,6 +78,7 @@ import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { ConfirmVectorStoreDocumentsDialog } from "@/components/ui/confirm-vector-store-documents-dialog";
 import { VectorStoreSearchPanel } from "@/components/biblioteca/VectorStoreSearchPanel";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
 import { usePagination } from "@/hooks/usePagination";
 import { useRole } from "@/hooks/useRole";
 import { getActiveAlertSchema, type AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
@@ -141,6 +142,30 @@ type KnowledgeTab =
   | "yellow-flags"
   | "red-flags"
   | "casos-similares";
+// Clickable active/inactive state shared by the library tables.
+function StatusToggle({
+  active,
+  onClick,
+  labels = ["Activo", "Inactivo"],
+}: {
+  active: boolean;
+  onClick: () => void;
+  labels?: [string, string];
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`text-[11px] uppercase tracking-wider ${active ? "text-success" : "text-text-secondary"}`}
+    >
+      {active ? labels[0] : labels[1]}
+    </button>
+  );
+}
+
+const EditIcon = <Pencil className="h-3 w-3" />;
+const DeleteIcon = <Trash2 className="h-3 w-3" />;
+
 const BIBLIOTECA_TABS: { key: BibliotecaTab; label: string }[] = [
   { key: "conocimiento", label: "Base de conocimiento" },
   { key: "eventos", label: "Catálogos de eventos" },
@@ -289,15 +314,11 @@ function BibliotecaPage() {
   const modusOperandi = modusOperandiQuery.data ?? [];
   const flags = flagsQuery.data ?? [];
   const similarCases = similarCasesQuery.data ?? [];
-  const taxonomiesPage = usePagination(taxonomies, 10);
-  const modusOperandiPage = usePagination(modusOperandi, 10);
   const visibleFlags = flags.filter((flag) =>
     activeKnowledgeTab === "yellow-flags"
       ? flag.flag_type === "yellow"
       : flag.flag_type === "red",
   );
-  const flagsPage = usePagination(visibleFlags, 10);
-  const similarCasesPage = usePagination(similarCases, 10);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["libraryTaxonomies"] });
@@ -451,7 +472,8 @@ function BibliotecaPage() {
   ) =>
     setter((current) => {
       const next = new Set(current);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   const openDocumentAdditionConfirmation = async (
@@ -525,7 +547,6 @@ function BibliotecaPage() {
     queryFn: () => listChannelLibraryEntries({ data: { activeOnly: false } }),
   });
   const channels = channelsQuery.data ?? [];
-  const channelsPage = usePagination(channels, 10);
   const invalidateChannels = () =>
     queryClient.invalidateQueries({ queryKey: ["channelLibrary"] });
 
@@ -828,105 +849,88 @@ function BibliotecaPage() {
         )}
 
         {activeTab === "canales" && (
-          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <div>
-                <h2 className="text-[14px] font-semibold text-text-primary">
-                  Canales
-                </h2>
-                <p className="text-[12px] text-text-secondary mt-0.5">
-                  Los segmentos que una configuración puede activar (ej.
-                  tarjetas, canales digitales) - el orden de desempate entre
-                  segmentos se define por configuración, en el tab Segmento.
-                </p>
-              </div>
-              <button
+          <DataTable
+            storageKey="biblioteca-canales"
+            title="Canales"
+            description="Los segmentos que una configuración puede activar (ej. tarjetas, canales digitales) - el orden de desempate entre segmentos se define por configuración, en el tab Segmento."
+            itemLabel="canal"
+            rows={channels}
+            rowKey={(c) => c.id}
+            emptyLabel="Sin canales en la biblioteca."
+            defaultSort={{ key: "name", dir: "asc" }}
+            columns={[
+              {
+                key: "name",
+                label: "Nombre",
+                minWidth: 160,
+                sortValue: (c) => c.name,
+                searchValue: (c) => c.name,
+                render: (c) => (
+                  <TruncText maxWidth={220} className="font-medium text-text-primary">
+                    {c.name}
+                  </TruncText>
+                ),
+              },
+              {
+                key: "description",
+                label: "Descripción",
+                minWidth: 220,
+                searchValue: (c) => c.description,
+                render: (c) => (
+                  <TruncText maxWidth={360} className="text-text-secondary">
+                    {c.description}
+                  </TruncText>
+                ),
+              },
+              {
+                key: "active",
+                label: "Estado",
+                minWidth: 90,
+                sortValue: (c) => (c.active ? 1 : 0),
+                render: (c) => (
+                  <StatusToggle active={c.active} onClick={() => toggleChannelActive.mutate(c)} />
+                ),
+              },
+            ]}
+            actionsWidth={150}
+            actions={(c) => (
+              <>
+                <ActionButton
+                  icon={EditIcon}
+                  aria-label={`Editar canal ${c.name}`}
+                  title="Editar canal"
+                  onClick={() => {
+                    setEditingChannel({ ...c });
+                    setShowChannelForm(true);
+                  }}
+                >
+                  Editar
+                </ActionButton>
+                <ActionButton
+                  tone="danger"
+                  icon={DeleteIcon}
+                  aria-label={`Eliminar canal ${c.name}`}
+                  title="Eliminar canal"
+                  onClick={() => setDeletingChannel(c)}
+                >
+                  Borrar
+                </ActionButton>
+              </>
+            )}
+            tableActions={
+              <ActionButton
+                tone="primary"
+                size="md"
+                icon={<Plus className="h-3.5 w-3.5" />}
                 onClick={() => {
                   setEditingChannel({ code: createId(), name: "", description: "" });
                   setShowChannelForm(true);
                 }}
-                className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
               >
-                <Plus className="h-4 w-4" /> Nuevo canal
-              </button>
-            </div>
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="text-text-secondary text-left border-b border-border">
-                  <th className="px-6 py-2 font-medium">Nombre</th>
-                  <th className="px-3 py-2 font-medium">Descripción</th>
-                  <th className="px-3 py-2 font-medium">Estado</th>
-                  <th className="px-3 py-2 font-medium w-24"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {channelsPage.pageItems.map((c) => (
-                  <tr
-                    key={c.id}
-                    className="border-b border-border last:border-0 hover:bg-surface align-top"
-                  >
-                    <td className="px-6 py-3 font-medium text-text-primary">
-                      {c.name}
-                    </td>
-                    <td className="px-3 py-3 text-text-secondary max-w-xs truncate">
-                      {c.description}
-                    </td>
-                    <td className="px-3 py-3">
-                      <button
-                        onClick={() => toggleChannelActive.mutate(c)}
-                        className={`text-[11px] uppercase tracking-wider ${c.active ? "text-success" : "text-text-secondary"}`}
-                      >
-                        {c.active ? "Activo" : "Inactivo"}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          aria-label={`Editar canal ${c.name}`}
-                          title="Editar canal"
-                          onClick={() => {
-                            setEditingChannel({ ...c });
-                            setShowChannelForm(true);
-                          }}
-                          className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={`Eliminar canal ${c.name}`}
-                          title="Eliminar canal"
-                          onClick={() => setDeletingChannel(c)}
-                          className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {channels.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="px-6 py-8 text-center text-text-secondary"
-                    >
-                      Sin canales en la biblioteca.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-            <PaginationFooter
-              page={channelsPage.page}
-              pageCount={channelsPage.pageCount}
-              total={channelsPage.total}
-              pageSize={channelsPage.pageSize}
-              onPageChange={channelsPage.setPage}
-              itemLabel="canal"
-            />
-          </section>
+                Nuevo canal
+              </ActionButton>
+            }
+          />
         )}
 
         {activeTab === "listas" && <WatchlistManager />}
@@ -1504,18 +1508,83 @@ function BibliotecaPage() {
 
             {/* Taxonomías */}
             {activeKnowledgeTab === "taxonomias" && (
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h2 className="text-[14px] font-semibold text-text-primary">
-                      Taxonomías de fraude
-                    </h2>
-                    <p className="text-[12px] text-text-secondary mt-0.5">
-                      Categorías abstractas de fraude, disponibles para
-                      cualquier segmento.
-                    </p>
-                  </div>
-                  <button
+              <DataTable
+                storageKey="biblioteca-taxonomias"
+                title="Taxonomías de fraude"
+                description="Categorías abstractas de fraude, disponibles para cualquier segmento."
+                itemLabel="taxonomía"
+                rows={taxonomies}
+                rowKey={(t) => t.id}
+                emptyLabel="Sin taxonomías en la biblioteca."
+                defaultSort={{ key: "name", dir: "asc" }}
+                columns={[
+                  {
+                    key: "name",
+                    label: "Nombre",
+                    minWidth: 160,
+                    sortValue: (t) => t.name,
+                    searchValue: (t) => t.name,
+                    render: (t) => (
+                      <TruncText maxWidth={240} className="font-medium text-text-primary">
+                        {t.name}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "description",
+                    label: "Descripción",
+                    minWidth: 220,
+                    searchValue: (t) => t.description,
+                    render: (t) => (
+                      <TruncText maxWidth={360} className="text-text-secondary">
+                        {t.description}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "active",
+                    label: "Estado",
+                    minWidth: 90,
+                    sortValue: (t) => (t.active ? 1 : 0),
+                    render: (t) => (
+                      <StatusToggle
+                        active={t.active}
+                        labels={["Activa", "Inactiva"]}
+                        onClick={() => toggleTaxActive.mutate(t)}
+                      />
+                    ),
+                  },
+                ]}
+                actionsWidth={150}
+                actions={(t) => (
+                  <>
+                    <ActionButton
+                      icon={EditIcon}
+                      aria-label={`Editar taxonomía ${t.name}`}
+                      title="Editar taxonomía"
+                      onClick={() => {
+                        setEditingTax({ ...t });
+                        setShowTaxForm(true);
+                      }}
+                    >
+                      Editar
+                    </ActionButton>
+                    <ActionButton
+                      tone="danger"
+                      icon={DeleteIcon}
+                      aria-label={`Eliminar taxonomía ${t.name}`}
+                      title="Eliminar taxonomía"
+                      onClick={() => setDeletingTax(t)}
+                    >
+                      Borrar
+                    </ActionButton>
+                  </>
+                )}
+                tableActions={
+                  <ActionButton
+                    tone="primary"
+                    size="md"
+                    icon={<Plus className="h-3.5 w-3.5" />}
                     onClick={() => {
                       setEditingTax({
                         code: createId(),
@@ -1526,103 +1595,127 @@ function BibliotecaPage() {
                       });
                       setShowTaxForm(true);
                     }}
-                    className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
                   >
-                    <Plus className="h-4 w-4" /> Nueva taxonomía
-                  </button>
-                </div>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-text-secondary text-left border-b border-border">
-                      <th className="px-6 py-2 font-medium">Nombre</th>
-                      <th className="px-3 py-2 font-medium">Descripción</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium w-24"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxonomiesPage.pageItems.map((t) => (
-                      <tr
-                        key={t.id}
-                        className="border-b border-border last:border-0 hover:bg-surface align-top"
-                      >
-                        <td className="px-6 py-3 font-medium text-text-primary">
-                          {t.name}
-                        </td>
-                        <td className="px-3 py-3 text-text-secondary max-w-xs truncate">
-                          {t.description}
-                        </td>
-                        <td className="px-3 py-3">
-                          <button
-                            onClick={() => toggleTaxActive.mutate(t)}
-                            className={`text-[11px] uppercase tracking-wider ${t.active ? "text-success" : "text-text-secondary"}`}
-                          >
-                            {t.active ? "Activa" : "Inactiva"}
-                          </button>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Editar taxonomía ${t.name}`}
-                              title="Editar taxonomía"
-                              onClick={() => {
-                                setEditingTax({ ...t });
-                                setShowTaxForm(true);
-                              }}
-                              className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Eliminar taxonomía ${t.name}`}
-                              title="Eliminar taxonomía"
-                              onClick={() => setDeletingTax(t)}
-                              className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {taxonomies.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="px-6 py-8 text-center text-text-secondary"
-                        >
-                          Sin taxonomías en la biblioteca.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <PaginationFooter
-                  page={taxonomiesPage.page}
-                  pageCount={taxonomiesPage.pageCount}
-                  total={taxonomiesPage.total}
-                  pageSize={taxonomiesPage.pageSize}
-                  onPageChange={taxonomiesPage.setPage}
-                  itemLabel="taxonomía"
-                />
-              </section>
+                    Nueva taxonomía
+                  </ActionButton>
+                }
+              />
             )}
 
             {/* Modus operandi */}
             {activeKnowledgeTab === "modus-operandi" && (
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h2 className="text-[14px] font-semibold text-text-primary">
-                      Modus operandi
-                    </h2>
-                    <p className="text-[12px] text-text-secondary mt-0.5">
-                      Casos concretos que aplican una taxonomía.
-                    </p>
-                  </div>
-                  <button
+              <DataTable
+                storageKey="biblioteca-modus-operandi"
+                title="Modus operandi"
+                description="Casos concretos que aplican una taxonomía."
+                itemLabel="modus operandi"
+                rows={modusOperandi}
+                rowKey={(m) => m.id}
+                emptyLabel="Sin modus operandi en la biblioteca."
+                defaultSort={{ key: "title", dir: "asc" }}
+                columns={[
+                  {
+                    key: "title",
+                    label: "Nombre",
+                    minWidth: 160,
+                    sortValue: (m) => m.title,
+                    searchValue: (m) => m.title,
+                    render: (m) => (
+                      <TruncText maxWidth={240} className="font-medium text-text-primary">
+                        {m.title}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "narrative",
+                    label: "Descripción",
+                    minWidth: 220,
+                    searchValue: (m) => m.narrative,
+                    render: (m) => (
+                      <TruncText maxWidth={320} className="text-text-secondary">
+                        {m.narrative}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "taxonomy",
+                    label: "Taxonomía",
+                    minWidth: 150,
+                    sortValue: (m) =>
+                      taxonomies.find((t) => t.id === m.taxonomy_library_id)?.name ?? "",
+                    searchValue: (m) =>
+                      taxonomies.find((t) => t.id === m.taxonomy_library_id)?.name,
+                    render: (m) => (
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono">
+                        <TruncText maxWidth={160}>
+                          {taxonomies.find((t) => t.id === m.taxonomy_library_id)?.name ??
+                            "Taxonomía eliminada"}
+                        </TruncText>
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "playbook",
+                    label: "Playbook",
+                    minWidth: 180,
+                    render: (m) =>
+                      m.playbook ? (
+                        <PlaybookPath path={apiPlaybookPath(m.playbook)} />
+                      ) : (
+                        <span className="text-[11px] text-text-secondary">
+                          Sin playbook (escala a analista)
+                        </span>
+                      ),
+                  },
+                  {
+                    key: "active",
+                    label: "Estado",
+                    minWidth: 90,
+                    sortValue: (m) => (m.active ? 1 : 0),
+                    render: (m) => (
+                      <StatusToggle active={m.active} onClick={() => toggleMOActive.mutate(m)} />
+                    ),
+                  },
+                ]}
+                actionsWidth={230}
+                actions={(m) => (
+                  <>
+                    <ActionButton
+                      icon={<BookOpen className="h-3 w-3" />}
+                      aria-label={`Playbook de ${m.title}`}
+                      title="Playbook: método de resolución y respaldos"
+                      onClick={() => setPlaybookMO(m)}
+                    >
+                      Playbook
+                    </ActionButton>
+                    <ActionButton
+                      icon={EditIcon}
+                      aria-label={`Editar modus operandi ${m.title}`}
+                      title="Editar modus operandi"
+                      onClick={() => {
+                        setEditingMO({ ...m });
+                        setShowMOForm(true);
+                      }}
+                    >
+                      Editar
+                    </ActionButton>
+                    <ActionButton
+                      tone="danger"
+                      icon={DeleteIcon}
+                      disabled
+                      aria-label={`Eliminar modus operandi ${m.title}`}
+                      title="Los modus operandi se retiran mediante la eliminación recursiva de su taxonomía."
+                    >
+                      Borrar
+                    </ActionButton>
+                  </>
+                )}
+                tableActions={
+                  <ActionButton
+                    tone="primary"
+                    size="md"
+                    icon={<Plus className="h-3.5 w-3.5" />}
+                    disabled={taxonomies.length === 0}
                     onClick={() => {
                       setEditingMO({
                         title: "",
@@ -1632,137 +1725,130 @@ function BibliotecaPage() {
                       });
                       setShowMOForm(true);
                     }}
-                    disabled={taxonomies.length === 0}
-                    className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Plus className="h-4 w-4" /> Nuevo modus operandi
-                  </button>
-                </div>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-text-secondary text-left border-b border-border">
-                      <th className="px-6 py-2 font-medium">Nombre</th>
-                      <th className="px-3 py-2 font-medium">Descripción</th>
-                      <th className="px-3 py-2 font-medium">Taxonomía</th>
-                      <th className="px-3 py-2 font-medium">Playbook</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium w-28"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {modusOperandiPage.pageItems.map((m) => {
-                      const tax = taxonomies.find(
-                        (t) => t.id === m.taxonomy_library_id,
-                      );
-                      return (
-                        <tr
-                          key={m.id}
-                          className="border-b border-border last:border-0 hover:bg-surface align-top"
-                        >
-                          <td className="px-6 py-3 font-medium text-text-primary">
-                            {m.title}
-                          </td>
-                          <td className="px-3 py-3 text-text-secondary max-w-xs truncate">
-                            {m.narrative}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono">
-                              {tax ? tax.name : "Taxonomía eliminada"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            {m.playbook ? (
-                              <PlaybookPath path={apiPlaybookPath(m.playbook)} />
-                            ) : (
-                              <span className="text-[11px] text-text-secondary">
-                                Sin playbook (escala a analista)
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-3">
-                            <button
-                              onClick={() => toggleMOActive.mutate(m)}
-                              className={`text-[11px] uppercase tracking-wider ${m.active ? "text-success" : "text-text-secondary"}`}
-                            >
-                              {m.active ? "Activo" : "Inactivo"}
-                            </button>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                aria-label={`Playbook de ${m.title}`}
-                                title="Playbook: método de resolución y respaldos"
-                                onClick={() => setPlaybookMO(m)}
-                                className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                              >
-                                <BookOpen className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Editar modus operandi ${m.title}`}
-                                title="Editar modus operandi"
-                                onClick={() => {
-                                  setEditingMO({ ...m });
-                                  setShowMOForm(true);
-                                }}
-                                className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled
-                                aria-label={`Eliminar modus operandi ${m.title}`}
-                                title="Los modus operandi se retiran mediante la eliminación recursiva de su taxonomía."
-                                className="p-1.5 rounded text-text-secondary opacity-40 cursor-not-allowed"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {modusOperandi.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-6 py-8 text-center text-text-secondary"
-                        >
-                          Sin modus operandi en la biblioteca.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <PaginationFooter
-                  page={modusOperandiPage.page}
-                  pageCount={modusOperandiPage.pageCount}
-                  total={modusOperandiPage.total}
-                  pageSize={modusOperandiPage.pageSize}
-                  onPageChange={modusOperandiPage.setPage}
-                  itemLabel="modus operandi"
-                />
-              </section>
+                    Nuevo modus operandi
+                  </ActionButton>
+                }
+              />
             )}
 
             {/* Flags */}
-            {(activeKnowledgeTab === "red-flags" ||
-              activeKnowledgeTab === "yellow-flags") && (
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h2 className="text-[14px] font-semibold text-text-primary">
-                      {activeKnowledgeTab === "red-flags"
-                        ? "Red flags"
-                        : "Yellow flags"}
-                    </h2>
-                    <p className="text-[12px] text-text-secondary mt-0.5">
-                      Comportamientos asociables a uno o varios modus operandi.
-                    </p>
-                  </div>
-                  <button
+            {(activeKnowledgeTab === "red-flags" || activeKnowledgeTab === "yellow-flags") && (
+              <DataTable
+                storageKey={`biblioteca-${activeKnowledgeTab}`}
+                title={activeKnowledgeTab === "red-flags" ? "Red flags" : "Yellow flags"}
+                description="Comportamientos asociables a uno o varios modus operandi."
+                itemLabel="flag"
+                rows={visibleFlags}
+                rowKey={(f) => f.id}
+                emptyLabel="Sin flags en la biblioteca."
+                defaultSort={{ key: "name", dir: "asc" }}
+                columns={[
+                  {
+                    key: "name",
+                    label: "Nombre",
+                    minWidth: 200,
+                    sortValue: (f) => f.name,
+                    searchValue: (f) => f.name,
+                    render: (f) => (
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${FLAG_TYPE_STYLES[f.flag_type]}`}
+                        >
+                          {FLAG_TYPE_LABELS[f.flag_type]}
+                        </span>
+                        <TruncText maxWidth={200} className="font-medium text-text-primary">
+                          {f.name}
+                        </TruncText>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: "description",
+                    label: "Descripción",
+                    minWidth: 220,
+                    searchValue: (f) => f.description,
+                    render: (f) => (
+                      <TruncText maxWidth={320} className="text-text-secondary">
+                        {f.description}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "modus_operandi",
+                    label: "Modus operandi asociados",
+                    minWidth: 200,
+                    searchValue: (f) =>
+                      f.modus_operandi_library_ids
+                        .map((mid) => modusOperandi.find((m) => m.id === mid)?.title ?? "")
+                        .join(" "),
+                    render: (f) => {
+                      const titles = f.modus_operandi_library_ids.map(
+                        (mid) => modusOperandi.find((m) => m.id === mid)?.title ?? "MO eliminado",
+                      );
+                      return (
+                        <div className="flex gap-1 max-w-[320px] overflow-hidden" title={titles.join(", ")}>
+                          {titles.slice(0, 2).map((title, i) => (
+                            <span
+                              key={`${title}-${i}`}
+                              className="px-2 py-0.5 rounded-full bg-surface border border-border text-text-secondary text-[11px] max-w-[130px] truncate"
+                            >
+                              {title}
+                            </span>
+                          ))}
+                          {titles.length > 2 && (
+                            <span className="px-2 py-0.5 rounded-full bg-surface border border-border text-text-secondary text-[11px]">
+                              +{titles.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    },
+                  },
+                  {
+                    key: "active",
+                    label: "Estado",
+                    minWidth: 90,
+                    sortValue: (f) => (f.active ? 1 : 0),
+                    render: (f) => (
+                      <StatusToggle
+                        active={f.active}
+                        labels={["Activa", "Inactiva"]}
+                        onClick={() => toggleFlagActive.mutate(f)}
+                      />
+                    ),
+                  },
+                ]}
+                actionsWidth={150}
+                actions={(f) => (
+                  <>
+                    <ActionButton
+                      icon={EditIcon}
+                      aria-label={`Editar flag ${f.name}`}
+                      title="Editar flag"
+                      onClick={() => {
+                        setEditingFlag({ ...f });
+                        setShowFlagForm(true);
+                      }}
+                    >
+                      Editar
+                    </ActionButton>
+                    <ActionButton
+                      tone="danger"
+                      icon={DeleteIcon}
+                      disabled
+                      aria-label={`Eliminar flag ${f.name}`}
+                      title="Las flags se retiran mediante la eliminación recursiva de su taxonomía."
+                    >
+                      Borrar
+                    </ActionButton>
+                  </>
+                )}
+                tableActions={
+                  <ActionButton
+                    tone="primary"
+                    size="md"
+                    icon={<Plus className="h-3.5 w-3.5" />}
                     onClick={() => {
                       setEditingFlag({
                         flag_type: "red",
@@ -1773,133 +1859,107 @@ function BibliotecaPage() {
                       });
                       setShowFlagForm(true);
                     }}
-                    className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
                   >
-                    <Plus className="h-4 w-4" /> Nueva flag
-                  </button>
-                </div>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-text-secondary text-left border-b border-border">
-                      <th className="px-6 py-2 font-medium">Nombre</th>
-                      <th className="px-3 py-2 font-medium">Descripción</th>
-                      <th className="px-3 py-2 font-medium">
-                        Modus operandi asociados
-                      </th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium w-24"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {flagsPage.pageItems.map((f) => (
-                      <tr
-                        key={f.id}
-                        className="border-b border-border last:border-0 hover:bg-surface align-top"
-                      >
-                        <td className="px-6 py-3">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-full border text-[11px] font-medium ${FLAG_TYPE_STYLES[f.flag_type]}`}
-                            >
-                              {FLAG_TYPE_LABELS[f.flag_type]}
-                            </span>
-                            <p className="font-medium text-text-primary">
-                              {f.name}
-                            </p>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-text-secondary max-w-xs truncate">
-                          {f.description}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {f.modus_operandi_library_ids.map((mid) => {
-                              const mo = modusOperandi.find(
-                                (m) => m.id === mid,
-                              );
-                              return (
-                                <span
-                                  key={mid}
-                                  className="px-2 py-0.5 rounded-full bg-surface border border-border text-text-secondary text-[11px]"
-                                >
-                                  {mo ? mo.title : "MO eliminado"}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3">
-                          <button
-                            onClick={() => toggleFlagActive.mutate(f)}
-                            className={`text-[11px] uppercase tracking-wider ${f.active ? "text-success" : "text-text-secondary"}`}
-                          >
-                            {f.active ? "Activa" : "Inactiva"}
-                          </button>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              aria-label={`Editar flag ${f.name}`}
-                              title="Editar flag"
-                              onClick={() => {
-                                setEditingFlag({ ...f });
-                                setShowFlagForm(true);
-                              }}
-                              className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled
-                              aria-label={`Eliminar flag ${f.name}`}
-                              title="Las flags se retiran mediante la eliminación recursiva de su taxonomía."
-                              className="p-1.5 rounded text-text-secondary opacity-40 cursor-not-allowed"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    {visibleFlags.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-6 py-8 text-center text-text-secondary"
-                        >
-                          Sin flags en la biblioteca.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <PaginationFooter
-                  page={flagsPage.page}
-                  pageCount={flagsPage.pageCount}
-                  total={flagsPage.total}
-                  pageSize={flagsPage.pageSize}
-                  onPageChange={flagsPage.setPage}
-                  itemLabel="flag"
-                />
-              </section>
+                    Nueva flag
+                  </ActionButton>
+                }
+              />
             )}
 
             {/* Casos similares */}
             {activeKnowledgeTab === "casos-similares" && (
-              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-                  <div>
-                    <h3 className="text-[13px] font-semibold text-text-primary">
-                      Casos similares
-                    </h3>
-                    <p className="text-[12px] text-text-secondary mt-0.5">
-                      Ejemplos, en texto libre, de cómo se manifiesta un modus
-                      operandi.
-                    </p>
-                  </div>
-                  <button
+              <DataTable
+                storageKey="biblioteca-casos-similares"
+                title="Casos similares"
+                description="Ejemplos, en texto libre, de cómo se manifiesta un modus operandi."
+                itemLabel="caso"
+                rows={similarCases}
+                rowKey={(c) => c.id}
+                emptyLabel="Sin casos similares en la biblioteca."
+                columns={[
+                  {
+                    key: "text",
+                    label: "Caso",
+                    minWidth: 260,
+                    sortValue: (c) => c.text,
+                    searchValue: (c) => c.text,
+                    render: (c) => (
+                      <TruncText maxWidth={420} className="text-text-primary">
+                        {c.text}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "modus_operandi",
+                    label: "Modus operandi",
+                    minWidth: 160,
+                    sortValue: (c) =>
+                      modusOperandi.find((m) => m.id === c.modus_operandi_library_id)?.title ?? "",
+                    searchValue: (c) =>
+                      modusOperandi.find((m) => m.id === c.modus_operandi_library_id)?.title,
+                    render: (c) => (
+                      <TruncText maxWidth={220} className="text-text-secondary">
+                        {modusOperandi.find((m) => m.id === c.modus_operandi_library_id)?.title ??
+                          "Modus operandi eliminado"}
+                      </TruncText>
+                    ),
+                  },
+                  {
+                    key: "taxonomy",
+                    label: "Taxonomía",
+                    minWidth: 150,
+                    sortValue: (c) =>
+                      taxonomies.find((t) => t.id === c.taxonomy_library_id)?.name ?? "",
+                    render: (c) => (
+                      <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono">
+                        <TruncText maxWidth={160}>
+                          {taxonomies.find((t) => t.id === c.taxonomy_library_id)?.name ??
+                            "Taxonomía eliminada"}
+                        </TruncText>
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "active",
+                    label: "Estado",
+                    minWidth: 90,
+                    sortValue: (c) => (c.active ? 1 : 0),
+                    render: (c) => (
+                      <StatusToggle active={c.active} onClick={() => toggleCaseActive.mutate(c)} />
+                    ),
+                  },
+                ]}
+                actionsWidth={150}
+                actions={(c) => (
+                  <>
+                    <ActionButton
+                      icon={EditIcon}
+                      aria-label={`Editar caso similar ${c.text}`}
+                      title="Editar caso similar"
+                      onClick={() => {
+                        setEditingCase({ ...c });
+                        setShowCaseForm(true);
+                      }}
+                    >
+                      Editar
+                    </ActionButton>
+                    <ActionButton
+                      tone="danger"
+                      icon={DeleteIcon}
+                      disabled
+                      aria-label={`Eliminar caso similar ${c.text}`}
+                      title="Los casos similares se retiran mediante la eliminación recursiva de su taxonomía."
+                    >
+                      Borrar
+                    </ActionButton>
+                  </>
+                )}
+                tableActions={
+                  <ActionButton
+                    tone="primary"
+                    size="md"
+                    icon={<Plus className="h-3.5 w-3.5" />}
+                    disabled={modusOperandi.length === 0}
                     onClick={() => {
                       const firstMO = modusOperandi[0];
                       setEditingCase({
@@ -1909,103 +1969,11 @@ function BibliotecaPage() {
                       });
                       setShowCaseForm(true);
                     }}
-                    disabled={modusOperandi.length === 0}
-                    className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Plus className="h-4 w-4" /> Nuevo caso
-                  </button>
-                </div>
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="text-text-secondary text-left border-b border-border">
-                      <th className="px-6 py-2 font-medium">Caso</th>
-                      <th className="px-3 py-2 font-medium">Modus operandi</th>
-                      <th className="px-3 py-2 font-medium">Taxonomía</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium w-24"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {similarCasesPage.pageItems.map((c) => {
-                      const mo = modusOperandi.find(
-                        (m) => m.id === c.modus_operandi_library_id,
-                      );
-                      const tax = taxonomies.find(
-                        (t) => t.id === c.taxonomy_library_id,
-                      );
-                      return (
-                        <tr
-                          key={c.id}
-                          className="border-b border-border last:border-0 hover:bg-surface align-top"
-                        >
-                          <td className="px-6 py-3 text-text-primary max-w-md truncate">
-                            {c.text}
-                          </td>
-                          <td className="px-3 py-3 text-text-secondary">
-                            {mo ? mo.title : "Modus operandi eliminado"}
-                          </td>
-                          <td className="px-3 py-3">
-                            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-mono">
-                              {tax?.name ?? "Taxonomía eliminada"}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3">
-                            <button
-                              onClick={() => toggleCaseActive.mutate(c)}
-                              className={`text-[11px] uppercase tracking-wider ${c.active ? "text-success" : "text-text-secondary"}`}
-                            >
-                              {c.active ? "Activo" : "Inactivo"}
-                            </button>
-                          </td>
-                          <td className="px-3 py-3">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                aria-label={`Editar caso similar ${c.text}`}
-                                title="Editar caso similar"
-                                onClick={() => {
-                                  setEditingCase({ ...c });
-                                  setShowCaseForm(true);
-                                }}
-                                className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled
-                                aria-label={`Eliminar caso similar ${c.text}`}
-                                title="Los casos similares se retiran mediante la eliminación recursiva de su taxonomía."
-                                className="p-1.5 rounded text-text-secondary opacity-40 cursor-not-allowed"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {similarCases.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-6 py-8 text-center text-text-secondary"
-                        >
-                          Sin casos similares en la biblioteca.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-                <PaginationFooter
-                  page={similarCasesPage.page}
-                  pageCount={similarCasesPage.pageCount}
-                  total={similarCasesPage.total}
-                  pageSize={similarCasesPage.pageSize}
-                  onPageChange={similarCasesPage.setPage}
-                  itemLabel="caso"
-                />
-              </section>
+                    Nuevo caso
+                  </ActionButton>
+                }
+              />
             )}
           </>
         )}
@@ -2531,7 +2499,6 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
     queryFn: () => listTags({ data: { category, activeOnly: false } }),
   });
   const tags = tagsQuery.data ?? [];
-  const tagsPage = usePagination(tags, 10);
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["tags", category] });
 
@@ -2558,100 +2525,77 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
   });
 
   return (
-    <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div>
-          <h2 className="text-[14px] font-semibold text-text-primary">
-            {TAG_CATEGORY_LABELS[category]}
-          </h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Valores disponibles para este filtro. Un valor desactivado deja de
-            aparecer al construir nuevas condiciones.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newValue.trim())
-                createMutation.mutate(newValue.trim());
-            }}
-            placeholder={`Nuevo valor de ${TAG_CATEGORY_LABELS[category].toLowerCase()}…`}
-            className="h-9 w-64 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-          />
-          <button
-            type="button"
-            onClick={() =>
-              newValue.trim() && createMutation.mutate(newValue.trim())
-            }
-            disabled={!newValue.trim()}
-            className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus className="h-4 w-4" /> Agregar
-          </button>
-        </div>
-      </div>
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-text-secondary text-left border-b border-border">
-            <th className="px-6 py-2 font-medium">Valor</th>
-            <th className="px-3 py-2 font-medium w-28">Estado</th>
-            <th className="px-3 py-2 font-medium w-16"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {tagsPage.pageItems.map((t) => (
-            <tr
-              key={t.id}
-              className="border-b border-border last:border-0 hover:bg-surface"
-            >
-              <td
-                className={`px-6 py-3 ${t.active ? "text-text-primary" : "text-text-secondary line-through"}`}
+    <>
+      <DataTable
+        storageKey={`biblioteca-evento-${category}`}
+        title={TAG_CATEGORY_LABELS[category]}
+        description="Valores disponibles para este filtro. Un valor desactivado deja de aparecer al construir nuevas condiciones."
+        itemLabel="valor"
+        rows={tags}
+        rowKey={(t) => t.id}
+        isLoading={tagsQuery.isLoading}
+        emptyLabel={`Sin valores en ${TAG_CATEGORY_LABELS[category].toLowerCase()}.`}
+        defaultSort={{ key: "value", dir: "asc" }}
+        columns={[
+          {
+            key: "value",
+            label: "Valor",
+            minWidth: 220,
+            sortValue: (t) => t.value,
+            searchValue: (t) => t.value,
+            render: (t) => (
+              <TruncText
+                maxWidth={360}
+                className={t.active ? "text-text-primary" : "text-text-secondary line-through"}
               >
                 {t.value}
-              </td>
-              <td className="px-3 py-3">
-                <button
-                  type="button"
-                  onClick={() => toggleActiveMutation.mutate(t)}
-                  className={`text-[11px] uppercase tracking-wider ${t.active ? "text-success" : "text-text-secondary"}`}
-                >
-                  {t.active ? "Activo" : "Inactivo"}
-                </button>
-              </td>
-              <td className="px-3 py-3">
-                <button
-                  type="button"
-                  aria-label={`Eliminar valor ${t.value}`}
-                  title="Eliminar valor"
-                  onClick={() => setDeletingTag(t)}
-                  className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </td>
-            </tr>
-          ))}
-          {tags.length === 0 && (
-            <tr>
-              <td
-                colSpan={3}
-                className="px-6 py-8 text-center text-text-secondary"
-              >
-                Sin valores en {TAG_CATEGORY_LABELS[category].toLowerCase()}.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <PaginationFooter
-        page={tagsPage.page}
-        pageCount={tagsPage.pageCount}
-        total={tagsPage.total}
-        pageSize={tagsPage.pageSize}
-        onPageChange={tagsPage.setPage}
-        itemLabel="valor"
+              </TruncText>
+            ),
+          },
+          {
+            key: "active",
+            label: "Estado",
+            minWidth: 90,
+            sortValue: (t) => (t.active ? 1 : 0),
+            render: (t) => (
+              <StatusToggle active={t.active} onClick={() => toggleActiveMutation.mutate(t)} />
+            ),
+          },
+        ]}
+        actionsWidth={90}
+        actions={(t) => (
+          <ActionButton
+            tone="danger"
+            icon={DeleteIcon}
+            aria-label={`Eliminar valor ${t.value}`}
+            title="Eliminar valor"
+            onClick={() => setDeletingTag(t)}
+          >
+            Borrar
+          </ActionButton>
+        )}
+        tableActions={
+          <>
+            <input
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newValue.trim()) createMutation.mutate(newValue.trim());
+              }}
+              placeholder={`Nuevo valor de ${TAG_CATEGORY_LABELS[category].toLowerCase()}…`}
+              className="h-8 min-w-0 flex-1 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary"
+            />
+            <ActionButton
+              tone="primary"
+              size="md"
+              icon={<Plus className="h-3.5 w-3.5" />}
+              onClick={() => newValue.trim() && createMutation.mutate(newValue.trim())}
+              disabled={!newValue.trim()}
+            >
+              Agregar
+            </ActionButton>
+          </>
+        }
       />
       <ConfirmDeleteDialog
         open={!!deletingTag}
@@ -2661,6 +2605,6 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
         pending={deleteMutation.isPending}
         onConfirm={() => deletingTag && deleteMutation.mutate(deletingTag.id)}
       />
-    </section>
+    </>
   );
 }

@@ -2,15 +2,19 @@ import { ModelTrainingWizard } from "@/components/modelos/ModelTrainingWizard";
 import { ModelTrainingResults } from "@/components/modelos/ModelTrainingResults";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Loader2, Plus, Power, Trash2 } from "lucide-react";
+import { Eye, Loader2, Play, Plus, Power, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
-import { PaginationFooter } from "@/components/ui/PaginationFooter";
+import {
+  ActionButton,
+  DataTable,
+  TruncText,
+  type DataTableColumn,
+} from "@/components/ui/DataTable";
 import { Progress } from "@/components/ui/progress";
 import { SectionTabs } from "@/components/ui/section-tabs";
-import { usePagination } from "@/hooks/usePagination";
 import { listAsyncOperations } from "@/lib/api/asyncOperations.functions";
 import {
   activateModel,
@@ -48,6 +52,99 @@ const STATUS_LABELS: Record<ModelStatus, string> = {
   FAILED: "Falló",
 };
 
+const formatCreatedAt = (iso: string) =>
+  new Date(iso).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" });
+
+const modelColumns: DataTableColumn<ModelResponse>[] = [
+  {
+    key: "tag",
+    label: "Tag",
+    minWidth: 200,
+    sortValue: (m) => m.tag,
+    searchValue: (m) => `${m.tag} ${m.description}`,
+    render: (m) => (
+      <div>
+        <TruncText maxWidth={240} className="font-medium text-text-primary">
+          {m.tag}
+        </TruncText>
+        <TruncText maxWidth={240} className="text-[11px] text-text-secondary">
+          {m.description}
+        </TruncText>
+      </div>
+    ),
+  },
+  {
+    key: "dataset",
+    label: "Dataset",
+    minWidth: 180,
+    sortValue: (m) => m.dataset_name,
+    searchValue: (m) => m.dataset_name,
+    render: (m) => (
+      <TruncText maxWidth={200} className="text-text-secondary">
+        {m.dataset_name}
+      </TruncText>
+    ),
+  },
+  {
+    key: "created_at",
+    label: "Creado",
+    minWidth: 130,
+    sortValue: (m) => (m.created_at ? new Date(m.created_at).getTime() : null),
+    render: (m) => (
+      <span className="text-text-secondary tabular-nums whitespace-nowrap">
+        {m.created_at ? formatCreatedAt(m.created_at) : "—"}
+      </span>
+    ),
+  },
+  {
+    key: "status",
+    label: "Estado",
+    minWidth: 110,
+    sortValue: (m) => STATUS_LABELS[m.status],
+    render: (m) => (
+      <div>
+        <span
+          className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${STATUS_STYLE[m.status]}`}
+        >
+          {STATUS_LABELS[m.status]}
+        </span>
+        {m.error && (
+          <TruncText maxWidth={200} className="text-[11px] text-danger mt-1">
+            {m.error}
+          </TruncText>
+        )}
+      </div>
+    ),
+  },
+  {
+    key: "metrics",
+    label: "Métricas",
+    minWidth: 160,
+    sortValue: (m) => m.metrics?.["roc_auc"] ?? null,
+    render: (m) => (
+      <span className="text-text-secondary whitespace-nowrap">
+        {m.metrics
+          ? `ROC-AUC ${m.metrics["roc_auc"]?.toFixed(3)} · F1 ${m.metrics["f1_macro"]?.toFixed(3)}`
+          : "—"}
+      </span>
+    ),
+  },
+  {
+    key: "active",
+    label: "Activo",
+    minWidth: 80,
+    sortValue: (m) => (m.active ? 1 : 0),
+    render: (m) =>
+      m.active ? (
+        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-success/10 text-success">
+          Activo
+        </span>
+      ) : (
+        <span className="text-text-secondary">—</span>
+      ),
+  },
+];
+
 function ModelosPage() {
   const queryClient = useQueryClient();
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -69,7 +166,6 @@ function ModelosPage() {
     models.find((model) => model.active) ??
     models[0] ??
     null;
-  const modelsPage = usePagination(models, 10);
 
   // "current training progress" table (task 7): the generic
   // /async-operations abstraction is the source of truth for progress
@@ -169,20 +265,8 @@ function ModelosPage() {
       }
     >
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-[20px] font-semibold text-text-primary">Modelos</h1>
-            <p className="text-[13px] text-text-secondary mt-1">
-              Crea y entrena una única vez modelos XGBoost sobre datasets del sistema. El servicio
-              MCP sirve el modelo que actives aquí a los agentes que lo consulten.
-            </p>
-          </div>
-          <button
-            onClick={() => setWizardOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white shrink-0"
-          >
-            <Plus className="h-4 w-4" /> Nuevo modelo
-          </button>
+        <header>
+          <h1 className="text-[20px] font-semibold text-text-primary">Modelos</h1>
         </header>
 
         <SectionTabs
@@ -199,120 +283,73 @@ function ModelosPage() {
         />
 
         {activeSection === "catalog" && (
-          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-            <div className="px-6 py-4 border-b border-border">
-              <h2 className="text-[14px] font-semibold text-text-primary">Modelos</h2>
-            </div>
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-text-secondary border-b border-border">
-                  <th className="px-6 py-2.5 font-medium">Tag</th>
-                  <th className="px-6 py-2.5 font-medium">Dataset</th>
-                  <th className="px-6 py-2.5 font-medium">Estado</th>
-                  <th className="px-6 py-2.5 font-medium">Métricas</th>
-                  <th className="px-6 py-2.5 font-medium">Activo</th>
-                  <th className="px-6 py-2.5 font-medium text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {models.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-8 text-center text-text-secondary">
-                      Sin modelos todavía.
-                    </td>
-                  </tr>
-                )}
-                {modelsPage.pageItems.map((m) => (
-                  <tr key={m.id} className="border-b border-border last:border-0">
-                    <td className="px-6 py-3">
-                      <button
-                        className="font-medium text-primary hover:underline"
-                        onClick={() => {
-                          setSelectedModelId(m.id);
-                          setResultId(m.id);
-                        }}
-                      >
-                        {m.tag}
-                      </button>
-                      <div className="text-[11px] text-text-secondary">{m.description}</div>
-                    </td>
-                    <td className="px-6 py-3 text-text-secondary">{m.dataset_name}</td>
-                    <td className="px-6 py-3">
-                      <span
-                        className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${STATUS_STYLE[m.status]}`}
-                      >
-                        {STATUS_LABELS[m.status]}
-                      </span>
-                      {m.error && <div className="text-[11px] text-danger mt-1">{m.error}</div>}
-                    </td>
-                    <td className="px-6 py-3 text-text-secondary">
-                      {m.metrics ? (
-                        <>
-                          ROC-AUC {m.metrics["roc_auc"]?.toFixed(3)} · F1{" "}
-                          {m.metrics["f1_macro"]?.toFixed(3)}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                      {m.active ? (
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-success/10 text-success">
-                          Activo
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={m.status !== "READY" || activateMutation.isPending}
-                          onClick={() => {
-                            setSelectedModelId(m.id);
-                            activateMutation.mutate(m.id);
-                          }}
-                          className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary disabled:opacity-40"
-                          title="Activar"
-                        >
-                          <Power className="h-3.5 w-3.5" /> Activar
-                        </button>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          type="button"
-                          disabled={m.status !== "DRAFT" || m.active || trainMutation.isPending}
-                          onClick={() => {
-                            setSelectedModelId(m.id);
-                            trainMutation.mutate(m.id);
-                          }}
-                          className="text-[12px] text-primary disabled:opacity-40"
-                        >
-                          Entrenar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedModelId(m.id);
-                            setDeleteTarget(m);
-                          }}
-                          className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <PaginationFooter
-              page={modelsPage.page}
-              pageCount={modelsPage.pageCount}
-              total={modelsPage.total}
-              pageSize={modelsPage.pageSize}
-              onPageChange={modelsPage.setPage}
-              itemLabel="modelo"
-            />
-          </section>
+          <DataTable
+            storageKey="modelos-catalogo"
+            title="Modelos"
+            description="Crea y entrena una única vez modelos XGBoost sobre datasets del sistema. El servicio MCP sirve el modelo que actives aquí a los agentes que lo consulten."
+            tableActions={
+              <ActionButton
+                tone="primary"
+                size="md"
+                icon={<Plus className="h-3.5 w-3.5" />}
+                onClick={() => setWizardOpen(true)}
+              >
+                Nuevo modelo
+              </ActionButton>
+            }
+            itemLabel="modelo"
+            rows={models}
+            rowKey={(m) => m.id}
+            columns={modelColumns}
+            actions={(m) => (
+              <>
+                <ActionButton
+                  icon={<Eye className="h-3 w-3" />}
+                  onClick={() => {
+                    setSelectedModelId(m.id);
+                    setResultId(m.id);
+                  }}
+                >
+                  Ver
+                </ActionButton>
+                <ActionButton
+                  tone="primary"
+                  icon={<Play className="h-3 w-3" />}
+                  disabled={m.status !== "DRAFT" || m.active || trainMutation.isPending}
+                  onClick={() => {
+                    setSelectedModelId(m.id);
+                    trainMutation.mutate(m.id);
+                  }}
+                >
+                  Entrenar
+                </ActionButton>
+                <ActionButton
+                  icon={<Power className="h-3 w-3" />}
+                  disabled={m.active || m.status !== "READY" || activateMutation.isPending}
+                  onClick={() => {
+                    setSelectedModelId(m.id);
+                    activateMutation.mutate(m.id);
+                  }}
+                >
+                  Activar
+                </ActionButton>
+                <ActionButton
+                  tone="danger"
+                  icon={<Trash2 className="h-3 w-3" />}
+                  onClick={() => {
+                    setSelectedModelId(m.id);
+                    setDeleteTarget(m);
+                  }}
+                >
+                  Borrar
+                </ActionButton>
+              </>
+            )}
+            actionsWidth={260}
+            defaultSort={{ key: "created_at", dir: "desc" }}
+            isLoading={modelsQuery.isLoading}
+            emptyLabel="Sin modelos todavía."
+          />
         )}
 
         {activeSection === "operations" && (

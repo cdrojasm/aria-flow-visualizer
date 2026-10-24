@@ -12,6 +12,7 @@ import {
   type WatchlistType,
 } from "@/lib/api/watchlist.functions";
 import { WatchlistElementsModal } from "./WatchlistElementsModal";
+import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 
 /* ─── Blacklist / whitelist admin ────────────────────────
@@ -101,104 +102,130 @@ export function WatchlistManager() {
   const managingWatchlist = watchlists.find((w) => w.id === managingId) ?? null;
 
   return (
-    <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-        <div>
-          <h2 className="text-[14px] font-semibold text-text-primary">Listas negras y blancas</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Catálogos de pertenencia (ej. cuentas, IPs, documentos) evaluados por el agente. Cada
-            lista puede tener miles de elementos - gestiónalos desde "Elementos", no aquí.
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setEditing(emptyDraft());
-            setShowForm(true);
-          }}
-          className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" /> Nueva lista
-        </button>
-      </div>
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="text-text-secondary text-left border-b border-border">
-            <th className="px-6 py-2 font-medium">Nombre</th>
-            <th className="px-3 py-2 font-medium">Tipo</th>
-            <th className="px-3 py-2 font-medium">Descripción</th>
-            <th className="px-3 py-2 font-medium">Elementos</th>
-            <th className="px-3 py-2 font-medium">Estado</th>
-            <th className="px-3 py-2 font-medium w-36"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {watchlists.map((w) => (
-            <tr
-              key={w.id}
-              className="border-b border-border last:border-0 hover:bg-surface align-top"
-            >
-              <td className="px-6 py-3 font-medium text-text-primary">{w.name}</td>
-              <td className="px-3 py-3">
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${LIST_TYPE_STYLES[w.list_type]}`}
-                >
-                  {LIST_TYPE_LABELS[w.list_type]}
-                </span>
-              </td>
-              <td className="px-3 py-3 text-text-secondary max-w-xs truncate">{w.description}</td>
-              <td className="px-3 py-3 font-mono text-[12px] text-text-secondary">
+    <>
+      <DataTable
+        storageKey="biblioteca-listas"
+        title="Listas negras y blancas"
+        description='Catálogos de pertenencia (ej. cuentas, IPs, documentos) evaluados por el agente. Cada lista puede tener miles de elementos - gestiónalos desde "Elementos", no aquí.'
+        itemLabel="lista"
+        rows={watchlists}
+        rowKey={(w) => w.id}
+        isLoading={watchlistsQuery.isLoading}
+        emptyLabel="Sin listas en la biblioteca."
+        defaultSort={{ key: "name", dir: "asc" }}
+        columns={[
+          {
+            key: "name",
+            label: "Nombre",
+            minWidth: 180,
+            sortValue: (w) => w.name,
+            searchValue: (w) => w.name,
+            render: (w) => (
+              <TruncText maxWidth={240} className="font-medium text-text-primary">
+                {w.name}
+              </TruncText>
+            ),
+          },
+          {
+            key: "list_type",
+            label: "Tipo",
+            minWidth: 110,
+            sortValue: (w) => LIST_TYPE_LABELS[w.list_type],
+            render: (w) => (
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border whitespace-nowrap ${LIST_TYPE_STYLES[w.list_type]}`}
+              >
+                {LIST_TYPE_LABELS[w.list_type]}
+              </span>
+            ),
+          },
+          {
+            key: "description",
+            label: "Descripción",
+            minWidth: 220,
+            searchValue: (w) => w.description,
+            render: (w) => (
+              <TruncText maxWidth={360} className="text-text-secondary">
+                {w.description}
+              </TruncText>
+            ),
+          },
+          {
+            key: "element_count",
+            label: "Elementos",
+            minWidth: 100,
+            align: "right",
+            sortValue: (w) => w.element_count,
+            render: (w) => (
+              <span className="font-mono text-[12px] text-text-secondary">
                 {w.element_count.toLocaleString("es-CO")}
-              </td>
-              <td className="px-3 py-3">
-                <button
-                  onClick={() => toggleActive.mutate(w)}
-                  className={`text-[11px] uppercase tracking-wider ${w.active ? "text-success" : "text-text-secondary"}`}
-                >
-                  {w.active ? "Activo" : "Inactivo"}
-                </button>
-              </td>
-              <td className="px-3 py-3">
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setManagingId(w.id)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium text-primary border border-primary/30 hover:bg-primary/10"
-                  >
-                    <ListTree className="h-3.5 w-3.5" /> Elementos
-                  </button>
-                  <button
-                    onClick={() => {
-                      setEditing({
-                        id: w.id,
-                        name: w.name,
-                        description: w.description,
-                        list_type: w.list_type,
-                        seedElements: "",
-                      });
-                      setShowForm(true);
-                    }}
-                    className="p-1.5 rounded hover:bg-primary-light text-text-secondary hover:text-primary"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => setDeletingWatchlist(w)}
-                    className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {watchlists.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-6 py-8 text-center text-text-secondary">
-                Sin listas en la biblioteca.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+              </span>
+            ),
+          },
+          {
+            key: "active",
+            label: "Estado",
+            minWidth: 90,
+            sortValue: (w) => (w.active ? 1 : 0),
+            render: (w) => (
+              <button
+                type="button"
+                onClick={() => toggleActive.mutate(w)}
+                className={`text-[11px] uppercase tracking-wider ${w.active ? "text-success" : "text-text-secondary"}`}
+              >
+                {w.active ? "Activo" : "Inactivo"}
+              </button>
+            ),
+          },
+        ]}
+        actionsWidth={240}
+        actions={(w) => (
+          <>
+            <ActionButton
+              tone="primary"
+              icon={<ListTree className="h-3 w-3" />}
+              onClick={() => setManagingId(w.id)}
+            >
+              Elementos
+            </ActionButton>
+            <ActionButton
+              icon={<Pencil className="h-3 w-3" />}
+              onClick={() => {
+                setEditing({
+                  id: w.id,
+                  name: w.name,
+                  description: w.description,
+                  list_type: w.list_type,
+                  seedElements: "",
+                });
+                setShowForm(true);
+              }}
+            >
+              Editar
+            </ActionButton>
+            <ActionButton
+              tone="danger"
+              icon={<Trash2 className="h-3 w-3" />}
+              onClick={() => setDeletingWatchlist(w)}
+            >
+              Borrar
+            </ActionButton>
+          </>
+        )}
+        tableActions={
+          <ActionButton
+            tone="primary"
+            size="md"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => {
+              setEditing(emptyDraft());
+              setShowForm(true);
+            }}
+          >
+            Nueva lista
+          </ActionButton>
+        }
+      />
 
       {showForm && editing && (
         <div
@@ -305,6 +332,6 @@ export function WatchlistManager() {
         pending={deleteMutation.isPending}
         onConfirm={() => deletingWatchlist && deleteMutation.mutate(deletingWatchlist.id)}
       />
-    </section>
+    </>
   );
 }

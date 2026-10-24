@@ -19,22 +19,13 @@ export function CasesPanel({
   children: ReactNode;
 }) {
   const [outcome, setOutcome] = useState(ALL_OUTCOMES);
-  const [query, setQuery] = useState("");
   const cases = run.cases;
 
-  const caseNumbers = useMemo(
-    () => new Map(cases.map((c, index) => [c.workflow_execution_id, index + 1])),
-    [cases],
-  );
   const groups = useMemo(() => buildOutcomeGroups(cases), [cases]);
-  const visibleCases = useMemo(() => {
-    const term = query.trim().toLowerCase();
-    return cases.filter(
-      (c) =>
-        (outcome === ALL_OUTCOMES || caseOutcomeKey(c) === outcome) &&
-        (!term || c.workflow_execution_id.includes(term) || c.alert_id.includes(term)),
-    );
-  }, [cases, outcome, query]);
+  const visibleCases = useMemo(
+    () => cases.filter((c) => outcome === ALL_OUTCOMES || caseOutcomeKey(c) === outcome),
+    [cases, outcome],
+  );
 
   return (
     <>
@@ -64,9 +55,6 @@ export function CasesPanel({
             <CaseList
               key={outcome}
               cases={visibleCases}
-              caseNumbers={caseNumbers}
-              query={query}
-              onQueryChange={setQuery}
               selectedCaseId={selectedCaseId}
               onSelect={onSelectCase}
             />
