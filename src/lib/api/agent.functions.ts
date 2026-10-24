@@ -167,6 +167,17 @@ export type AgentMessage = {
   created_at: string;
   redaction_counts: Record<string, number>;
   extracted_insight_ids: string[];
+  // Assistant messages: places worth opening (view or task entry) and the
+  // project-map nodes the answer was grounded on.
+  references?: AgentMessageReference[];
+  context_used?: AgentMessageReference[];
+};
+
+export type AgentMessageReference = {
+  id: string;
+  kind: string;
+  label: string;
+  path?: string;
 };
 
 export type AgentInsight = {
@@ -341,10 +352,15 @@ export function listAgentMessages(sessionId: string, afterSeq = 0) {
   );
 }
 
-export function sendAgentMessage(sessionId: string, clientMessageId: string, content: string) {
+export function sendAgentMessage(
+  sessionId: string,
+  clientMessageId: string,
+  content: string,
+  pagePath = "",
+) {
   return apiFetch<AgentChatTurn>(`${path}/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "POST",
-    body: JSON.stringify({ client_message_id: clientMessageId, content }),
+    body: JSON.stringify({ client_message_id: clientMessageId, content, page_path: pagePath }),
   });
 }
 

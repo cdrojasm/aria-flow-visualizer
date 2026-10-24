@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
+  GripVertical,
   Check,
   ChevronDown,
+  ArrowUpRight,
+  Lightbulb,
+  Pencil,
   Loader2,
   MessageCircle,
   RefreshCw,
@@ -11,7 +16,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import {
   changeAgentInsight,
   confirmModusOperandiDraft,
@@ -64,6 +69,24 @@ function titleForSession(session: AgentSession) {
   return `${session.mode === "assistant" ? "Asistente" : "Optimizador"} · ${date.toLocaleDateString("es-CO")}`;
 }
 
+// The assistant answers with light markdown; only **bold** is rendered, as
+// text nodes (never HTML), so model output cannot inject markup.
+function BoldText({ text }: { text: string }) {
+  return (
+    <>
+      {text
+        .split(/(\*\*[^*\n]+\*\*)/g)
+        .map((part, index) =>
+          part.startsWith("**") && part.endsWith("**") && part.length > 4 ? (
+            <strong key={index}>{part.slice(2, -2)}</strong>
+          ) : (
+            part
+          ),
+        )}
+    </>
+  );
+}
+
 function summaryText(value: unknown): string {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return value.map(String).join("\n");
@@ -101,9 +124,11 @@ export function AgentPanel({
   const [targetId, setTargetId] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [notice, setNotice] = useState("");
-  const [editingInsight, setEditingInsight] = useState<string | null>(null);
-  const [insightEdit, setInsightEdit] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const launcher = useDraggablePosition("agent-launcher", {
+    right: 24,
+    bottom: hasBottomBar ? 96 : 24,
+  });
   const pageLabel =
     PAGE_LABELS[
       ALLOWED_ROUTES.find((route) => pathname === route || pathname.startsWith(`${route}/`)) ?? ""
@@ -193,7 +218,7 @@ export function AgentPanel({
 
   const sendMutation = useMutation({
     mutationFn: ({ id, content }: { id: string; content: string }) =>
-      sendAgentMessage(activeSessionId, id, content),
+      sendAgentMessage(activeSessionId, id, content, pathname),
     onSuccess: async (turn, variables) => {
       setLastUserMessage(turn.user_message);
       setPending((items) => items.filter((item) => item.id !== variables.id));
@@ -289,6 +314,13 @@ export function AgentPanel({
   const proposedInsights = insights.filter(
     (insight) => insight.status.toUpperCase() === "PROPOSED",
   );
+  const insightsById = new Map(insights.map((insight) => [insight.insight_id, insight]));
+  const referencedInsightIds = new Set(
+    displayedMessages.flatMap((message) => message.extracted_insight_ids),
+  );
+  const orphanInsights = proposedInsights.filter(
+    (insight) => !referencedInsightIds.has(insight.insight_id),
+  );
   const draftItem = draft?.content.items?.[0];
   const checksPass = Boolean(
     draft &&
@@ -307,10 +339,15 @@ export function AgentPanel({
       {!open && (
         <button
           type="button"
+          ref={launcher.ref}
+          style={launcher.style}
+          {...launcher.handlers}
           onClick={() => setOpen(true)}
           aria-label="Abrir asistente ARIA"
-          className={`fixed ${hasBottomBar ? "bottom-24" : "bottom-6"} right-6 z-40 flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/90`}
+          title="Arrastra para mover"
+          className="fixed z-40 flex cursor-grab touch-none select-none items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-primary/90 active:cursor-grabbing"
         >
+          <GripVertical className="-ml-2 h-3.5 w-3.5 opacity-60" />
           <MessageCircle className="h-4 w-4" /> Asistente ARIA
           {optimizerAttention > 0 && (
             <span className="rounded-full bg-danger px-1.5 py-0.5 text-[10px] text-white">
@@ -324,12 +361,14 @@ export function AgentPanel({
           className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[460px] flex-col border-l border-border bg-background shadow-2xl"
           aria-label="Panel del asistente"
         >
-          <header className="flex items-start justify-between border-b border-border bg-card px-5 py-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <header className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <div className="flex items-center gap-1.5 text-sm font-semibold text-text-primary">
                 <Bot className="h-4 w-4 text-primary" /> ARIA · Asistente
               </div>
-              <p className="mt-1 text-xs text-text-secondary">Contexto de página: {pageLabel}</p>
+              <p className="truncate text-[11px] text-text-secondary">
+                Contexto de página: {pageLabel}
+              </p>
             </div>
             <button
               type="button"
@@ -345,7 +384,7 @@ export function AgentPanel({
               type="button"
               aria-pressed={panelTab === "assistant"}
               onClick={() => setPanelTab("assistant")}
-              className={`flex-1 px-4 py-3 text-xs font-semibold ${panelTab === "assistant" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
+              className={`flex-1 px-3 py-1.5 text-xs font-semibold ${panelTab === "assistant" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
             >
               Asistente
             </button>
@@ -353,7 +392,7 @@ export function AgentPanel({
               type="button"
               aria-pressed={panelTab === "optimizer"}
               onClick={() => setPanelTab("optimizer")}
-              className={`flex-1 px-4 py-3 text-xs font-semibold ${panelTab === "optimizer" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
+              className={`flex-1 px-3 py-1.5 text-xs font-semibold ${panelTab === "optimizer" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
             >
               Optimizador
               {optimizerAttention > 0 && (
@@ -363,7 +402,7 @@ export function AgentPanel({
               )}
             </button>
           </nav>
-          <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+          <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5">
             <label className="sr-only" htmlFor="agent-session">
               Conversación
             </label>
@@ -378,7 +417,7 @@ export function AgentPanel({
                 setLastUserMessage(null);
                 setNotice("");
               }}
-              className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-2 text-xs text-text-primary"
+              className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-text-primary"
             >
               <option value="">Selecciona una conversación</option>
               {sessions
@@ -393,134 +432,130 @@ export function AgentPanel({
               type="button"
               onClick={() => createSession.mutate()}
               disabled={createSession.isPending}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-2 text-xs text-text-primary disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-text-primary disabled:opacity-50"
             >
               <Sparkles className="h-3.5 w-3.5" /> Nueva
             </button>
           </div>
-          {currentSession && (
-            <div className="border-b border-border px-4 py-2 text-xs">
-              {waitingForUser ? (
-                <div className="rounded-md bg-amber-500/10 px-3 py-2 font-medium text-amber-800">
-                  El asistente espera una respuesta tuya para continuar.
-                </div>
-              ) : (
-                <div className="flex items-center justify-between text-text-secondary">
-                  <span>Estado: {currentSession.status}</span>
-                  <span>
-                    {currentSession.mode === "assistant" ? "Modo asistente" : "Optimizador"}
-                  </span>
-                </div>
-              )}
+          {currentSession && waitingForUser && (
+            <div className="border-b border-border bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-800">
+              El asistente espera una respuesta tuya para continuar.
             </div>
           )}
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-live="polite">
+          {currentSession && (
+            <details className="border-b border-border px-3 py-1 text-xs">
+              <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] font-medium text-text-secondary">
+                <span>
+                  Resumen de sesión
+                  {proposedInsights.length > 0 && ` · ${proposedInsights.length} propuesta(s)`}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </summary>
+              <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap text-text-primary">
+                {summaryQuery.isLoading
+                  ? "Cargando resumen…"
+                  : summaryQuery.data
+                    ? summaryText(summaryQuery.data.content)
+                    : "Todavía no hay resumen disponible."}
+              </div>
+            </details>
+          )}
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-2" aria-live="polite">
             {!activeSessionId ? (
-              <div className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-text-secondary">
+              <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-secondary">
                 {sessionsQuery.isLoading
                   ? "Cargando conversaciones…"
                   : "Inicia una conversación para trabajar en un borrador de la Biblioteca."}
               </div>
             ) : null}
             {messagesQuery.isError && (
-              <div className="rounded-md bg-danger/10 p-3 text-xs text-danger">
+              <div className="rounded-md bg-danger/10 p-2 text-xs text-danger">
                 No se pudieron cargar los mensajes. Recarga el panel para reintentarlo.
               </div>
             )}
             {displayedMessages.map((message) => {
               const failed = pending.find((item) => item.id === message.client_message_id)?.failed;
+              const inlineInsights = message.extracted_insight_ids
+                .map((id) => insightsById.get(id))
+                .filter((item): item is AgentInsight => Boolean(item));
               return (
-                <article
-                  key={`${message.client_message_id}-${message.seq}`}
-                  className={`max-w-[92%] rounded-xl px-3.5 py-3 text-sm ${message.role === "user" ? "ml-auto bg-primary text-white" : "mr-auto border border-border bg-card text-text-primary"}`}
-                >
-                  <div className="mb-1 text-[10px] font-semibold uppercase opacity-70">
-                    {message.role === "user" ? "Tú" : "ARIA"}
-                  </div>
-                  <p className="whitespace-pre-wrap break-words">{message.content}</p>
-                  {failed && (
-                    <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/20 pt-2 text-xs">
-                      <span>Envío no confirmado.</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          submitMessage(
-                            pending.find((item) => item.id === message.client_message_id),
-                          )
-                        }
-                        className="inline-flex items-center gap-1 underline"
-                      >
-                        <RefreshCw className="h-3 w-3" /> Reintentar
-                      </button>
-                    </div>
-                  )}
-                  {message.role === "user" &&
-                    lastUserMessage?.client_message_id === message.client_message_id && (
-                      <button
-                        type="button"
-                        onClick={() => draftMutation.mutate()}
-                        disabled={draftMutation.isPending}
-                        className="mt-2 block rounded border border-white/40 px-2 py-1 text-xs hover:bg-white/10"
-                      >
-                        {draftMutation.isPending
-                          ? "Preparando borrador…"
-                          : "Crear borrador de modus operandi desde este mensaje"}
-                      </button>
+                <div key={`${message.client_message_id}-${message.seq}`} className="space-y-1">
+                  <article
+                    className={`max-w-[94%] rounded-lg px-2.5 py-1.5 text-[13px] leading-snug ${message.role === "user" ? "ml-auto bg-primary text-white" : "mr-auto border border-border bg-card text-text-primary"}`}
+                  >
+                    <span className="mr-1.5 text-[10px] font-semibold uppercase opacity-70">
+                      {message.role === "user" ? "Tú" : "ARIA"}
+                    </span>
+                    <span className="whitespace-pre-wrap break-words">
+                      {message.role === "user" ? (
+                        message.content
+                      ) : (
+                        <BoldText text={message.content} />
+                      )}
+                    </span>
+                    {failed && (
+                      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/20 pt-1 text-xs">
+                        <span>Envío no confirmado.</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            submitMessage(
+                              pending.find((item) => item.id === message.client_message_id),
+                            )
+                          }
+                          className="inline-flex items-center gap-1 underline"
+                        >
+                          <RefreshCw className="h-3 w-3" /> Reintentar
+                        </button>
+                      </div>
                     )}
-                </article>
+                    {message.role === "user" &&
+                      lastUserMessage?.client_message_id === message.client_message_id && (
+                        <button
+                          type="button"
+                          onClick={() => draftMutation.mutate()}
+                          disabled={draftMutation.isPending}
+                          aria-label="Crear borrador de modus operandi desde este mensaje"
+                          className="mt-1 block rounded border border-white/40 px-1.5 py-0.5 text-[11px] hover:bg-white/10"
+                        >
+                          {draftMutation.isPending ? "Preparando borrador…" : "Crear borrador"}
+                        </button>
+                      )}
+                  </article>
+                  <MessageReferences message={message} />
+                  {inlineInsights.map((insight) => (
+                    <InsightRow
+                      key={insight.insight_id}
+                      insight={insight}
+                      busy={insightMutation.isPending}
+                      onConfirm={() =>
+                        insightMutation.mutate({ insightId: insight.insight_id, action: "confirm" })
+                      }
+                      onReject={() =>
+                        insightMutation.mutate({ insightId: insight.insight_id, action: "reject" })
+                      }
+                      onEdit={() =>
+                        setComposer(`Quiero ajustar esta propuesta: ${insight.statement}`)
+                      }
+                    />
+                  ))}
+                </div>
               );
             })}
-            {pending.some((item) => !item.failed) && (
-              <div className="text-right text-[11px] text-text-secondary">Enviando…</div>
-            )}
-            <div ref={endRef} />
-          </div>
-
-          <div className="max-h-[38vh] space-y-3 overflow-y-auto border-t border-border bg-card/60 px-4 py-3">
-            {proposedInsights.map((insight) => (
-              <InsightCard
+            {orphanInsights.map((insight) => (
+              <InsightRow
                 key={insight.insight_id}
                 insight={insight}
+                busy={insightMutation.isPending}
                 onConfirm={() =>
                   insightMutation.mutate({ insightId: insight.insight_id, action: "confirm" })
                 }
                 onReject={() =>
                   insightMutation.mutate({ insightId: insight.insight_id, action: "reject" })
                 }
-                onEdit={() => {
-                  setEditingInsight(insight.insight_id);
-                  setInsightEdit(insight.statement);
-                }}
-                busy={insightMutation.isPending}
+                onEdit={() => setComposer(`Quiero ajustar esta propuesta: ${insight.statement}`)}
               />
             ))}
-            {editingInsight && (
-              <div className="rounded-lg border border-primary/30 bg-card p-3">
-                <label htmlFor="insight-edit" className="mb-2 block text-xs font-semibold">
-                  Reformula la propuesta en el chat
-                </label>
-                <textarea
-                  id="insight-edit"
-                  value={insightEdit}
-                  onChange={(event) => setInsightEdit(event.target.value)}
-                  className="min-h-20 w-full rounded border border-border bg-background p-2 text-sm"
-                />
-                <p className="mt-1 text-[11px] text-text-secondary">
-                  Al enviarla, ARIA evaluará de nuevo el texto. La propuesta original seguirá
-                  pendiente hasta que la confirmes o rechaces.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComposer(`Quiero ajustar esta propuesta: ${insightEdit}`);
-                    setEditingInsight(null);
-                  }}
-                  className="mt-2 rounded bg-primary px-3 py-1.5 text-xs font-semibold text-white"
-                >
-                  Continuar en el chat
-                </button>
-              </div>
-            )}
             {draft && draftItem && (
               <DraftCard
                 draft={draft}
@@ -529,36 +564,22 @@ export function AgentPanel({
                 onConfirm={() => setConfirmOpen(true)}
               />
             )}
-            {currentSession && (
-              <details className="rounded-md border border-border bg-card px-3 py-2 text-xs">
-                <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-text-secondary">
-                  Resumen de sesión <ChevronDown className="h-3.5 w-3.5" />
-                </summary>
-                <div className="mt-2 whitespace-pre-wrap text-text-primary">
-                  {summaryQuery.isLoading
-                    ? "Cargando resumen…"
-                    : summaryQuery.data
-                      ? summaryText(summaryQuery.data.content)
-                      : "Todavía no hay resumen disponible."}
-                </div>
-              </details>
+            {pending.some((item) => !item.failed) && (
+              <div className="text-right text-[11px] text-text-secondary">Enviando…</div>
             )}
-            <div className="flex items-center justify-between text-[11px] text-text-secondary">
-              <span>Propuestas de insight: {proposedInsights.length}</span>
-              <span>Contenido de casos no disponible en este panel.</span>
-            </div>
+            <div ref={endRef} />
           </div>
 
           {notice && (
             <div
               role="alert"
-              className="mx-4 mt-2 rounded-md bg-danger/10 px-3 py-2 text-xs text-danger"
+              className="mx-3 mt-1 rounded-md bg-danger/10 px-2.5 py-1.5 text-xs text-danger"
             >
               {notice}
             </div>
           )}
           {draft && (
-            <div className="flex items-center gap-2 border-t border-border px-4 py-3">
+            <div className="flex items-center gap-1.5 border-t border-border px-3 py-1.5">
               <label className="sr-only" htmlFor="draft-operation">
                 Operación del borrador
               </label>
@@ -566,7 +587,7 @@ export function AgentPanel({
                 id="draft-operation"
                 value={operation}
                 onChange={(event) => setOperation(event.target.value as "create" | "update")}
-                className="rounded border border-border bg-card px-2 py-2 text-xs"
+                className="rounded border border-border bg-card px-2 py-1 text-xs"
               >
                 <option value="create">Crear</option>
                 <option value="update">Editar</option>
@@ -576,7 +597,7 @@ export function AgentPanel({
                   aria-label="Entrada de Biblioteca"
                   value={targetId}
                   onChange={(event) => setTargetId(event.target.value)}
-                  className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-2 text-xs"
+                  className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs"
                 >
                   <option value="">Selecciona modus operandi</option>
                   {(libraryQuery.data ?? []).map((entry) => (
@@ -590,7 +611,7 @@ export function AgentPanel({
                 type="button"
                 onClick={() => draftMutation.mutate()}
                 disabled={draftMutation.isPending || (operation === "update" && !targetId)}
-                className="rounded border border-border px-2 py-2 text-xs disabled:opacity-50"
+                className="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
               >
                 Regenerar
               </button>
@@ -601,31 +622,32 @@ export function AgentPanel({
               event.preventDefault();
               submitMessage();
             }}
-            className="border-t border-border bg-card px-4 py-3"
+            className="border-t border-border bg-card px-3 py-2"
           >
             <label htmlFor="agent-message" className="sr-only">
               Mensaje para ARIA
             </label>
-            <textarea
-              id="agent-message"
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              disabled={!activeSessionId || sendMutation.isPending}
-              maxLength={MESSAGE_LIMIT}
-              placeholder={
-                activeSessionId
-                  ? "Describe qué necesitas…"
-                  : "Inicia una conversación para escribir"
-              }
-              className="min-h-20 w-full resize-y rounded-lg border border-border bg-background p-3 text-sm text-text-primary outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
-            />
-            <div className="mt-2 flex items-center justify-between">
-              <span
-                className={`text-[11px] ${composer.length >= MESSAGE_LIMIT ? "text-danger" : "text-text-secondary"}`}
-              >
-                {composer.length.toLocaleString("es-CO")} / {MESSAGE_LIMIT.toLocaleString("es-CO")}{" "}
-                caracteres
-              </span>
+            <div className="flex items-end gap-2">
+              <textarea
+                id="agent-message"
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    submitMessage();
+                  }
+                }}
+                disabled={!activeSessionId || sendMutation.isPending}
+                maxLength={MESSAGE_LIMIT}
+                rows={2}
+                placeholder={
+                  activeSessionId
+                    ? "Describe qué necesitas… (Enter envía, Shift+Enter salto)"
+                    : "Inicia una conversación para escribir"
+                }
+                className="max-h-40 min-h-[44px] min-w-0 flex-1 resize-y rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-text-primary outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+              />
               <button
                 type="submit"
                 disabled={!activeSessionId || !composer.trim() || sendMutation.isPending}
@@ -638,6 +660,12 @@ export function AgentPanel({
                 )}{" "}
                 Enviar
               </button>
+            </div>
+            <div
+              className={`mt-1 text-[10px] ${composer.length >= MESSAGE_LIMIT ? "text-danger" : "text-text-secondary"}`}
+            >
+              {composer.length.toLocaleString("es-CO")} / {MESSAGE_LIMIT.toLocaleString("es-CO")}{" "}
+              caracteres · Contenido de casos no disponible en este panel.
             </div>
           </form>
         </aside>
@@ -719,7 +747,64 @@ export function AgentPanel({
   );
 }
 
-function InsightCard({
+const KIND_LABELS: Record<string, string> = {
+  view: "Vista",
+  task: "Tarea",
+  concept: "Concepto",
+  component: "Componente",
+  action: "Acción",
+  api_call: "Llamada",
+  endpoint: "Endpoint",
+  use_case: "Caso de uso",
+  port: "Puerto",
+  adapter: "Adaptador",
+  resource: "Recurso",
+  asset: "Activo",
+  role: "Rol",
+  permission: "Permiso",
+};
+
+// Chips that open what the answer recommends, plus a collapsed list of the
+// project-map nodes it was grounded on (so the user can see why).
+function MessageReferences({ message }: { message: AgentMessage }) {
+  const references = (message.references ?? []).filter((ref) => ref.path);
+  const used = message.context_used ?? [];
+  if (references.length === 0 && used.length === 0) return null;
+  return (
+    <div className="mr-auto w-[94%] space-y-0.5 text-[11px]">
+      {references.length > 0 && (
+        <div className="flex flex-wrap gap-1" aria-label="Lugares sugeridos">
+          {references.map((ref) => (
+            <Link
+              key={ref.id}
+              to={ref.path as never}
+              title={ref.path}
+              className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 font-medium text-primary hover:bg-primary/10"
+            >
+              {ref.kind === "task" ? `Cómo: ${ref.label}` : `Ir a ${ref.label}`}
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
+          ))}
+        </div>
+      )}
+      {used.length > 0 && (
+        <details className="text-text-secondary">
+          <summary className="cursor-pointer select-none">Contexto usado ({used.length})</summary>
+          <ul className="mt-0.5 space-y-0.5 pl-3">
+            {used.map((ref) => (
+              <li key={ref.id} className="truncate" title={ref.id}>
+                <span className="font-semibold">{KIND_LABELS[ref.kind] ?? ref.kind}:</span>{" "}
+                {ref.label}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function InsightRow({
   insight,
   onConfirm,
   onReject,
@@ -732,40 +817,54 @@ function InsightCard({
   onEdit: () => void;
   busy: boolean;
 }) {
+  const proposed = insight.status.toUpperCase() === "PROPOSED";
+  const iconButton = "rounded p-1 text-text-secondary hover:bg-surface disabled:opacity-50";
   return (
-    <article className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-      <div className="flex items-center justify-between text-[10px] font-semibold uppercase text-amber-800">
-        <span>Insight propuesto · {insight.kind}</span>
-        <span>Sin confirmar</span>
-      </div>
-      <p className="mt-1 text-sm text-text-primary">{insight.statement}</p>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onConfirm}
-          className="rounded bg-primary px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-        >
-          Confirmar insight
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onEdit}
-          className="rounded border border-border px-2.5 py-1.5 text-xs text-text-primary"
-        >
-          Editar en chat
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onReject}
-          className="rounded border border-border px-2.5 py-1.5 text-xs text-text-secondary"
-        >
-          Rechazar
-        </button>
-      </div>
-    </article>
+    <div
+      className={`mr-auto flex w-[94%] items-start gap-1.5 rounded-md border px-2 py-1 text-xs ${proposed ? "border-amber-500/30 bg-amber-500/5" : "border-border bg-card/60 text-text-secondary"}`}
+    >
+      <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+      <p className="min-w-0 flex-1 leading-snug">
+        <span className="mr-1 text-[10px] font-semibold uppercase text-amber-800">
+          {proposed ? `Insight propuesto · ${insight.kind}` : `${insight.kind} · ${insight.status}`}
+        </span>
+        {insight.statement}
+      </p>
+      {proposed && (
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            aria-label="Confirmar insight"
+            title="Confirmar insight"
+            className={`${iconButton} text-primary`}
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onEdit}
+            aria-label="Editar en chat"
+            title="Editar en chat"
+            className={iconButton}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onReject}
+            aria-label="Rechazar insight"
+            title="Rechazar"
+            className={iconButton}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
