@@ -7,6 +7,26 @@ import { AgentPanel } from "./agent/AgentPanel";
 import { ROLE_NAV, useRole } from "@/hooks/useRole";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
+const SIDEBAR_COLLAPSED_KEY = "aria.sidebar.collapsed";
+
+// Last choice of the user; read synchronously before the first render so the
+// bar never flashes open before collapsing. Open is the default.
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Private window: the preference only lasts for this session.
+  }
+}
+
 export function DashboardLayout({
   children,
   bottomBar,
@@ -14,7 +34,7 @@ export function DashboardLayout({
   children: ReactNode;
   bottomBar?: ReactNode;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const router = useRouter();
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
@@ -53,7 +73,12 @@ export function DashboardLayout({
     <div className="min-h-screen bg-background">
       <AppSidebar
         collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
+        onToggle={() =>
+          setCollapsed((c) => {
+            writeSidebarCollapsed(!c);
+            return !c;
+          })
+        }
         role={role}
         user={user}
         onLogout={logout}

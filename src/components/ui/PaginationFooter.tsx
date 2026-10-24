@@ -12,7 +12,12 @@ type PaginationFooterProps = {
   extra?: ReactNode;
   // Icon-only pager with a short summary, for narrow side lists.
   compact?: boolean;
+  // Present => a "por página" selector sits next to the pager.
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
 };
+
+export const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 const NAV_BUTTON =
   "inline-flex items-center justify-center h-7 min-w-7 px-1.5 gap-0.5 rounded-md border border-border text-text-primary text-[11px] font-medium hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed";
@@ -26,7 +31,12 @@ export function PaginationFooter({
   itemLabel = "resultado",
   extra,
   compact = false,
+  onPageSizeChange,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: PaginationFooterProps) {
+  const sizes = pageSizeOptions.includes(pageSize)
+    ? pageSizeOptions
+    : [...pageSizeOptions, pageSize].sort((a, b) => a - b);
   const start = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
   const summary =
@@ -40,6 +50,23 @@ export function PaginationFooter({
       <div className="flex items-center gap-3">
         <span className="text-[11px] text-text-secondary">{summary}</span>
         {extra}
+        {onPageSizeChange && !compact && (
+          <label className="flex items-center gap-1.5 text-[11px] text-text-secondary">
+            Filas por página
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              aria-label="Filas por página"
+              className="h-7 rounded-md border border-border bg-card px-1.5 text-[11px] text-text-primary"
+            >
+              {sizes.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       {pageCount > 1 && (
         <div className="flex items-center gap-1.5">

@@ -4,6 +4,8 @@ import {
   createContext,
   isValidElement,
   useContext,
+  useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -102,6 +104,42 @@ function compareValues(
   return String(a).localeCompare(String(b), "es", { numeric: true });
 }
 
+const WIDTHS_PREFIX = "aria.columnWidths.";
+const MIN_COLUMN_WIDTH = 60;
+
+// Widths the user dragged, persisted per table; empty = natural widths.
+function useColumnWidths(storageKey: string) {
+  const [widths, setWidths] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(WIDTHS_PREFIX + storageKey);
+      if (raw) setWidths(JSON.parse(raw) as Record<string, number>);
+    } catch {
+      // localStorage unavailable: widths only last for this session.
+    }
+  }, [storageKey]);
+
+  const commit = useCallback(
+    (key: string, width: number) =>
+      setWidths((prev) => {
+        const next = { ...prev, [key]: Math.max(MIN_COLUMN_WIDTH, Math.round(width)) };
+        try {
+          localStorage.setItem(WIDTHS_PREFIX + storageKey, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      }),
+    [storageKey],
+  );
+  return { widths, commit };
+}
+
+function widthStyle(width: number | undefined, minWidth: number | undefined) {
+  return width ? { minWidth: width, width, maxWidth: width } : { minWidth };
+}
+
 const HEAD_CELL =
   "sticky top-0 z-10 bg-card border-b border-border font-normal whitespace-nowrap text-[11px] uppercase tracking-wider text-text-secondary";
 
@@ -120,7 +158,7 @@ export function DataTable<T>({
   selection,
   defaultSort,
   searchPlaceholder,
-  pageSize = 10,
+  pageSize = 20,
   itemLabel = "resultado",
   isLoading = false,
   loadingLabel = "Cargando…",
@@ -136,6 +174,26 @@ export function DataTable<T>({
   isRowActive,
 }: DataTableProps<T>) {
   const { hidden, toggle } = useHiddenColumns<string>(storageKey);
+  const { widths, commit: commitWidth } = useColumnWidths(storageKey);
+
+  // Drag the right edge of a header to resize its column.
+  const startResize = (key: string, e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.parentElement as HTMLElement;
+    const startX = e.clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    const onMove = (ev: PointerEvent) => commitWidth(key, startWidth + ev.clientX - startX);
+    // No text selection while dragging.
+    document.body.style.userSelect = "none";
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   const [sort, setSort] = useState(defaultSort ?? null);
   const [search, setSearch] = useState("");
 
@@ -195,7 +253,7 @@ export function DataTable<T>({
       >
         {/* Line 1: title on the left, column palette always at the opposite (right) end.
             The subtitle always sits on its own line below. */}
-        {(title || description || headerExtra || !hideColumnMenu) && (
+        {(title || description || headerExtra) && (
           <div>
             <div className="flex items-center justify-between gap-3">
               {title ? (
@@ -203,16 +261,7 @@ export function DataTable<T>({
               ) : (
                 <span />
               )}
-              <div className="flex shrink-0 items-center gap-2">
-                {headerExtra}
-                {!hideColumnMenu && (
-                  <ColumnVisibilityMenu
-                    columns={columns.map(({ key, label }) => ({ key, label }))}
-                    hidden={hidden}
-                    onToggle={toggle}
-                  />
-                )}
-              </div>
+              <div className="flex shrink-0 items-center gap-2">{headerExtra}</div>
             </div>
             {description && <p className="mt-0.5 text-[12px] text-text-secondary">{description}</p>}
           </div>
@@ -255,6 +304,17 @@ export function DataTable<T>({
       {error}
       {notice}
 
+      {/* Table toolbar: stuck to the top edge of the table, right-aligned. */}
+      {!hideColumnMenu && (
+        <div className="flex items-center justify-end gap-2 px-3 py-1.5 border-b border-border">
+          <ColumnVisibilityMenu
+            columns={columns.map(({ key, label }) => ({ key, label }))}
+            hidden={hidden}
+            onToggle={toggle}
+          />
+        </div>
+      )}
+
       {/* Roughly one viewport tall at most; scrolls on both axes inside the card. */}
       <div className="overflow-auto max-h-[100vh]">
         <table className="w-full min-w-max border-separate border-spacing-0 text-[12px]">
@@ -285,8 +345,8 @@ export function DataTable<T>({
                 return (
                   <th
                     key={col.key}
-                    style={{ minWidth: col.minWidth }}
-                    className={`${HEAD_CELL} ${headPad} ${col.align === "right" ? "text-right" : "text-left"}`}
+                    style={widthStyle(widths[col.key], col.minWidth)}
+                    className={`${HEAD_CELL} relative ${headPad} ${col.align === "right" ? "text-right" : "text-left"}`}
                     aria-sort={
                       active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
                     }
@@ -311,6 +371,19 @@ export function DataTable<T>({
                     ) : (
                       col.label
                     )}
+                    <span
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={`Redimensionar columna ${col.label}`}
+                      data-testid={`resize-${col.key}`}
+                      onPointerDown={(e) => startResize(col.key, e)}
+                      className="group absolute -right-1 top-0 z-10 flex h-full w-2.5 cursor-col-resize select-none touch-none items-center justify-center"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="h-4 w-px bg-border group-hover:h-full group-hover:w-0.5 group-hover:bg-primary"
+                      />
+                    </span>
                   </th>
                 );
               })}
@@ -368,8 +441,8 @@ export function DataTable<T>({
                     {visibleColumns.map((col) => (
                       <td
                         key={col.key}
-                        style={{ minWidth: col.minWidth }}
-                        className={`border-t border-border ${cellPad} align-middle ${col.align === "right" ? "text-right" : ""}`}
+                        style={widthStyle(widths[col.key], col.minWidth)}
+                        className={`border-t border-border ${cellPad} align-middle ${widths[col.key] ? "overflow-hidden text-ellipsis" : ""} ${col.align === "right" ? "text-right" : ""}`}
                       >
                         {col.render(row)}
                       </td>
@@ -388,6 +461,7 @@ export function DataTable<T>({
         total={paging.total}
         pageSize={paging.pageSize}
         onPageChange={paging.setPage}
+        onPageSizeChange={paging.setPageSize}
         itemLabel={itemLabel}
         extra={footerExtra}
         compact={compact}

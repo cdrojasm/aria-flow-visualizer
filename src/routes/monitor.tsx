@@ -65,12 +65,17 @@ export const Route = createFileRoute("/monitor")({
 // flagged as degraded (derived from the range's sums, not a live probe).
 const DEGRADED_THRESHOLD = 0.05;
 
-const METHOD_SECTIONS: { method: ApiResolutionMethod; title: string; icon: ReactNode }[] = [
+// Voicebot and Bidi are not in operation yet: their sections stay defined but hidden.
+const DISABLED_METHODS: ApiResolutionMethod[] = ["voicebot", "bidi"];
+
+const ALL_METHOD_SECTIONS: { method: ApiResolutionMethod; title: string; icon: ReactNode }[] = [
   { method: "aria", title: "ARIA", icon: <Brain className="h-4 w-4" /> },
   { method: "analyst", title: "Analistas", icon: <Users className="h-4 w-4" /> },
   { method: "voicebot", title: "Voicebot", icon: <Bot className="h-4 w-4" /> },
   { method: "bidi", title: "Bidi", icon: <Fingerprint className="h-4 w-4" /> },
 ];
+
+const METHOD_SECTIONS = ALL_METHOD_SECTIONS.filter((s) => !DISABLED_METHODS.includes(s.method));
 
 function mergeWarnings(...lists: (ApiMetricsWarning[] | undefined)[]): ApiMetricsWarning[] {
   const byCode = new Map<string, ApiMetricsWarning>();

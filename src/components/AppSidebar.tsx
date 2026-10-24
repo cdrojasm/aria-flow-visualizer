@@ -48,7 +48,8 @@ export function AppSidebar({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
+  // Until the role is known nothing is painted, so no option appears and vanishes.
+  const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : [];
 
   return (
     <aside
@@ -68,7 +69,11 @@ export function AppSidebar({
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
-      <nav className="flex-1 px-2 space-y-1">
+      <nav className="flex-1 px-2 space-y-1" aria-busy={!role}>
+        {!role &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-9 rounded-md bg-white/10 animate-pulse" aria-hidden="true" />
+          ))}
         {visibleNav.map((item) => {
           const active =
             pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));

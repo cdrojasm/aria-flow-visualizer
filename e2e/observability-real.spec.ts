@@ -60,6 +60,10 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
   for (const route of ["/dashboard", "/monitor"]) {
     await page.goto(`${baseURL}${route}`, { waitUntil: "networkidle" });
     expect(new URL(page.url()).pathname).toBe(route);
+    // Voicebot and Bidi are disabled for now: no section for them in the monitor.
+    if (route === "/monitor") {
+      await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);
+    }
     await expect(page.locator("body")).not.toBeEmpty();
   }
   expect(pageErrors).toEqual([]);

@@ -52,10 +52,47 @@ async function expectTableBasics(page: Page, firstActionName: RegExp) {
   await sortable.getByRole("button").click();
   await expect(sortable).toHaveAttribute("aria-sort", /ascending|descending/);
 
-  // Column menu lists the columns.
-  await page.getByRole("button", { name: "Columnas" }).click();
+  // Column menu lists the columns and sits in the table's own toolbar: right
+  // aligned and stuck to the top edge of the table.
+  const columnsButton = page.getByRole("button", { name: "Columnas" });
+  const [columnsBox, tableBox, cardBox] = await Promise.all([
+    columnsButton.boundingBox(),
+    table.boundingBox(),
+    // The table itself may be wider than the card (it scrolls inside it).
+    table.locator("xpath=ancestor::section[1]").boundingBox(),
+  ]);
+  expect(columnsBox!.y + columnsBox!.height).toBeLessThanOrEqual(tableBox!.y + 1);
+  expect(tableBox!.y - (columnsBox!.y + columnsBox!.height)).toBeLessThan(24);
+  expect(columnsBox!.x + columnsBox!.width).toBeGreaterThan(cardBox!.x + cardBox!.width * 0.8);
+  await columnsButton.click();
   await expect(page.getByRole("menuitemcheckbox").first()).toBeVisible();
   await page.keyboard.press("Escape");
+
+  // Dragging the right edge of a header resizes the column; the width survives a reload.
+  const resizeHandle = table.getByRole("separator", { name: /Redimensionar columna/ }).first();
+  const header = resizeHandle.locator("xpath=..");
+  const widthBefore = (await header.boundingBox())!.width;
+  const handleBox = (await resizeHandle.boundingBox())!;
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 90, handleBox.y + 4, { steps: 6 });
+  await page.mouse.up();
+  const widthAfter = (await header.boundingBox())!.width;
+  expect(widthAfter).toBeGreaterThan(widthBefore + 60);
+  await page.reload();
+  const reloaded = table.getByRole("separator", { name: /Redimensionar columna/ }).first();
+  await expect(reloaded).toBeVisible({ timeout: 30_000 });
+  const widthReloaded = (await reloaded.locator("xpath=..").boundingBox())!.width;
+  expect(Math.abs(widthReloaded - widthAfter)).toBeLessThan(4);
+
+  // Rows per page: 20 by default, 50 and 100 available, and the pager resets to page 1.
+  const pageSize = page.getByRole("combobox", { name: "Filas por página" });
+  await expect(pageSize).toHaveValue("20");
+  expect(await pageSize.locator("option").allInnerTexts()).toEqual(["20", "50", "100"]);
+  await pageSize.selectOption("50");
+  await expect(pageSize).toHaveValue("50");
+  await expect(page.getByText(/Página 1 de|^1–/).first()).toBeVisible();
+  await pageSize.selectOption("20");
 
   // Pagination has jump-to-edge controls whenever there is more than one page.
   const last = page.getByRole("button", { name: "Ir al final" });

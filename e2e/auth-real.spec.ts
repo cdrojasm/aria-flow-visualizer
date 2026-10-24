@@ -63,6 +63,21 @@ for (const roleCase of roleCases) {
       `Define E2E_${roleCase.key}_EMAIL y E2E_${roleCase.key}_PASSWORD.`,
     );
 
+    // The sidebar must never paint an option the role cannot reach (no flicker).
+    const seenLinks = new Set<string>();
+    await page.exposeFunction("recordNavLink", (href: string) => seenLinks.add(href));
+    await page.addInitScript(() => {
+      const record = () =>
+        document
+          .querySelectorAll("aside nav a")
+          .forEach((a) =>
+            (window as never as { recordNavLink: (h: string) => void }).recordNavLink(
+              a.getAttribute("href") ?? "",
+            ),
+          );
+      new MutationObserver(record).observe(document, { childList: true, subtree: true });
+    });
+
     await page.goto("/login");
     await page.getByLabel("Correo").fill(email!);
     await page.getByLabel("Contraseña").fill(password!);
@@ -74,6 +89,28 @@ for (const roleCase of roleCases) {
     for (const label of roleCase.allowedLinks) {
       await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
+
+    // Every link ever painted belongs to this role's navigation.
+    const allowedHrefs = await Promise.all(
+      roleCase.allowedLinks.map((label) =>
+        page.getByRole("link", { name: label, exact: true }).getAttribute("href"),
+      ),
+    );
+    expect(seenLinks.size).toBeGreaterThan(0);
+    for (const href of seenLinks)
+      expect(await page.locator(`aside nav a[href="${href}"]`).count()).toBeGreaterThan(0);
+    expect(allowedHrefs.every((h) => h && seenLinks.has(h))).toBeTruthy();
+
+    // The sidebar remembers collapsed/open across reloads.
+    const sidebar = page.locator("aside").first();
+    await expect(sidebar).toHaveClass(/w-\[220px\]/);
+    await sidebar.getByRole("button").first().click();
+    await expect(sidebar).toHaveClass(/w-14/);
+    await page.reload();
+    await expect(page.locator("aside").first()).toHaveClass(/w-14/);
+    await page.locator("aside").first().getByRole("button").first().click();
+    await expect(page.locator("aside").first()).toHaveClass(/w-\[220px\]/);
+    expect(await page.evaluate(() => localStorage.getItem("aria.sidebar.collapsed"))).toBe("0");
 
     const navigationLink = page.getByRole("link", {
       name: roleCase.allowedLinks[1] ?? roleCase.allowedLinks[0],

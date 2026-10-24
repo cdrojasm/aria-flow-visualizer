@@ -69,7 +69,9 @@ export function useRole() {
     getCurrentUser()
       .then(setUser)
       .catch(() => {
-        clearAccessToken();
+        // A 401 already ended the session (apiFetch drops the token). Any other
+        // failure — a request cancelled by a reload, a network blip — must not
+        // wipe a still-valid token, or reloading mid-request logs the user out.
         setUser(null);
       });
   }, []);
