@@ -15,7 +15,9 @@ async function openFraudHistory(page: Page, accessToken: string) {
     accessToken,
   );
   await page.goto("/historico-fraude");
-  await expect(page.getByPlaceholder("Buscar en lo cargado por alerta, evento o cliente…")).toBeVisible();
+  await expect(
+    page.getByPlaceholder("Buscar en lo cargado por alerta, evento o cliente…"),
+  ).toBeVisible();
 }
 
 async function token(request: APIRequestContext) {
@@ -49,7 +51,10 @@ async function provisionUser(request: APIRequestContext) {
   expect(created.status(), await created.text()).toBe(201);
 }
 
-test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({ page, request }) => {
+test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({
+  page,
+  request,
+}) => {
   test.skip(
     !email || !password || !bootstrapToken,
     "El runner local debe proporcionar credenciales efímeras y el token bootstrap temporal.",
@@ -99,9 +104,7 @@ test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({
         historyPage = (await history.json()) as typeof historyPage;
         return historyPage.items.some(
           (item) =>
-            item.alert_id === alertId &&
-            item.event_id === eventId &&
-            item.fraud_review_count === 2,
+            item.alert_id === alertId && item.event_id === eventId && item.fraud_review_count === 2,
         );
       },
       { timeout: 60_000, intervals: [500, 1_000, 2_000] },
@@ -111,7 +114,10 @@ test("E08 real: marca, remarca y consulta el histórico de revisiones", async ({
   await openFraudHistory(page, accessToken);
   const search = page.getByPlaceholder("Buscar en lo cargado por alerta, evento o cliente…");
   await search.fill(eventId);
-  const row = page.getByRole("row").filter({ hasText: eventId });
+  // The event id is searchable but not printed in the table: the search leaves one data row.
+  const table = page.getByRole("table").first();
+  await expect(table.getByRole("row")).toHaveCount(2);
+  const row = table.getByRole("row").nth(1);
   await expect(row).toBeVisible();
   await expect(row).toContainText("2");
   await expect(row).toContainText("No fraude");

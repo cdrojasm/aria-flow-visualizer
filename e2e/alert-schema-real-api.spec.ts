@@ -605,7 +605,12 @@ test("API/UI real: alerta canónica, raw restringido, historial y exportación a
   await page.goto("/cola");
   await expect(page.getByRole("heading", { name: "Alertas en progreso" })).toBeVisible();
   await page.getByRole("button", { name: "Alertas en proceso" }).click();
-  await expect(page.getByText("$ 800,00 USD")).toBeVisible();
+  // The in-process table prints the amount as an es-CO number (thousands "." and decimals ",").
+  const inProcess = page.getByRole("table").first();
+  await expect(inProcess.getByRole("columnheader", { name: /Monto/ })).toBeVisible();
+  await expect(
+    inProcess.getByRole("cell", { name: /^\d{1,3}(\.\d{3})*,\d{2}$/ }).first(),
+  ).toBeVisible();
   await page.goto(`/alerta/${start.alert_id}`);
   await page.getByRole("button", { name: "Data alerta" }).click();
   await expect(page.getByText("12.345,67", { exact: true })).toBeVisible();
@@ -742,7 +747,14 @@ test("API real: métricas conservan versión, channel y entrypoint desde roles",
     .poll(
       async () => {
         const current = await getJson(request, manager.access_token, metricsPath);
-        return current.range.schema_versions.map(String).includes(String(versions.version));
+        // The version can already be in range from earlier runs: wait for this run's second
+        // alert (its own entrypoint) to be counted, not just for the version to show up.
+        return (
+          current.range.schema_versions.map(String).includes(String(versions.version)) &&
+          current.distributions.subchannel.some(
+            (item: { value: string }) => item.value === "e2e-entrypoint-v2",
+          )
+        );
       },
       { timeout: 120_000, intervals: [1000, 2000, 5000] },
     )
