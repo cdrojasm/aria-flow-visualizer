@@ -146,13 +146,12 @@ function MonitorPage() {
     <DashboardLayout>
       <div className="p-8 max-w-[1400px] space-y-6">
         {health === "degraded" && (
-          <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-            <div className="text-[13px] text-text-primary">
-              <span className="font-semibold">Agente degradado en el rango.</span> Pasos fallidos{" "}
-              {formatPct(stepFailRate)} · errores LLM {formatPct(llmErrorRate)} (umbral{" "}
-              {formatPct(DEGRADED_THRESHOLD, 0)}).
-            </div>
+          <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 flex items-center gap-2 text-[12px] text-text-primary">
+            <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+            <span className="font-semibold">Agente degradado.</span>
+            <span title={`Umbral ${formatPct(DEGRADED_THRESHOLD, 0)}`}>
+              Pasos fallidos {formatPct(stepFailRate)} · errores LLM {formatPct(llmErrorRate)}
+            </span>
           </div>
         )}
 

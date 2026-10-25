@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { AlertTriangle, CalendarRange, Info } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -12,6 +12,7 @@ import {
   MATURATION_META,
   presetRange,
   RANGE_PRESETS,
+  warningSummary,
   warningText,
   type RangeState,
 } from "@/lib/api/metricsMapping";
@@ -109,36 +110,86 @@ export function MaturationBadge({ maturation }: { maturation: ApiMaturation | nu
   );
 }
 
-/** "Sólo medidas acumulativas sobre el periodo" + the API's warnings. */
+/** One-line scope note + the API's warnings, each a short sentence with the detail on demand. */
 export function MetricsNotices({ warnings }: { warnings: ApiMetricsWarning[] }) {
   return (
     <div className="space-y-2 mb-6">
-      <p className="flex items-start gap-2 text-[12px] text-text-secondary">
-        <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-        <span>
-          <span className="font-medium text-text-primary">
-            Sólo medidas acumulativas sobre el periodo
-          </span>
-          : conteos, sumas y distribuciones del rango elegido (no fotos de un instante). Las tasas
-          se calculan como numerador / denominador del periodo completo.
+      <p className="flex flex-wrap items-center gap-2 text-[12px] text-text-secondary">
+        <Info className="h-3.5 w-3.5 shrink-0" />
+        <span className="font-medium text-text-primary">
+          Sólo medidas acumulativas sobre el periodo
         </span>
+        <MoreDetail>
+          Conteos, sumas y distribuciones del rango elegido (no fotos de un instante). Las tasas se
+          calculan como numerador / denominador del periodo completo.
+        </MoreDetail>
       </p>
-      {warnings.map((w) => (
-        <div
-          key={w.code}
-          role="status"
-          className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-2.5 flex items-start gap-2 text-[12px] text-text-primary"
-        >
-          <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-          <span>
-            {warningText(w)}
-            {w.periods.length > 0 && (
-              <span className="text-text-secondary"> Periodos: {w.periods.join(", ")}.</span>
-            )}
-          </span>
-        </div>
-      ))}
+      {warnings.length === 1 && <WarningLine warning={warnings[0]} />}
+      {warnings.length > 1 && <WarningGroup warnings={warnings} />}
     </div>
+  );
+}
+
+const WARNING_BOX =
+  "rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 flex flex-wrap items-center gap-2 text-[12px] text-text-primary";
+
+function WarningLine({ warning }: { warning: ApiMetricsWarning }) {
+  return (
+    <div role="status" className={WARNING_BOX}>
+      <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+      <span>{warningSummary(warning)}</span>
+      <MoreDetail>
+        {warningText(warning)}
+        {warning.periods.length > 0 && <> Periodos: {warning.periods.join(", ")}.</>}
+      </MoreDetail>
+    </div>
+  );
+}
+
+// Several warnings share one box: a count up front, the list on demand.
+function WarningGroup({ warnings }: { warnings: ApiMetricsWarning[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div role="status" className={WARNING_BOX}>
+      <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+      <span>{warnings.length} avisos sobre este rango</span>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="text-[11px] text-primary hover:underline shrink-0"
+      >
+        {open ? "Ver menos" : "Ver más"}
+      </button>
+      {open && (
+        <ul className="basis-full list-disc pl-5 space-y-1 text-text-secondary">
+          {warnings.map((w) => (
+            <li key={w.code}>
+              <span className="text-text-primary">{warningSummary(w)}</span> {warningText(w)}
+              {w.periods.length > 0 && <> Periodos: {w.periods.join(", ")}.</>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** "Ver más" toggle: keeps long explanations out of the way until asked for. */
+function MoreDetail({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="text-[11px] text-primary hover:underline shrink-0"
+      >
+        {open ? "Ver menos" : "Ver más"}
+      </button>
+      {open && <span className="basis-full text-text-secondary">{children}</span>}
+    </>
   );
 }
 

@@ -60,6 +60,13 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
   for (const route of ["/dashboard", "/monitor"]) {
     await page.goto(`${baseURL}${route}`, { waitUntil: "networkidle" });
     expect(new URL(page.url()).pathname).toBe(route);
+    // The scope note is one line; its detail only appears on demand.
+    const scopeNote = page.getByText("Sólo medidas acumulativas sobre el periodo");
+    await expect(scopeNote).toBeVisible();
+    const detail = page.getByText(/no fotos de un instante/);
+    await expect(detail).toHaveCount(0);
+    await scopeNote.locator("xpath=..").getByRole("button", { name: "Ver más" }).click();
+    await expect(detail).toBeVisible();
     // Voicebot and Bidi are disabled for now: no section for them in the monitor.
     if (route === "/monitor") {
       await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);

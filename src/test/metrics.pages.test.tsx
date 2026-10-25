@@ -282,7 +282,7 @@ describe("/dashboard", () => {
     renderPage(DashboardRoute.options.component as ComponentType);
     expect(screen.getByText("Sólo medidas acumulativas sobre el periodo")).toBeInTheDocument();
     expect(
-      await screen.findByText(/Los falsos positivos y el fraude no detectado aún pueden cambiar/),
+      await screen.findByText(/Falsos positivos y fraude no detectado aún pueden cambiar/),
     ).toBeInTheDocument();
     // decided = 0 -> no rate, never a made-up number.
     const fpCard = screen

@@ -104,6 +104,17 @@ const WARNING_TEXT: Record<ApiMetricsWarning["code"], string> = {
     "Los falsos positivos y el fraude no detectado aún pueden cambiar en estos periodos: las correcciones llegan hasta ~6 meses después (~98 % en 4 días).",
 };
 
+// One short sentence for the banner; `warningText` is the detail shown on demand.
+const WARNING_SUMMARY: Record<ApiMetricsWarning["code"], string> = {
+  partial_period: "Datos de más de 90 días: se cuentan por mes/año completos.",
+  schema_changed: "El rango mezcla más de un juego de rangos de monto.",
+  fraud_label_maturing: "Falsos positivos y fraude no detectado aún pueden cambiar.",
+};
+
+export function warningSummary(warning: ApiMetricsWarning): string {
+  return WARNING_SUMMARY[warning.code] ?? warning.message;
+}
+
 export function warningText(warning: ApiMetricsWarning): string {
   return WARNING_TEXT[warning.code] ?? warning.message;
 }
