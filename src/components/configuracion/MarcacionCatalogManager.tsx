@@ -193,6 +193,7 @@ export function MarcacionCatalogManager({
                     <button
                       type="button"
                       onClick={() => setDeleting(c)}
+                      aria-label={`Eliminar categoría ${c.value}`}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

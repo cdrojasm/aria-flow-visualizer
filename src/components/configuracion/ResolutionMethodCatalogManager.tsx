@@ -201,6 +201,7 @@ export function ResolutionMethodCatalogManager({
                     <button
                       type="button"
                       onClick={() => setDeleting(m)}
+                      aria-label={`Eliminar método ${m.value}`}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />

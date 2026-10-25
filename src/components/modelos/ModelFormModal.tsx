@@ -112,7 +112,13 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
   return (
     <SideDrawer
       open={open}
-      onOpenChange={(o) => !o && onClose()}
+      onOpenChange={(o) => {
+        if (!o) {
+          reset();
+          onClose();
+        }
+      }}
+      dirty={tag.trim() !== "" || description.trim() !== "" || datasetName !== ""}
       size="lg"
       title="Nuevo modelo"
       description={
@@ -125,7 +131,10 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
         <>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              reset();
+              onClose();
+            }}
             className="px-3 py-2 rounded-md text-[13px] text-text-secondary hover:text-text-primary"
           >
             Cancelar

@@ -191,6 +191,7 @@ export function VariableCatalogManager({
                     <button
                       type="button"
                       onClick={() => setDeleting(v)}
+                      aria-label={`Eliminar variable ${v.value}`}
                       className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
