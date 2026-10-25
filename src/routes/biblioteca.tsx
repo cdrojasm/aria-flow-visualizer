@@ -2423,11 +2423,13 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
     queryClient.invalidateQueries({ queryKey: ["tags", category] });
 
   const [newValue, setNewValue] = useState("");
+  const [showForm, setShowForm] = useState(false);
   const [deletingTag, setDeletingTag] = useState<TagEntryResponse | null>(null);
   const createMutation = useMutation({
     mutationFn: (value: string) => createTag({ data: { category, value } }),
     onSuccess: () => {
       setNewValue("");
+      setShowForm(false);
       invalidate();
     },
   });
@@ -2495,28 +2497,51 @@ function EventCatalogSection({ category }: { category: TagCategory }) {
           </ActionButton>
         )}
         tableActions={
-          <>
-            <input
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && newValue.trim()) createMutation.mutate(newValue.trim());
-              }}
-              placeholder={`Nuevo valor de ${TAG_CATEGORY_LABELS[category].toLowerCase()}…`}
-              className="h-8 min-w-0 flex-1 rounded-md border border-border px-3 text-[12px] focus:outline-none focus:border-primary"
-            />
-            <ActionButton
-              tone="primary"
-              size="md"
-              icon={<Plus className="h-3.5 w-3.5" />}
-              onClick={() => newValue.trim() && createMutation.mutate(newValue.trim())}
-              disabled={!newValue.trim()}
-            >
-              Agregar
-            </ActionButton>
-          </>
+          <ActionButton
+            tone="primary"
+            size="md"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() => setShowForm(true)}
+          >
+            Nuevo valor
+          </ActionButton>
         }
       />
+      <SideDrawer
+        open={showForm}
+        onOpenChange={(open) => !open && setShowForm(false)}
+        title={`Nuevo valor de ${TAG_CATEGORY_LABELS[category]}`}
+        description="Agrega un valor al catálogo global que usan las condiciones de filtro."
+        dirty={!!newValue.trim()}
+        footer={
+          <button
+            type="button"
+            onClick={() => newValue.trim() && createMutation.mutate(newValue.trim())}
+            disabled={!newValue.trim() || createMutation.isPending}
+            className="rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {createMutation.isPending ? "Agregando…" : "Agregar valor"}
+          </button>
+        }
+      >
+        <Field label="Valor">
+          <input
+            autoFocus
+            value={newValue}
+            onChange={(event) => setNewValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && newValue.trim()) createMutation.mutate(newValue.trim());
+            }}
+            placeholder={`Nuevo valor de ${TAG_CATEGORY_LABELS[category].toLowerCase()}…`}
+            className="h-9 w-full rounded-md border border-border px-3 text-[13px] focus:border-primary focus:outline-none"
+          />
+        </Field>
+        {createMutation.isError && (
+          <p role="alert" className="mt-3 text-[12px] text-danger">
+            No se pudo agregar el valor: {String(createMutation.error)}
+          </p>
+        )}
+      </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deletingTag}
         onOpenChange={(open) => !open && setDeletingTag(null)}

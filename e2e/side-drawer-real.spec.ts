@@ -316,6 +316,52 @@ test.describe("drawer lateral único", () => {
       }
     }
   });
+
+  test("Biblioteca: los tres catálogos de eventos crean valores desde el drawer", async ({
+    page,
+    request,
+  }) => {
+    const auth = { Authorization: `Bearer ${token}` };
+    const createdTags: { category: string; id: string }[] = [];
+    const catalogs = [
+      { category: "integration_point", label: "Punto de integración" },
+      { category: "triggered_rule", label: "Regla disparada" },
+      { category: "event_type", label: "Tipo de evento" },
+    ];
+    try {
+      await page.goto("/biblioteca");
+      await page.getByRole("button", { name: "Catálogos de eventos", exact: true }).click();
+      for (const catalog of catalogs) {
+        const value = `e2e drawer ${catalog.category} ${Date.now()}`;
+        await page.getByRole("button", { name: catalog.label, exact: true }).click();
+        await page.getByRole("button", { name: "Nuevo valor", exact: true }).click();
+        const drawer = await expectRightDrawer(page, `Nuevo valor de ${catalog.label}`);
+        const valueInput = drawer.getByPlaceholder(
+          `Nuevo valor de ${catalog.label.toLowerCase()}…`,
+        );
+        await expect(drawer.getByRole("button", { name: "Agregar valor" })).toBeDisabled();
+        await valueInput.fill(value);
+        const createResponse = page.waitForResponse(
+          (response) =>
+            response.request().method() === "POST" &&
+            new URL(response.url()).pathname === "/api/v0/tag-catalog",
+        );
+        await drawer.getByRole("button", { name: "Agregar valor" }).click();
+        const created = await createResponse;
+        await expectApiSuccess(created, `Crear valor de ${catalog.label}`);
+        const tag = (await created.json()) as { id: string };
+        createdTags.push({ category: catalog.category, id: tag.id });
+        await expect(page.getByTestId("side-drawer")).toBeHidden();
+        await expect(page.getByRole("row").filter({ hasText: value })).toBeVisible();
+      }
+    } finally {
+      for (const tag of createdTags) {
+        await request.delete(`/api/v0/tag-catalog/${tag.category}/${encodeURIComponent(tag.id)}`, {
+          headers: auth,
+        });
+      }
+    }
+  });
 });
 
 test.describe("drawer lateral único: Configuración", () => {
