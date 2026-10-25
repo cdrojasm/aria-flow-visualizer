@@ -178,3 +178,137 @@ test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }
     expect(csv).toContain(report.countLabel);
   }
 });
+
+// "Rango personalizado" is shared by Dashboard and Monitor: pick whole days in the
+// calendar, apply, and check that the reads and the exported report follow that range.
+for (const route of ["/dashboard", "/monitor"] as const) {
+  test(`E10 rango personalizado en ${route}: valida, aplica y se refleja en lecturas y reporte`, async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      (value: string) => localStorage.setItem("aria.auth.accessToken", value),
+      accessToken,
+    );
+    let channelFilter: string | undefined;
+    const metricsEndpoint = route === "/dashboard" ? "overview" : "agent";
+    await page.goto(route);
+    const exportButton = page.getByRole("button", { name: "Exportar reporte" });
+    await expect(exportButton).toBeEnabled({ timeout: 30_000 });
+
+    // Whole local calendar days: the day before yesterday through yesterday.
+    const days = await page.evaluate(() => {
+      const iso = (offset: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offset);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      };
+      return { from: iso(-2), to: iso(-1), end: iso(0), tomorrow: iso(1) };
+    });
+    const day = (iso: string) => page.locator(`td[data-day="${iso}"] button`);
+    const pickDay = async (iso: string) => {
+      for (let i = 0; i < 2 && (await day(iso).count()) === 0; i += 1)
+        await page.getByRole("button", { name: "Go to the Previous Month" }).click();
+      await day(iso).click();
+    };
+
+    await page.getByRole("button", { name: "Rango personalizado" }).click();
+    const apply = page.getByRole("button", { name: "Aplicar" });
+    // Nothing picked yet: the range cannot be applied.
+    await expect(apply).toBeDisabled();
+    // Days after today cannot be picked.
+    await expect(day(days.tomorrow)).toBeDisabled();
+    // One day is already a valid range (that same day); the second click extends it.
+    await pickDay(days.from);
+    await expect(apply).toBeEnabled();
+    await pickDay(days.to);
+    await expect(apply).toBeEnabled();
+
+    const rangeRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes(`/api/v0/metrics/${metricsEndpoint}`) &&
+        new URL(request.url()).searchParams.get("from") === `${days.from}T00:00:00`,
+    );
+    const rangeResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`/api/v0/metrics/${metricsEndpoint}`) &&
+        response.url().includes(`${days.from}T00%3A00%3A00`) &&
+        response.ok(),
+    );
+    await apply.click();
+    // Whole days: [from 00:00, day after `to` 00:00), read in the operations timezone.
+    const params = new URL((await rangeRequest).url()).searchParams;
+    expect(params.get("to")).toBe(`${days.end}T00:00:00`);
+    const metrics = (await (await rangeResponse).json()) as {
+      range: { from: string; to: string; timezone: string };
+    };
+    expect(metrics.range.timezone).toBe("America/Bogota");
+    expect(metrics.range.from).toMatch(new RegExp(`^${days.from}T00:00:00`));
+    expect(metrics.range.to).toMatch(new RegExp(`^${days.end}T00:00:00`));
+    // The trigger shows the chosen days and no preset stays highlighted.
+    await expect(page.getByRole("button", { name: /\d+ \w+ – \d+ \w+/ })).toBeVisible();
+
+    // The report follows the applied range (and, on the dashboard, the active filter).
+    if (route === "/dashboard") {
+      const filtered = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v0/metrics/overview") &&
+          response.url().includes("CLOSED") &&
+          response.ok(),
+      );
+      await page.getByRole("combobox", { name: "Estado" }).click();
+      await page.getByRole("option", { name: "Cerrada" }).click();
+      const filteredMetrics = (await (await filtered).json()) as typeof metrics;
+      expect(filteredMetrics.range.from).toBe(metrics.range.from);
+    }
+    if (route === "/monitor") {
+      // Channel options are the values observed in the range; pick the first real one.
+      await page.getByRole("combobox", { name: "Canal", exact: true }).click();
+      const channel = page
+        .getByRole("option")
+        .filter({ hasNotText: /^Todos/ })
+        .first();
+      test.skip((await channel.count()) === 0, "No hay canales observados en el rango.");
+      const channelName = ((await channel.textContent()) ?? "").trim();
+      const filtered = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/v0/metrics/agent") &&
+          decodeURIComponent(response.url()).includes(channelName) &&
+          response.ok(),
+      );
+      await channel.click();
+      await filtered;
+      await expect(exportButton).toBeEnabled();
+      channelFilter = channelName;
+    }
+    await expect(exportButton).toBeEnabled();
+    const download = page.waitForEvent("download");
+    await exportButton.click();
+    const csv = (await readFile((await (await download).path())!, "utf8")).replace("\uFEFF", "");
+    expect(csv).toContain(metrics.range.from);
+    expect(csv).toContain(metrics.range.to);
+    if (route === "/dashboard") expect(csv).toMatch(/FILTROS APLICADOS\s+status,?"?CLOSED/);
+    else expect(csv).toMatch(/FILTROS APLICADOS\s+channel,?"?/);
+    if (route === "/monitor") expect(csv).toContain(channelFilter!);
+
+    // Picking a preset leaves the custom range.
+    await page.getByRole("button", { name: "Semana" }).click();
+    await expect(page.getByRole("button", { name: "Rango personalizado" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /\d+ \w+ – \d+ \w+/ })).toHaveCount(0);
+  });
+}
+
+test("E10 rango personalizado: la API rechaza rangos inválidos y devuelve vacío sin datos", async ({
+  request,
+}) => {
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const read = (from: string, to: string) =>
+    request.get(`${BASE_URL}/api/v0/metrics/overview?from=${from}&to=${to}`, { headers });
+  // Reversed or malformed dates are a 422, never a silent empty report.
+  expect((await read("2026-10-25T00:00:00", "2026-10-20T00:00:00")).status()).toBe(422);
+  expect((await read("no-es-fecha", "2026-10-20T00:00:00")).status()).toBe(422);
+  // A valid range with no alerts is a normal answer with zero totals.
+  const empty = await read("2025-01-01T00:00:00", "2025-01-02T00:00:00");
+  expect(empty.ok()).toBeTruthy();
+  expect(((await empty.json()) as { totals: { alerts: number } }).totals.alerts).toBe(0);
+});
