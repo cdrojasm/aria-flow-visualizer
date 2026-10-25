@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListTree, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ListTree, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { Field } from "@/components/configuracion/shared/FormControls";
@@ -14,6 +14,7 @@ import {
 import { WatchlistElementsModal } from "./WatchlistElementsModal";
 import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 
 /* ─── Blacklist / whitelist admin ────────────────────────
    Same "global catalog" footing as Canales above (channelLibrary), but
@@ -59,6 +60,7 @@ export function WatchlistManager() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["watchlists"] });
 
   const [editing, setEditing] = useState<Draft | null>(null);
+  const [initialDraft, setInitialDraft] = useState<Draft | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [managingId, setManagingId] = useState<string | null>(null);
   const [deletingWatchlist, setDeletingWatchlist] = useState<WatchlistEntry | null>(null);
@@ -100,6 +102,16 @@ export function WatchlistManager() {
   });
 
   const managingWatchlist = watchlists.find((w) => w.id === managingId) ?? null;
+  const openForm = (draft: Draft) => {
+    setEditing(draft);
+    setInitialDraft(draft);
+    setShowForm(true);
+  };
+  const closeForm = () => {
+    setShowForm(false);
+    setEditing(null);
+    setInitialDraft(null);
+  };
 
   return (
     <>
@@ -191,14 +203,13 @@ export function WatchlistManager() {
             <ActionButton
               icon={<Pencil className="h-3 w-3" />}
               onClick={() => {
-                setEditing({
+                openForm({
                   id: w.id,
                   name: w.name,
                   description: w.description,
                   list_type: w.list_type,
                   seedElements: "",
                 });
-                setShowForm(true);
               }}
             >
               Editar
@@ -218,8 +229,7 @@ export function WatchlistManager() {
             size="md"
             icon={<Plus className="h-3.5 w-3.5" />}
             onClick={() => {
-              setEditing(emptyDraft());
-              setShowForm(true);
+              openForm(emptyDraft());
             }}
           >
             Nueva lista
@@ -227,97 +237,77 @@ export function WatchlistManager() {
         }
       />
 
-      {showForm && editing && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => setShowForm(false)}
+      {editing && (
+        <SideDrawer
+          open={showForm}
+          onOpenChange={(open) => !open && closeForm()}
+          title={editing.id ? "Editar lista" : "Nueva lista"}
+          description="Configura el catálogo de pertenencia que consultan los agentes."
+          dirty={JSON.stringify(editing) !== JSON.stringify(initialDraft)}
+          footer={
+            <button
+              type="button"
+              onClick={() => saveMutation.mutate(editing)}
+              disabled={
+                !editing.name.trim() || !editing.description.trim() || saveMutation.isPending
+              }
+              className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {editing.id ? "Guardar" : "Crear"}
+            </button>
+          }
         >
-          <div
-            className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="text-[14px] font-semibold text-text-primary">
-                {editing.id ? "Editar lista" : "Nueva lista"}
-              </h3>
-              <button
-                onClick={() => setShowForm(false)}
-                className="text-text-secondary hover:text-text-primary"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              {!editing.id && (
-                <Field label="Tipo">
-                  <div className="flex gap-2">
-                    {(["blacklist", "whitelist"] as const).map((t) => (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => setEditing({ ...editing, list_type: t })}
-                        className={`flex-1 h-9 rounded-md border text-[13px] font-medium ${
-                          editing.list_type === t
-                            ? LIST_TYPE_STYLES[t]
-                            : "border-border text-text-secondary hover:bg-surface"
-                        }`}
-                      >
-                        {LIST_TYPE_LABELS[t]}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-              )}
-              <Field label="Nombre">
-                <input
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-                  placeholder="Cuentas mula conocidas"
-                />
-              </Field>
-              <Field label="Descripción">
-                <textarea
-                  value={editing.description}
-                  onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                  rows={3}
-                  className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
-                />
-              </Field>
-              {!editing.id && (
-                <Field
-                  label="Elementos iniciales"
-                  hint="Opcional, uno por línea. Para cargas grandes usa 'Elementos → Importar' después de crear la lista."
-                >
-                  <textarea
-                    value={editing.seedElements}
-                    onChange={(e) => setEditing({ ...editing, seedElements: e.target.value })}
-                    rows={4}
-                    className="w-full rounded-md border border-border px-3 py-2 text-[13px] font-mono focus:outline-none focus:border-primary resize-none"
-                    placeholder={"1234567890\n0987654321"}
-                  />
-                </Field>
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-              <button
-                onClick={() => setShowForm(false)}
-                className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => saveMutation.mutate(editing)}
-                disabled={
-                  !editing.name.trim() || !editing.description.trim() || saveMutation.isPending
-                }
-                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {editing.id ? "Guardar" : "Crear"}
-              </button>
-            </div>
-          </div>
-        </div>
+          {!editing.id && (
+            <Field label="Tipo">
+              <div className="flex gap-2">
+                {(["blacklist", "whitelist"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setEditing({ ...editing, list_type: t })}
+                    className={`flex-1 h-9 rounded-md border text-[13px] font-medium ${
+                      editing.list_type === t
+                        ? LIST_TYPE_STYLES[t]
+                        : "border-border text-text-secondary hover:bg-surface"
+                    }`}
+                  >
+                    {LIST_TYPE_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
+          <Field label="Nombre">
+            <input
+              value={editing.name}
+              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+              placeholder="Cuentas mula conocidas"
+            />
+          </Field>
+          <Field label="Descripción">
+            <textarea
+              value={editing.description}
+              onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+              rows={3}
+              className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
+            />
+          </Field>
+          {!editing.id && (
+            <Field
+              label="Elementos iniciales"
+              hint="Opcional, uno por línea. Para cargas grandes usa 'Elementos → Importar' después de crear la lista."
+            >
+              <textarea
+                value={editing.seedElements}
+                onChange={(e) => setEditing({ ...editing, seedElements: e.target.value })}
+                rows={4}
+                className="w-full rounded-md border border-border px-3 py-2 text-[13px] font-mono focus:outline-none focus:border-primary resize-none"
+                placeholder={"1234567890\n0987654321"}
+              />
+            </Field>
+          )}
+        </SideDrawer>
       )}
 
       {managingWatchlist && (

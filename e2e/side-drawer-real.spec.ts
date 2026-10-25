@@ -176,6 +176,60 @@ test.describe("drawer lateral único", () => {
     await expectRightDrawer(page, "Extraer / derivar dataset");
     await closeWithButton(page);
   });
+
+  test("Biblioteca: crear y editar una lista usa el drawer y persiste por la API real", async ({
+    page,
+    request,
+  }) => {
+    const name = `e2e_drawer_watchlist_${Date.now()}`;
+    const auth = { Authorization: `Bearer ${token}` };
+    let createdId: string | undefined;
+    try {
+      await page.goto("/biblioteca");
+      await page.getByRole("button", { name: "Listas negras/blancas", exact: true }).click();
+      await page.getByRole("button", { name: "Nueva lista" }).click();
+      const drawer = await expectRightDrawer(page, "Nueva lista");
+      await drawer.getByPlaceholder("Cuentas mula conocidas").fill(name);
+      await page.keyboard.press("Escape");
+      const discardPrompt = page.getByRole("alertdialog");
+      await expect(discardPrompt.getByText("¿Descartar los cambios?")).toBeVisible();
+      await discardPrompt.getByRole("button", { name: "Seguir editando" }).click();
+      await waitForAlertDialogAnimation(page);
+      await expect(drawer.getByPlaceholder("Cuentas mula conocidas")).toHaveValue(name);
+      await drawer.getByRole("textbox").nth(1).fill("Lista de prueba E2E");
+      const createdResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname === "/api/v0/watchlists",
+      );
+      await drawer.getByRole("button", { name: "Crear", exact: true }).click();
+      const created = await createdResponse;
+      expect(created.ok(), await created.text()).toBeTruthy();
+      createdId = ((await created.json()) as { id: string }).id;
+      await expect(page.getByTestId("side-drawer")).toBeHidden();
+
+      const row = page.getByRole("row").filter({ hasText: name });
+      await expect(row).toBeVisible();
+      await row.getByRole("button", { name: "Editar" }).click();
+      const editDrawer = await expectRightDrawer(page, "Editar lista");
+      await editDrawer.getByPlaceholder("Cuentas mula conocidas").fill(`${name}_editada`);
+      const updatedResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PATCH" &&
+          new URL(response.url()).pathname === `/api/v0/watchlists/${createdId}`,
+      );
+      await editDrawer.getByRole("button", { name: "Guardar", exact: true }).click();
+      expect((await updatedResponse).ok()).toBeTruthy();
+      await expect(page.getByTestId("side-drawer")).toBeHidden();
+      await expect(page.getByRole("row").filter({ hasText: `${name}_editada` })).toBeVisible();
+    } finally {
+      if (createdId) {
+        await request.delete(`/api/v0/watchlists/${encodeURIComponent(createdId)}`, {
+          headers: auth,
+        });
+      }
+    }
+  });
 });
 
 test.describe("drawer lateral único: Configuración", () => {

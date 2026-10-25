@@ -1,8 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import {
   addWatchlistElements,
   importWatchlistElements,
@@ -124,26 +125,16 @@ export function WatchlistElementsModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
+    <SideDrawer
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={watchlist.name}
+      description={`${watchlist.element_count.toLocaleString("es-CO")} elementos`}
+      size="xl"
+      bare
+      dirty={!!newValue.trim()}
     >
-      <div
-        className="bg-card rounded-xl border border-border w-full max-w-3xl shadow-xl max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div>
-            <h3 className="text-[14px] font-semibold text-text-primary">{watchlist.name}</h3>
-            <p className="text-[11px] text-text-secondary mt-0.5">
-              {watchlist.element_count.toLocaleString("es-CO")} elementos
-            </p>
-          </div>
-          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-border space-y-3">
           <div className="flex gap-2">
             <input
@@ -191,7 +182,7 @@ export function WatchlistElementsModal({
           {error && <p className="text-[11px] text-danger">{error}</p>}
         </div>
 
-        <div className="overflow-y-auto flex-1 p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <DataTable
             storageKey="biblioteca-lista-elementos"
             itemLabel="elemento"
@@ -235,6 +226,6 @@ export function WatchlistElementsModal({
           />
         </div>
       </div>
-    </div>
+    </SideDrawer>
   );
 }

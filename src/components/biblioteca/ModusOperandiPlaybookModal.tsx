@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Loader2, X } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Field } from "@/components/configuracion/shared/FormControls";
 import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
 import { ResolutionMethodPicker } from "@/components/configuracion/shared/ResolutionMethodPicker";
@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/knowledgeLibrary.functions";
 import { listResolutionMethods } from "@/lib/api/resolutionMethod.functions";
 import { playbookPath, shortageFromApi, shortageToApi } from "@/lib/playbookPath";
+import { SideDrawer } from "@/components/ui/side-drawer";
 
 /* Playbook of one modus operandi (Biblioteca, not versioned): how the
    analyst agent resolves an alert that resembles it, and what to do when
@@ -73,6 +74,7 @@ export function ModusOperandiPlaybookModal({
   onSaved: () => void;
 }) {
   const [draft, setDraft] = useState<Playbook>(() => initialPlaybook(entry));
+  const [initialDraft] = useState<Playbook>(() => initialPlaybook(entry));
   const [showCatalog, setShowCatalog] = useState(false);
   const resolutionMethodsQuery = useQuery({
     queryKey: ["resolutionMethods"],
@@ -103,121 +105,96 @@ export function ModusOperandiPlaybookModal({
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-        onClick={onClose}
+      <SideDrawer
+        open
+        onOpenChange={(open) => !open && onClose()}
+        title="Playbook"
+        description={entry.title}
+        size="lg"
+        dirty={JSON.stringify(draft) !== JSON.stringify(initialDraft)}
+        footer={
+          <button
+            type="button"
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50"
+          >
+            {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Guardar playbook
+          </button>
+        }
       >
-        <div
-          role="dialog"
-          aria-label={`Playbook de ${entry.title}`}
-          className="bg-card rounded-xl border border-border w-full max-w-xl shadow-xl max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <div>
-              <h3 className="text-[14px] font-semibold text-text-primary">Playbook</h3>
-              <p className="text-[12px] text-text-secondary">{entry.title}</p>
-            </div>
-            <button
-              type="button"
-              aria-label="Cerrar"
-              onClick={onClose}
-              className="text-text-secondary hover:text-text-primary"
-            >
-              <X className="h-4 w-4" />
-            </button>
+        <div className="space-y-5">
+          <Field
+            label="Estrategia"
+            hint="Cómo debe tratar el analista (agente) una alerta de este modus operandi."
+          >
+            <textarea
+              value={draft.strategy}
+              onChange={(e) => setDraft({ ...draft, strategy: e.target.value })}
+              rows={4}
+              maxLength={4000}
+              placeholder="Ej: Confirmar con el cliente antes de bloquear; si reporta desconocer la transacción, bloquear la tarjeta."
+              className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary"
+            />
+          </Field>
+          <Field
+            label="Método de resolución"
+            hint="Camino preferido. 'Resolver con ARIA' deja que el agente decida entre bloquear, dejar pasar o bidi."
+          >
+            <ResolutionMethodPicker
+              name="Método de resolución"
+              value={draft.resolution}
+              onChange={(v) => setDraft({ ...draft, resolution: v })}
+              allowedTags={PRIMARY_TAGS}
+              resolutionMethods={resolutionMethods}
+              onManage={() => setShowCatalog(true)}
+            />
+          </Field>
+          <Field
+            label="Si no hay voicebot"
+            hint={
+              usesVoicebot
+                ? "Qué hacer cuando no quedan slots o el voicebot está apagado."
+                : "Solo aplica si el camino pasa por el voicebot."
+            }
+          >
+            <ResolutionMethodPicker
+              name="Si no hay voicebot"
+              value={draft.ifNoVoicebot}
+              onChange={(v) => setDraft({ ...draft, ifNoVoicebot: v })}
+              allowedTags={IF_NO_VOICEBOT_TAGS}
+              resolutionMethods={resolutionMethods}
+            />
+          </Field>
+          <Field
+            label="Si no hay analista"
+            hint={
+              usesAnalyst
+                ? "Qué hacer cuando no hay analistas disponibles en la hora actual o están apagados."
+                : "Solo aplica si el camino pasa por un analista."
+            }
+          >
+            <ResolutionMethodPicker
+              name="Si no hay analista"
+              value={draft.ifNoAnalyst}
+              onChange={(v) => setDraft({ ...draft, ifNoAnalyst: v })}
+              allowedTags={IF_NO_ANALYST_TAGS}
+              resolutionMethods={resolutionMethods}
+            />
+          </Field>
+          <div className="rounded-lg bg-surface p-3">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-text-secondary mb-2">
+              Camino si faltan recursos
+            </p>
+            <PlaybookPath path={playbookPath(draft)} />
           </div>
-          <div className="p-5 space-y-5">
-            <Field
-              label="Estrategia"
-              hint="Cómo debe tratar el analista (agente) una alerta de este modus operandi."
-            >
-              <textarea
-                value={draft.strategy}
-                onChange={(e) => setDraft({ ...draft, strategy: e.target.value })}
-                rows={4}
-                maxLength={4000}
-                placeholder="Ej: Confirmar con el cliente antes de bloquear; si reporta desconocer la transacción, bloquear la tarjeta."
-                className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary"
-              />
-            </Field>
-            <Field
-              label="Método de resolución"
-              hint="Camino preferido. 'Resolver con ARIA' deja que el agente decida entre bloquear, dejar pasar o bidi."
-            >
-              <ResolutionMethodPicker
-                name="Método de resolución"
-                value={draft.resolution}
-                onChange={(v) => setDraft({ ...draft, resolution: v })}
-                allowedTags={PRIMARY_TAGS}
-                resolutionMethods={resolutionMethods}
-                onManage={() => setShowCatalog(true)}
-              />
-            </Field>
-            <Field
-              label="Si no hay voicebot"
-              hint={
-                usesVoicebot
-                  ? "Qué hacer cuando no quedan slots o el voicebot está apagado."
-                  : "Solo aplica si el camino pasa por el voicebot."
-              }
-            >
-              <ResolutionMethodPicker
-                name="Si no hay voicebot"
-                value={draft.ifNoVoicebot}
-                onChange={(v) => setDraft({ ...draft, ifNoVoicebot: v })}
-                allowedTags={IF_NO_VOICEBOT_TAGS}
-                resolutionMethods={resolutionMethods}
-              />
-            </Field>
-            <Field
-              label="Si no hay analista"
-              hint={
-                usesAnalyst
-                  ? "Qué hacer cuando no hay analistas disponibles en la hora actual o están apagados."
-                  : "Solo aplica si el camino pasa por un analista."
-              }
-            >
-              <ResolutionMethodPicker
-                name="Si no hay analista"
-                value={draft.ifNoAnalyst}
-                onChange={(v) => setDraft({ ...draft, ifNoAnalyst: v })}
-                allowedTags={IF_NO_ANALYST_TAGS}
-                resolutionMethods={resolutionMethods}
-              />
-            </Field>
-            <div className="rounded-lg bg-surface p-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-text-secondary mb-2">
-                Camino si faltan recursos
-              </p>
-              <PlaybookPath path={playbookPath(draft)} />
-            </div>
-            {save.isError && (
-              <p className="text-[12px] text-danger">No se pudo guardar: {String(save.error)}</p>
-            )}
-          </div>
-          <div className="flex justify-end gap-2 px-5 py-4 border-t border-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-2 rounded-md text-[13px] text-text-secondary hover:bg-surface"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => save.mutate()}
-              disabled={save.isPending}
-              className="inline-flex items-center gap-2 bg-primary text-white px-3 py-2 rounded-md text-[13px] font-medium hover:bg-primary/90 disabled:opacity-50"
-            >
-              {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Guardar playbook
-            </button>
-          </div>
+          {save.isError && (
+            <p className="text-[12px] text-danger">No se pudo guardar: {String(save.error)}</p>
+          )}
         </div>
-      </div>
-      {/* Outside the overlay: clicks inside the catalog dialog bubble through
-        the React tree and would otherwise close this modal. */}
+      </SideDrawer>
+      {/* Nested catalog remains a separate drawer while the playbook stays open. */}
       <ResolutionMethodCatalogManager open={showCatalog} onOpenChange={setShowCatalog} />
     </>
   );
