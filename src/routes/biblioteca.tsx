@@ -76,6 +76,7 @@ import {
 import { apiPlaybookPath } from "@/lib/playbookPath";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { ConfirmVectorStoreDocumentsDialog } from "@/components/ui/confirm-vector-store-documents-dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { VectorStoreSearchPanel } from "@/components/biblioteca/VectorStoreSearchPanel";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
 import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
@@ -752,6 +753,23 @@ function BibliotecaPage() {
   const [editingCase, setEditingCase] =
     useState<Partial<SimilarCaseLibraryEntry> | null>(null);
   const [showCaseForm, setShowCaseForm] = useState(false);
+  const [formBaseline, setFormBaseline] = useState<string | null>(null);
+  useEffect(() => {
+    const draft = showChannelForm
+      ? editingChannel
+      : showTaxForm
+        ? editingTax
+        : showMOForm
+          ? editingMO
+          : showFlagForm
+            ? editingFlag
+            : showCaseForm
+              ? editingCase
+              : null;
+    setFormBaseline(draft ? JSON.stringify(draft) : null);
+    // Capture only when a drawer opens/closes; draft edits must remain dirty.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showChannelForm, showTaxForm, showMOForm, showFlagForm, showCaseForm]);
   const [deletingCase, setDeletingCase] =
     useState<SimilarCaseLibraryEntry | null>(null);
   const saveCaseMutation = useMutation({
@@ -942,79 +960,58 @@ function BibliotecaPage() {
         )}
 
         {showChannelForm && editingChannel && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setShowChannelForm(false)}
+          <SideDrawer
+            open={showChannelForm}
+            onOpenChange={(open) => !open && setShowChannelForm(false)}
+            title={editingChannel.id ? "Editar canal" : "Nuevo canal"}
+            description="Nombre y descripción del canal usado por las taxonomías de conocimiento."
+            dirty={formBaseline !== JSON.stringify(editingChannel)}
+            footer={
+              <button
+                type="button"
+                onClick={() => saveChannelMutation.mutate(editingChannel)}
+                disabled={!editingChannel.name?.trim() || saveChannelMutation.isPending}
+                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingChannel.id ? "Guardar" : "Crear"}
+              </button>
+            }
           >
-            <div
-              className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-[14px] font-semibold text-text-primary">
-                  {editingChannel.id ? "Editar canal" : "Nuevo canal"}
-                </h3>
-                <button
-                  onClick={() => setShowChannelForm(false)}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
-                <Field
-                  label="Nombre"
-                  hint="El nombre se usa para buscar esta taxonomía en la base de conocimiento."
-                >
-                  <input
-                    value={editingChannel.name ?? ""}
-                    onChange={(e) =>
-                      setEditingChannel({
-                        ...editingChannel,
-                        name: e.target.value,
-                      })
-                    }
-                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-                    placeholder="Tarjetas"
-                  />
-                </Field>
-                <Field
-                  label="Descripción"
-                  hint="La descripción también se indexa para las búsquedas semánticas y por texto."
-                >
-                  <textarea
-                    value={editingChannel.description ?? ""}
-                    onChange={(e) =>
-                      setEditingChannel({
-                        ...editingChannel,
-                        description: e.target.value,
-                      })
-                    }
-                    rows={3}
-                    className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
-                  />
-                </Field>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-                <button
-                  onClick={() => setShowChannelForm(false)}
-                  className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => saveChannelMutation.mutate(editingChannel)}
-                  disabled={
-                    !editingChannel.name?.trim() ||
-                    saveChannelMutation.isPending
+            <div className="space-y-4">
+              <Field
+                label="Nombre"
+                hint="El nombre se usa para buscar esta taxonomía en la base de conocimiento."
+              >
+                <input
+                  value={editingChannel.name ?? ""}
+                  onChange={(e) =>
+                    setEditingChannel({
+                      ...editingChannel,
+                      name: e.target.value,
+                    })
                   }
-                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingChannel.id ? "Guardar" : "Crear"}
-                </button>
-              </div>
+                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+                  placeholder="Tarjetas"
+                />
+              </Field>
+              <Field
+                label="Descripción"
+                hint="La descripción también se indexa para las búsquedas semánticas y por texto."
+              >
+                <textarea
+                  value={editingChannel.description ?? ""}
+                  onChange={(e) =>
+                    setEditingChannel({
+                      ...editingChannel,
+                      description: e.target.value,
+                    })
+                  }
+                  rows={3}
+                  className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
+                />
+              </Field>
             </div>
-          </div>
+          </SideDrawer>
         )}
 
         {activeTab === "conocimiento" && (
@@ -1980,26 +1977,25 @@ function BibliotecaPage() {
 
         {/* Taxonomy modal */}
         {showTaxForm && editingTax && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setShowTaxForm(false)}
+          <SideDrawer
+            open={showTaxForm}
+            onOpenChange={(open) => !open && setShowTaxForm(false)}
+            title={editingTax.id ? "Editar taxonomía" : "Nueva taxonomía"}
+            description="Define la categoría y los datos que ayudan a encontrarla en Biblioteca."
+            size="lg"
+            dirty={formBaseline !== JSON.stringify(editingTax)}
+            footer={
+              <button
+                type="button"
+                onClick={() => saveTaxMutation.mutate(editingTax)}
+                disabled={!editingTax.name?.trim() || saveTaxMutation.isPending}
+                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingTax.id ? "Guardar" : "Crear"}
+              </button>
+            }
           >
-            <div
-              className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-[14px] font-semibold text-text-primary">
-                  {editingTax.id ? "Editar taxonomía" : "Nueva taxonomía"}
-                </h3>
-                <button
-                  onClick={() => setShowTaxForm(false)}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
+            <div className="space-y-4">
                 <Field label="Nombre">
                   <input
                     value={editingTax.name ?? ""}
@@ -2042,27 +2038,8 @@ function BibliotecaPage() {
                     }
                   />
                 </Field>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-                <button
-                  onClick={() => setShowTaxForm(false)}
-                  className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => saveTaxMutation.mutate(editingTax)}
-                  disabled={
-                    !editingTax.name?.trim() ||
-                    saveTaxMutation.isPending
-                  }
-                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingTax.id ? "Guardar" : "Crear"}
-                </button>
-              </div>
             </div>
-          </div>
+          </SideDrawer>
         )}
 
         {/* MO modal */}
@@ -2075,28 +2052,30 @@ function BibliotecaPage() {
         )}
 
         {showMOForm && editingMO && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setShowMOForm(false)}
+          <SideDrawer
+            open={showMOForm}
+            onOpenChange={(open) => !open && setShowMOForm(false)}
+            title={editingMO.id ? "Editar modus operandi" : "Nuevo modus operandi"}
+            description="Describe el patrón de fraude y vincúlalo con una taxonomía."
+            size="lg"
+            dirty={formBaseline !== JSON.stringify(editingMO)}
+            footer={
+              <button
+                type="button"
+                onClick={() => saveMOMutation.mutate(editingMO)}
+                disabled={
+                  !editingMO.title?.trim() ||
+                  !editingMO.narrative?.trim() ||
+                  !editingMO.taxonomy_library_id ||
+                  saveMOMutation.isPending
+                }
+                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingMO.id ? "Guardar" : "Crear"}
+              </button>
+            }
           >
-            <div
-              className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-[14px] font-semibold text-text-primary">
-                  {editingMO.id
-                    ? "Editar modus operandi"
-                    : "Nuevo modus operandi"}
-                </h3>
-                <button
-                  onClick={() => setShowMOForm(false)}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
+            <div className="space-y-4">
                 <Field
                   label="Nombre del caso"
                   hint="Este nombre se utiliza para encontrar el modus operandi en las búsquedas."
@@ -2158,53 +2137,31 @@ function BibliotecaPage() {
                     }
                   />
                 </Field>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-                <button
-                  onClick={() => setShowMOForm(false)}
-                  className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => saveMOMutation.mutate(editingMO)}
-                  disabled={
-                    !editingMO.title?.trim() ||
-                    !editingMO.narrative?.trim() ||
-                    !editingMO.taxonomy_library_id ||
-                    saveMOMutation.isPending
-                  }
-                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingMO.id ? "Guardar" : "Crear"}
-                </button>
-              </div>
             </div>
-          </div>
+          </SideDrawer>
         )}
 
         {/* Flag modal */}
         {showFlagForm && editingFlag && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setShowFlagForm(false)}
+          <SideDrawer
+            open={showFlagForm}
+            onOpenChange={(open) => !open && setShowFlagForm(false)}
+            title={editingFlag.id ? "Editar flag" : "Nueva flag"}
+            description="Configura el tipo de flag, su descripción y sus relaciones."
+            size="lg"
+            dirty={formBaseline !== JSON.stringify(editingFlag)}
+            footer={
+              <button
+                type="button"
+                onClick={() => saveFlagMutation.mutate(editingFlag)}
+                disabled={!editingFlag.name?.trim() || saveFlagMutation.isPending}
+                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingFlag.id ? "Guardar" : "Crear"}
+              </button>
+            }
           >
-            <div
-              className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-[14px] font-semibold text-text-primary">
-                  {editingFlag.id ? "Editar flag" : "Nueva flag"}
-                </h3>
-                <button
-                  onClick={() => setShowFlagForm(false)}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
+            <div className="space-y-4">
                 <Field label="Tipo">
                   <div className="flex items-center gap-1 rounded-lg border border-border p-1 w-fit">
                     {(["red", "yellow"] as FlagTypeValue[]).map((t) => (
@@ -2297,52 +2254,35 @@ function BibliotecaPage() {
                     })}
                   </div>
                 </Field>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-                <button
-                  onClick={() => setShowFlagForm(false)}
-                  className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => saveFlagMutation.mutate(editingFlag)}
-                  disabled={
-                    !editingFlag.name?.trim() || saveFlagMutation.isPending
-                  }
-                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingFlag.id ? "Guardar" : "Crear"}
-                </button>
-              </div>
             </div>
-          </div>
+          </SideDrawer>
         )}
 
         {/* Similar case modal */}
         {showCaseForm && editingCase && (
-          <div
-            className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-            onClick={() => setShowCaseForm(false)}
+          <SideDrawer
+            open={showCaseForm}
+            onOpenChange={(open) => !open && setShowCaseForm(false)}
+            title={editingCase.id ? "Editar caso similar" : "Nuevo caso similar"}
+            description="Relaciona el caso con su taxonomía y modus operandi."
+            size="lg"
+            dirty={formBaseline !== JSON.stringify(editingCase)}
+            footer={
+              <button
+                type="button"
+                onClick={() => saveCaseMutation.mutate(editingCase)}
+                disabled={
+                  !editingCase.text?.trim() ||
+                  !editingCase.modus_operandi_library_id ||
+                  saveCaseMutation.isPending
+                }
+                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {editingCase.id ? "Guardar" : "Crear"}
+              </button>
+            }
           >
-            <div
-              className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <h3 className="text-[14px] font-semibold text-text-primary">
-                  {editingCase.id
-                    ? "Editar caso similar"
-                    : "Nuevo caso similar"}
-                </h3>
-                <button
-                  onClick={() => setShowCaseForm(false)}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-5 space-y-4">
+            <div className="space-y-4">
                 <Field label="Taxonomía">
                   <select
                     value={editingCase.taxonomy_library_id ?? ""}
@@ -2409,28 +2349,8 @@ function BibliotecaPage() {
                     className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
                   />
                 </Field>
-              </div>
-              <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-                <button
-                  onClick={() => setShowCaseForm(false)}
-                  className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => saveCaseMutation.mutate(editingCase)}
-                  disabled={
-                    !editingCase.text?.trim() ||
-                    !editingCase.modus_operandi_library_id ||
-                    saveCaseMutation.isPending
-                  }
-                  className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {editingCase.id ? "Guardar" : "Crear"}
-                </button>
-              </div>
             </div>
-          </div>
+          </SideDrawer>
         )}
 
         <ConfirmDeleteDialog

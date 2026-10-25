@@ -1,4 +1,10 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from "@playwright/test";
 
 // PENDIENTES_MVC #17: every create/edit form opens in the same right-hand
 // SideDrawer (fixed, overlay, close button, Esc / click-outside, unsaved-
@@ -9,6 +15,10 @@ async function login(api: APIRequestContext, email: string, password: string): P
   const response = await api.post("/api/v0/auth/login", { data: { email, password } });
   expect(response.ok(), `login API: ${await response.text()}`).toBeTruthy();
   return ((await response.json()) as { access_token: string }).access_token;
+}
+
+async function expectApiSuccess(response: APIResponse, operation: string) {
+  if (!response.ok()) throw new Error(`${operation}: ${await response.text()}`);
 }
 
 async function authenticatePage(page: Page, token: string) {
@@ -225,6 +235,82 @@ test.describe("drawer lateral único", () => {
     } finally {
       if (createdId) {
         await request.delete(`/api/v0/watchlists/${encodeURIComponent(createdId)}`, {
+          headers: auth,
+        });
+      }
+    }
+  });
+
+  test("Biblioteca: los formularios de conocimiento abren el drawer compartido", async ({
+    page,
+    request,
+  }) => {
+    const suffix = Date.now().toString();
+    const auth = { Authorization: `Bearer ${token}` };
+    let taxonomyId: string | undefined;
+    try {
+      const taxonomyResponse = await request.post("/api/v0/library/taxonomies", {
+        headers: auth,
+        data: {
+          code: `E2E-SD-${suffix}`,
+          name: `Taxonomía drawer ${suffix}`,
+          description: "Fixture real para verificar formularios de Biblioteca.",
+          examples: [],
+        },
+      });
+      await expectApiSuccess(taxonomyResponse, "Crear taxonomía de fixture");
+      taxonomyId = ((await taxonomyResponse.json()) as { id: string }).id;
+
+      const modusOperandiResponse = await request.post("/api/v0/library/modus-operandi", {
+        headers: auth,
+        data: {
+          title: `MO drawer ${suffix}`,
+          narrative: "Fixture real para verificar los formularios de Biblioteca.",
+          taxonomy_library_id: taxonomyId,
+          evolved_variables: [],
+        },
+      });
+      await expectApiSuccess(modusOperandiResponse, "Crear modus operandi de fixture");
+      const modusOperandi = (await modusOperandiResponse.json()) as { title: string };
+
+      await page.goto("/biblioteca");
+      await page.getByRole("button", { name: "Canales", exact: true }).click();
+      await page.getByRole("button", { name: "Nuevo canal" }).click();
+      await expectRightDrawer(page, "Nuevo canal");
+      await closeWithButton(page);
+
+      await page.getByRole("button", { name: "Base de conocimiento", exact: true }).click();
+      await page.getByRole("button", { name: "Taxonomías de fraude", exact: true }).click();
+      await page.getByRole("button", { name: "Nueva taxonomía" }).click();
+      await expectRightDrawer(page, "Nueva taxonomía");
+      await closeWithButton(page);
+
+      await page.getByRole("button", { name: "Modus operandi", exact: true }).click();
+      await page.getByRole("button", { name: "Nuevo modus operandi" }).click();
+      await expectRightDrawer(page, "Nuevo modus operandi");
+      await closeWithButton(page);
+
+      await page.getByRole("button", { name: "Red flags", exact: true }).click();
+      await page.getByRole("button", { name: "Nueva flag" }).click();
+      await expectRightDrawer(page, "Nueva flag");
+      await closeWithButton(page);
+
+      await page.getByRole("button", { name: "Casos similares", exact: true }).click();
+      await page.getByRole("button", { name: "Nuevo caso", exact: true }).click();
+      await expectRightDrawer(page, "Nuevo caso similar");
+      await closeWithButton(page);
+
+      await page.getByRole("button", { name: "Modus operandi", exact: true }).click();
+      await page
+        .getByRole("row")
+        .filter({ hasText: modusOperandi.title })
+        .getByRole("button", { name: `Playbook de ${modusOperandi.title}` })
+        .click();
+      await expectRightDrawer(page, "Playbook");
+      await closeWithButton(page);
+    } finally {
+      if (taxonomyId) {
+        await request.delete(`/api/v0/library/taxonomies/${encodeURIComponent(taxonomyId)}`, {
           headers: auth,
         });
       }
