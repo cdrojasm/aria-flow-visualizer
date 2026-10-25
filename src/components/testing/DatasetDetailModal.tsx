@@ -1,13 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { DatasetSummaryTab } from "@/components/datasets/DatasetSummaryTab";
 
 /* ─── Dataset detail, read-only picker context (Phase 1 of
@@ -30,23 +24,24 @@ export function DatasetDetailModal({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Dataset: {datasetName}</DialogTitle>
-          <DialogDescription className="flex items-center justify-between gap-3">
-            <span>Totales y distribución de campos del dataset seleccionado.</span>
-            <Link
-              to="/biblioteca"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline shrink-0"
-            >
-              Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
-            </Link>
-          </DialogDescription>
-        </DialogHeader>
-
-        {datasetName && <DatasetSummaryTab datasetName={datasetName} />}
-      </DialogContent>
-    </Dialog>
+    <SideDrawer
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      size="lg"
+      title={<>Dataset: {datasetName}</>}
+      description={
+        <>
+          <span>Totales y distribución de campos del dataset seleccionado.</span>
+          <Link
+            to="/biblioteca"
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline shrink-0"
+          >
+            Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
+          </Link>
+        </>
+      }
+    >
+      {datasetName && <DatasetSummaryTab datasetName={datasetName} />}
+    </SideDrawer>
   );
 }

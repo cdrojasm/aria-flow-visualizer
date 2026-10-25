@@ -164,8 +164,10 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
   try {
     await useToken(page, release.access_token);
     await page.goto("/testing?configurationId=e2e-simulation");
-    // The launch UI is rendered as an inline side panel, not an ARIA dialog.
-    await expect(page.getByRole("heading", { name: "Nueva prueba" })).toBeVisible();
+    // The launch UI is the shared right-hand SideDrawer (an ARIA dialog).
+    await expect(
+      page.getByRole("dialog").getByRole("heading", { name: "Nueva prueba" }),
+    ).toBeVisible();
     await page.getByRole("tab", { name: "Generador" }).click();
     await page.getByPlaceholder("Ej: Pico de fraude BreB fin de mes").fill(`E06 dataset ${unique}`);
     await page

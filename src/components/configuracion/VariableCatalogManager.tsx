@@ -3,15 +3,16 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   createVariable,
@@ -109,15 +110,19 @@ export function VariableCatalogManager({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Gestionar variables de origen</DialogTitle>
-          <DialogDescription>
-            Campos recibidos en la alerta. Las variables derivadas se crean en Enriquecimiento de la data.
-          </DialogDescription>
-        </DialogHeader>
-
+    <>
+      <SideDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        size="md"
+        title="Gestionar variables de origen"
+        description={
+          <>
+            Campos recibidos en la alerta. Las variables derivadas se crean en Enriquecimiento de la
+            data.
+          </>
+        }
+      >
         <div className="flex items-center gap-2">
           <Input
             value={newValue}
@@ -157,14 +162,17 @@ export function VariableCatalogManager({
             <TableBody>
               {variables.map((v) => (
                 <TableRow key={v.id}>
-                  <TableCell className={`text-[13px] ${v.active ? "" : "text-text-secondary line-through"}`}>
+                  <TableCell
+                    className={`text-[13px] ${v.active ? "" : "text-text-secondary line-through"}`}
+                  >
                     {v.value}
                   </TableCell>
                   <TableCell>
                     <input
                       defaultValue={v.description}
                       onBlur={(e) => {
-                        if (e.target.value !== v.description) handleDescriptionChange(v, e.target.value);
+                        if (e.target.value !== v.description)
+                          handleDescriptionChange(v, e.target.value);
                       }}
                       placeholder="—"
                       className="h-8 w-full rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
@@ -192,7 +200,10 @@ export function VariableCatalogManager({
               ))}
               {!loading && variables.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-[12px] text-text-secondary py-6">
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-[12px] text-text-secondary py-6"
+                  >
                     Sin variables en el catálogo.
                   </TableCell>
                 </TableRow>
@@ -200,8 +211,7 @@ export function VariableCatalogManager({
             </TableBody>
           </Table>
         </div>
-      </DialogContent>
-
+      </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -210,6 +220,6 @@ export function VariableCatalogManager({
         pending={deletePending}
         onConfirm={() => deleting && handleDelete(deleting)}
       />
-    </Dialog>
+    </>
   );
 }

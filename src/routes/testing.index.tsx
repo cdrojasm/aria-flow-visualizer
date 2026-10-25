@@ -269,9 +269,7 @@ function TestingPage() {
         <header>
           <h1 className="text-[20px] font-semibold text-text-primary">Testing del Agente</h1>
         </header>
-        <div
-          className={`grid gap-6 items-start ${showNewRunModal ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px]" : "grid-cols-1"}`}
-        >
+        <div className="grid grid-cols-1 gap-6 items-start">
           <div className="space-y-6">
             {/* Last runs */}
             <DataTable

@@ -438,10 +438,7 @@ test("API real: gobierno del esquema y bloqueo de autoaprobación", async ({ pag
   }
 });
 
-test("API real: procesa una fila y conserva labels fuera del input", async ({
-  page,
-  request,
-}) => {
+test("API real: procesa una fila y conserva labels fuera del input", async ({ page, request }) => {
   test.skip(
     !process.env.E2E_MANAGER_EMAIL || !process.env.E2E_RELEASE_MANAGER_EMAIL,
     "Define las credenciales E2E de manager y release_manager.",
@@ -466,7 +463,8 @@ test("API real: procesa una fila y conserva labels fuera del input", async ({
     .filter({ has: page.locator(`option[value="${candidate.version}"]`) })
     .selectOption(String(candidate.version));
   await page
-    .locator("aside select")
+    .getByTestId("side-drawer")
+    .locator("select")
     .filter({ has: page.locator(`option[value="${datasetName}"]`) })
     .selectOption(datasetName);
   // This assertion covers the persisted case payload and its real workflow.

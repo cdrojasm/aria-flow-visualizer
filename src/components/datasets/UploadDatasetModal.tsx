@@ -2,18 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Progress } from "@/components/ui/progress";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Field } from "@/components/configuracion/shared/FormControls";
 import { getDatasets, uploadDataset } from "@/lib/api/datasets.functions";
 
-export function UploadDatasetModal({ open, onClose, onUploaded }: {
+export function UploadDatasetModal({
+  open,
+  onClose,
+  onUploaded,
+}: {
   open: boolean;
   onClose: () => void;
   onUploaded?: (operationId: string | null) => void;
@@ -23,9 +20,12 @@ export function UploadDatasetModal({ open, onClose, onUploaded }: {
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const datasetsQuery = useQuery({ queryKey: ["datasets"], queryFn: getDatasets, enabled: open });
   const datasetName = file?.name.replace(/\.csv$/i, "") ?? "";
-  const duplicateName = !!datasetName && (datasetsQuery.data ?? []).some(
-    (dataset) => dataset.name.localeCompare(datasetName, undefined, { sensitivity: "accent" }) === 0,
-  );
+  const duplicateName =
+    !!datasetName &&
+    (datasetsQuery.data ?? []).some(
+      (dataset) =>
+        dataset.name.localeCompare(datasetName, undefined, { sensitivity: "accent" }) === 0,
+    );
 
   const uploadMutation = useMutation({
     mutationFn: () => {
@@ -51,7 +51,7 @@ export function UploadDatasetModal({ open, onClose, onUploaded }: {
   };
 
   return (
-    <Dialog
+    <SideDrawer
       open={open}
       onOpenChange={(o) => {
         if (!o) {
@@ -59,52 +59,16 @@ export function UploadDatasetModal({ open, onClose, onUploaded }: {
           onClose();
         }
       }}
-    >
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Subir dataset (CSV)</DialogTitle>
-          <DialogDescription>
-            El nombre del dataset se toma del nombre del archivo. Falla si ya existe uno con ese
-            nombre — bórralo primero o sube con otro nombre de archivo.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Field label="Archivo CSV" hint="Solo archivos .csv.">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => {
-              uploadMutation.reset();
-              setFile(e.target.files?.[0] ?? null);
-            }}
-            className="w-full text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-border file:text-[12px] file:bg-surface"
-          />
-        </Field>
-
-        {duplicateName && (
-          <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-warning">
-            Ya existe un dataset llamado <strong>{datasetName}</strong>. Cambia el nombre del
-            archivo antes de subirlo.
-          </div>
-        )}
-
-        {uploadMutation.isError && (
-          <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
-            {(uploadMutation.error as Error).message.includes("409")
-              ? "Ese nombre de dataset ya está en uso. Renombra el archivo e inténtalo de nuevo."
-              : "No se pudo subir el dataset. Verifica el archivo e inténtalo nuevamente."}
-          </div>
-        )}
-        {uploadMutation.isPending && uploadPercent !== null && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[12px] text-text-secondary">
-              <span>Subiendo archivo…</span><span>{uploadPercent}%</span>
-            </div>
-            <Progress value={uploadPercent} />
-          </div>
-        )}
-
-        <DialogFooter>
+      size="md"
+      title="Subir dataset (CSV)"
+      description={
+        <>
+          El nombre del dataset se toma del nombre del archivo. Falla si ya existe uno con ese
+          nombre — bórralo primero o sube con otro nombre de archivo.
+        </>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={() => {
@@ -121,10 +85,50 @@ export function UploadDatasetModal({ open, onClose, onUploaded }: {
             onClick={() => uploadMutation.mutate()}
             className="px-3 py-2 rounded-md text-[13px] font-medium bg-primary text-white disabled:opacity-50"
           >
-            {uploadMutation.isPending ? (uploadPercent === 100 ? "Iniciando procesamiento…" : "Subiendo…") : "Subir dataset"}
+            {uploadMutation.isPending
+              ? uploadPercent === 100
+                ? "Iniciando procesamiento…"
+                : "Subiendo…"
+              : "Subir dataset"}
           </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <Field label="Archivo CSV" hint="Solo archivos .csv.">
+        <input
+          type="file"
+          accept=".csv"
+          onChange={(e) => {
+            uploadMutation.reset();
+            setFile(e.target.files?.[0] ?? null);
+          }}
+          className="w-full text-[13px] file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:border-border file:text-[12px] file:bg-surface"
+        />
+      </Field>
+
+      {duplicateName && (
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-warning">
+          Ya existe un dataset llamado <strong>{datasetName}</strong>. Cambia el nombre del archivo
+          antes de subirlo.
+        </div>
+      )}
+
+      {uploadMutation.isError && (
+        <div className="rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger">
+          {(uploadMutation.error as Error).message.includes("409")
+            ? "Ese nombre de dataset ya está en uso. Renombra el archivo e inténtalo de nuevo."
+            : "No se pudo subir el dataset. Verifica el archivo e inténtalo nuevamente."}
+        </div>
+      )}
+      {uploadMutation.isPending && uploadPercent !== null && (
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-[12px] text-text-secondary">
+            <span>Subiendo archivo…</span>
+            <span>{uploadPercent}%</span>
+          </div>
+          <Progress value={uploadPercent} />
+        </div>
+      )}
+    </SideDrawer>
   );
 }

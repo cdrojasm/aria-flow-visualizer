@@ -3,15 +3,16 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { RESOLUTION_TAG_LABELS, type ResolutionTag } from "@/data/configs";
 import {
@@ -113,16 +114,19 @@ export function ResolutionMethodCatalogManager({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Gestionar métodos de resolución</DialogTitle>
-          <DialogDescription>
-            Métodos que un playbook puede asignar como resolución o como respaldo. Cada uno mapea a una
-            de las vías que ARIA sabe ejecutar.
-          </DialogDescription>
-        </DialogHeader>
-
+    <>
+      <SideDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        size="md"
+        title="Gestionar métodos de resolución"
+        description={
+          <>
+            Métodos que un playbook puede asignar como resolución o como respaldo. Cada uno mapea a
+            una de las vías que ARIA sabe ejecutar.
+          </>
+        }
+      >
         <div className="flex items-center gap-2">
           <Input
             value={newValue}
@@ -166,7 +170,9 @@ export function ResolutionMethodCatalogManager({
             <TableBody>
               {methods.map((m) => (
                 <TableRow key={m.id}>
-                  <TableCell className={`text-[13px] ${m.active ? "" : "text-text-secondary line-through"}`}>
+                  <TableCell
+                    className={`text-[13px] ${m.active ? "" : "text-text-secondary line-through"}`}
+                  >
                     {m.value}
                   </TableCell>
                   <TableCell>
@@ -204,7 +210,10 @@ export function ResolutionMethodCatalogManager({
               ))}
               {!loading && methods.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-[12px] text-text-secondary py-6">
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-[12px] text-text-secondary py-6"
+                  >
                     Sin métodos de resolución.
                   </TableCell>
                 </TableRow>
@@ -212,8 +221,7 @@ export function ResolutionMethodCatalogManager({
             </TableBody>
           </Table>
         </div>
-      </DialogContent>
-
+      </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -222,6 +230,6 @@ export function ResolutionMethodCatalogManager({
         pending={deletePending}
         onConfirm={() => deleting && handleDelete(deleting)}
       />
-    </Dialog>
+    </>
   );
 }

@@ -1,19 +1,19 @@
 import { useState } from "react";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { X } from "lucide-react";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { DatasetTestForm } from "./DatasetTestForm";
 import { FormularioTestForm } from "./FormularioTestForm";
 import { GeneradorScenarioForm } from "./GeneradorScenarioForm";
 
 /* ─── New test run, three launch strategies behind one entry point ───────
-   The launch area is a side panel, not a modal. Phase C turns it into a
+   The launch area is the shared right-hand SideDrawer. Phase C turns it into a
    strategy switcher: Dataset (existing, untouched behavior, now living in
    DatasetTestForm.tsx), Formulario (a raw JSON event dispatched straight
    into the real pipeline via POST /alerts/test) and Generador (configures
    and starts a scenario via aria-api's /api/v0/scenarios).
    Each strategy owns its own form state, validation and submit action -
-   this component is just the Dialog chrome + tab switcher. */
+   this component is just the drawer chrome + tab switcher. */
 
 type LaunchStrategy = "dataset" | "formulario" | "generador";
 
@@ -32,25 +32,14 @@ export function NewTestRunPanel({
   const [strategy, setStrategy] = useState<LaunchStrategy>("dataset");
 
   return (
-    <aside className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto">
-      <div className="px-5 py-4 border-b border-border flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-[14px] font-semibold text-text-primary">Nueva prueba</h2>
-          <p className="text-[12px] text-text-secondary mt-0.5">
-            Elige cómo lanzar el pipeline de 7 pasos.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar nueva prueba"
-          className="text-text-secondary hover:text-text-primary shrink-0"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="p-5">
+    <SideDrawer
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="lg"
+      title="Nueva prueba"
+      description="Elige cómo lanzar el pipeline de 7 pasos."
+    >
+      <div data-testid="new-test-run-panel">
         <Tabs value={strategy} onValueChange={(v) => setStrategy(v as LaunchStrategy)}>
           <TabsList className="flex h-auto w-full items-center justify-start gap-1 rounded-xl border border-border bg-card p-1.5">
             <TabsTrigger
@@ -88,6 +77,6 @@ export function NewTestRunPanel({
           </TabsContent>
         </Tabs>
       </div>
-    </aside>
+    </SideDrawer>
   );
 }

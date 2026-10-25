@@ -3,14 +3,7 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRole } from "@/hooks/useRole";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import {
   getAlertFieldMapping,
   getDatasetSummary,
@@ -100,7 +93,7 @@ export function AlertFieldMappingEditor({
   const availableColumns = summaryQuery.data?.available_fields ?? [];
 
   return (
-    <Dialog
+    <SideDrawer
       open={open}
       onOpenChange={(next) => {
         if (!next) {
@@ -108,90 +101,17 @@ export function AlertFieldMappingEditor({
           onClose();
         }
       }}
-    >
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Exportar a formato externo: {datasetName}</DialogTitle>
-          <DialogDescription>
-            Define cómo los campos de la alerta canónica se traducen a columnas de este dataset al
-            exportar a un formato externo. La curación al dataset usa entrada, etiquetas y versión
-            del esquema, sin este mapeo.
-          </DialogDescription>
-        </DialogHeader>
-
-        {(mappingQuery.isLoading || summaryQuery.isLoading) && (
-          <p className="text-[13px] text-text-secondary">Cargando…</p>
-        )}
-        {(mappingQuery.isError || summaryQuery.isError) && (
-          <p className="text-[13px] text-danger">No se pudo cargar la información del dataset.</p>
-        )}
-
-        {mappingQuery.isSuccess && summaryQuery.isSuccess && (
-          <div className="space-y-2">
-            {!canEdit && (
-              <p className="rounded-md bg-surface px-3 py-2 text-[12px] text-text-secondary">
-                Solo manager y release manager pueden editar el formato de exportación. Vista de
-                solo lectura.
-              </p>
-            )}
-            {pairs.length === 0 && (
-              <p className="text-[12px] text-text-secondary">
-                Sin campos mapeados todavía. Agrega uno con el botón de abajo.
-              </p>
-            )}
-            {pairs.map((pair, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <input
-                  disabled={!canEdit}
-                  type="text"
-                  value={pair.alertField}
-                  onChange={(e) => updatePair(index, { alertField: e.target.value })}
-                  placeholder="Campo de la alerta (ej. eventId)"
-                  className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
-                />
-                <span className="text-text-secondary text-[12px]">→</span>
-                <select
-                  disabled={!canEdit}
-                  value={pair.datasetColumn}
-                  onChange={(e) => updatePair(index, { datasetColumn: e.target.value })}
-                  className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
-                >
-                  <option value="">Columna del dataset</option>
-                  {availableColumns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={!canEdit}
-                  onClick={() => removePair(index)}
-                  className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            {canEdit && (
-              <button
-                type="button"
-                onClick={addPair}
-                className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary"
-              >
-                <Plus className="h-3.5 w-3.5" /> Agregar campo
-              </button>
-            )}
-          </div>
-        )}
-
-        {saveMutation.isError && (
-          <p className="text-[12px] text-danger">
-            Error al guardar el mapeo: {(saveMutation.error as Error).message}
-          </p>
-        )}
-
-        <DialogFooter>
+      size="lg"
+      title={<>Exportar a formato externo: {datasetName}</>}
+      description={
+        <>
+          Define cómo los campos de la alerta canónica se traducen a columnas de este dataset al
+          exportar a un formato externo. La curación al dataset usa entrada, etiquetas y versión del
+          esquema, sin este mapeo.
+        </>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={onClose}
@@ -210,8 +130,80 @@ export function AlertFieldMappingEditor({
               {saveMutation.isPending ? "Guardando…" : "Guardar"}
             </button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      {(mappingQuery.isLoading || summaryQuery.isLoading) && (
+        <p className="text-[13px] text-text-secondary">Cargando…</p>
+      )}
+      {(mappingQuery.isError || summaryQuery.isError) && (
+        <p className="text-[13px] text-danger">No se pudo cargar la información del dataset.</p>
+      )}
+
+      {mappingQuery.isSuccess && summaryQuery.isSuccess && (
+        <div className="space-y-2">
+          {!canEdit && (
+            <p className="rounded-md bg-surface px-3 py-2 text-[12px] text-text-secondary">
+              Solo manager y release manager pueden editar el formato de exportación. Vista de solo
+              lectura.
+            </p>
+          )}
+          {pairs.length === 0 && (
+            <p className="text-[12px] text-text-secondary">
+              Sin campos mapeados todavía. Agrega uno con el botón de abajo.
+            </p>
+          )}
+          {pairs.map((pair, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                disabled={!canEdit}
+                type="text"
+                value={pair.alertField}
+                onChange={(e) => updatePair(index, { alertField: e.target.value })}
+                placeholder="Campo de la alerta (ej. eventId)"
+                className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
+              />
+              <span className="text-text-secondary text-[12px]">→</span>
+              <select
+                disabled={!canEdit}
+                value={pair.datasetColumn}
+                onChange={(e) => updatePair(index, { datasetColumn: e.target.value })}
+                className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
+              >
+                <option value="">Columna del dataset</option>
+                {availableColumns.map((col) => (
+                  <option key={col} value={col}>
+                    {col}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={!canEdit}
+                onClick={() => removePair(index)}
+                className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={addPair}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary"
+            >
+              <Plus className="h-3.5 w-3.5" /> Agregar campo
+            </button>
+          )}
+        </div>
+      )}
+
+      {saveMutation.isError && (
+        <p className="text-[12px] text-danger">
+          Error al guardar el mapeo: {(saveMutation.error as Error).message}
+        </p>
+      )}
+    </SideDrawer>
   );
 }

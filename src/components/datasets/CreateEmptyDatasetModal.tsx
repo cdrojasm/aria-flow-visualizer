@@ -1,14 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Field, TagInput } from "@/components/configuracion/shared/FormControls";
 import { createEmptyDataset } from "@/lib/api/datasets.functions";
 
@@ -32,7 +25,7 @@ export function CreateEmptyDatasetModal({ open, onClose }: { open: boolean; onCl
   };
 
   return (
-    <Dialog
+    <SideDrawer
       open={open}
       onOpenChange={(o) => {
         if (!o) {
@@ -40,34 +33,16 @@ export function CreateEmptyDatasetModal({ open, onClose }: { open: boolean; onCl
           onClose();
         }
       }}
-    >
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Crear dataset vacío</DialogTitle>
-          <DialogDescription>
-            Define el nombre y las columnas. Queda listo con 0 filas — agrégalas después desde
-            "Filas" en el detalle del dataset.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Field label="Nombre">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Ej: casos_revision_manual"
-            className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-          />
-        </Field>
-
-        <Field label="Columnas" hint="Escribe un nombre de columna y presiona Enter o coma.">
-          <TagInput value={fields} onChange={setFields} placeholder="Ej: id_transaccion" />
-        </Field>
-
-        {createMutation.isError && (
-          <p className="text-[12px] text-danger">{(createMutation.error as Error).message}</p>
-        )}
-
-        <DialogFooter>
+      size="md"
+      title="Crear dataset vacío"
+      description={
+        <>
+          Define el nombre y las columnas. Queda listo con 0 filas — agrégalas después desde "Filas"
+          en el detalle del dataset.
+        </>
+      }
+      footer={
+        <>
           <button
             type="button"
             onClick={() => {
@@ -86,8 +61,25 @@ export function CreateEmptyDatasetModal({ open, onClose }: { open: boolean; onCl
           >
             {createMutation.isPending ? "Creando…" : "Crear dataset"}
           </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <Field label="Nombre">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ej: casos_revision_manual"
+          className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+        />
+      </Field>
+
+      <Field label="Columnas" hint="Escribe un nombre de columna y presiona Enter o coma.">
+        <TagInput value={fields} onChange={setFields} placeholder="Ej: id_transaccion" />
+      </Field>
+
+      {createMutation.isError && (
+        <p className="text-[12px] text-danger">{(createMutation.error as Error).message}</p>
+      )}
+    </SideDrawer>
   );
 }

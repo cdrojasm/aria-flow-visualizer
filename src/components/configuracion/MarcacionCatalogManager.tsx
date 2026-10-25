@@ -2,15 +2,16 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   createMarcacionCategory,
@@ -105,16 +106,19 @@ export function MarcacionCatalogManager({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Gestionar categorías de marcación</DialogTitle>
-          <DialogDescription>
-            Razones de marcación que ARIA puede asignar cuando resuelve una alerta directamente. Cada una
-            mapea a una etiqueta de riesgo general.
-          </DialogDescription>
-        </DialogHeader>
-
+    <>
+      <SideDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        size="md"
+        title="Gestionar categorías de marcación"
+        description={
+          <>
+            Razones de marcación que ARIA puede asignar cuando resuelve una alerta directamente.
+            Cada una mapea a una etiqueta de riesgo general.
+          </>
+        }
+      >
         <div className="flex items-center gap-2">
           <Input
             value={newValue}
@@ -158,7 +162,9 @@ export function MarcacionCatalogManager({
             <TableBody>
               {categories.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className={`text-[13px] ${c.active ? "" : "text-text-secondary line-through"}`}>
+                  <TableCell
+                    className={`text-[13px] ${c.active ? "" : "text-text-secondary line-through"}`}
+                  >
                     {c.value}
                   </TableCell>
                   <TableCell>
@@ -196,7 +202,10 @@ export function MarcacionCatalogManager({
               ))}
               {!loading && categories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-[12px] text-text-secondary py-6">
+                  <TableCell
+                    colSpan={4}
+                    className="text-center text-[12px] text-text-secondary py-6"
+                  >
                     Sin categorías de marcación.
                   </TableCell>
                 </TableRow>
@@ -204,8 +213,7 @@ export function MarcacionCatalogManager({
             </TableBody>
           </Table>
         </div>
-      </DialogContent>
-
+      </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -214,6 +222,6 @@ export function MarcacionCatalogManager({
         pending={deletePending}
         onConfirm={() => deleting && handleDelete(deleting)}
       />
-    </Dialog>
+    </>
   );
 }
