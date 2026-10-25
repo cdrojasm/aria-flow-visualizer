@@ -69,30 +69,71 @@ async function expectTableBasics(page: Page, firstActionName: RegExp) {
   await page.keyboard.press("Escape");
 
   // Dragging the right edge of a header resizes the column; the width survives a reload.
-  const resizeHandle = table.getByRole("separator", { name: /Redimensionar columna/ }).first();
-  const header = resizeHandle.locator("xpath=..");
-  const widthBefore = (await header.boundingBox())!.width;
-  const handleBox = (await resizeHandle.boundingBox())!;
-  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(handleBox.x + handleBox.width / 2 + 90, handleBox.y + 4, { steps: 6 });
-  await page.mouse.up();
-  const widthAfter = (await header.boundingBox())!.width;
-  expect(widthAfter).toBeGreaterThan(widthBefore + 60);
-  await page.reload();
-  const reloaded = table.getByRole("separator", { name: /Redimensionar columna/ }).first();
-  await expect(reloaded).toBeVisible({ timeout: 30_000 });
-  const widthReloaded = (await reloaded.locator("xpath=..").boundingBox())!.width;
-  expect(Math.abs(widthReloaded - widthAfter)).toBeLessThan(4);
+  const handles = table.getByRole("separator", { name: /Redimensionar columna/ });
+  const dragHandle = async (index: number, dx: number) => {
+    const box = (await handles.nth(index).boundingBox())!;
+    const x = box.x + box.width / 2;
+    await page.mouse.move(x, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x + dx, box.y + 4, { steps: 8 });
+    await page.mouse.up();
+  };
+  const headerWidth = async (index: number) =>
+    (await handles.nth(index).locator("xpath=..").boundingBox())!.width;
 
-  // Rows per page: 20 by default, 50 and 100 available, and the pager resets to page 1.
+  const widthBefore = await headerWidth(0);
+  await dragHandle(0, 90);
+  const widthAfter = await headerWidth(0);
+  expect(widthAfter).toBeGreaterThan(widthBefore + 60);
+  // Dragging back to the left shrinks it, never below the minimum (60 px).
+  await dragHandle(0, -2000);
+  const widthMin = await headerWidth(0);
+  expect(widthMin).toBeLessThan(widthAfter - 20);
+  expect(widthMin).toBeGreaterThanOrEqual(59);
+  expect(widthMin).toBeLessThanOrEqual(64);
+  // Resizing another column leaves the first one alone.
+  const secondBefore = await headerWidth(1);
+  await dragHandle(1, 70);
+  expect(await headerWidth(1)).toBeGreaterThan(secondBefore + 40);
+  expect(Math.abs((await headerWidth(0)) - widthMin)).toBeLessThan(2);
+
+  // A hidden column and the dragged widths both survive a reload.
+  const headersBefore = await table.getByRole("columnheader").count();
+  await page.getByRole("button", { name: "Columnas" }).click();
+  await page.getByRole("menuitemcheckbox").last().click();
+  await page.keyboard.press("Escape");
+  await expect(table.getByRole("columnheader")).toHaveCount(headersBefore - 1);
+  const firstWidth = await headerWidth(0);
+  await page.reload();
+  await expect(handles.first()).toBeVisible({ timeout: 30_000 });
+  await expect(table.getByRole("columnheader")).toHaveCount(headersBefore - 1);
+  expect(Math.abs((await headerWidth(0)) - firstWidth)).toBeLessThan(4);
+
+  // Rows per page: 20 by default, 50 and 100 available; changing it returns to the
+  // first page and shows as many rows as the new size allows.
   const pageSize = page.getByRole("combobox", { name: "Filas por página" });
   await expect(pageSize).toHaveValue("20");
   expect(await pageSize.locator("option").allInnerTexts()).toEqual(["20", "50", "100"]);
-  await pageSize.selectOption("50");
-  await expect(pageSize).toHaveValue("50");
-  await expect(page.getByText(/Página 1 de|^1–/).first()).toBeVisible();
-  await pageSize.selectOption("20");
+  const summary = page.getByText(/^\d+–\d+ de \d+/).first();
+  const range = async () => {
+    const [, from, to, total] = (await summary.innerText()).match(/^(\d+)–(\d+) de (\d+)/)!;
+    return { from: Number(from), to: Number(to), total: Number(total) };
+  };
+  const total = (await range()).total;
+  expect((await range()).to).toBe(Math.min(20, total));
+  const lastPage = page.getByRole("button", { name: "Ir al final" });
+  if (await lastPage.count()) {
+    await lastPage.click();
+    expect((await range()).from).toBeGreaterThan(1);
+  }
+  for (const size of [50, 100, 20]) {
+    await pageSize.selectOption(String(size));
+    await expect(pageSize).toHaveValue(String(size));
+    const shown = await range();
+    expect(shown.from).toBe(1);
+    expect(shown.to).toBe(Math.min(size, total));
+    expect(await table.getByRole("row").count()).toBeGreaterThanOrEqual(Math.min(size, total) + 1);
+  }
 
   // Pagination has jump-to-edge controls whenever there is more than one page.
   const last = page.getByRole("button", { name: "Ir al final" });

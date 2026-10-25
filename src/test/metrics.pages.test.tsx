@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ApiMetricsWarning } from "@/lib/api/metrics.functions";
+import { MetricsNotices } from "@/components/metrics/MetricsShared";
 
 vi.mock("@/components/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <main>{children}</main>,
@@ -292,6 +294,49 @@ describe("/dashboard", () => {
     expect(within(fpCard).getByText("En maduración")).toBeInTheDocument();
     expect(await screen.findByText("En llamada con Voicebot")).toBeInTheDocument();
     expect(await screen.findByText("10")).toBeInTheDocument(); // 4 + 2 + 1 + 3 live alerts
+  });
+});
+
+describe("MetricsNotices", () => {
+  const partial: ApiMetricsWarning = {
+    code: "partial_period",
+    message: "x",
+    periods: ["2025-01", "2025-02"],
+  };
+  const schema: ApiMetricsWarning = { code: "schema_changed", message: "y", periods: [] };
+
+  it("shows a single warning in one line with the detail on demand", async () => {
+    const user = userEvent.setup();
+    render(<MetricsNotices warnings={[partial]} />);
+    const warning = screen.getByText("Datos de más de 90 días: se cuentan por mes/año completos.");
+    expect(warning).toBeInTheDocument();
+    expect(screen.queryByText(/avisos sobre este rango/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Periodos: 2025-01, 2025-02/)).not.toBeInTheDocument();
+    const box = warning.closest("[role=status]") as HTMLElement;
+    await user.click(within(box).getByRole("button", { name: "Ver más" }));
+    expect(within(box).getByText(/Periodos: 2025-01, 2025-02\./)).toBeInTheDocument();
+    await user.click(within(box).getByRole("button", { name: "Ver menos" }));
+    expect(within(box).queryByText(/Periodos:/)).not.toBeInTheDocument();
+  });
+
+  it("groups several warnings in one box that expands to the full list", async () => {
+    const user = userEvent.setup();
+    render(<MetricsNotices warnings={[partial, schema]} />);
+    expect(screen.getByText("2 avisos sobre este rango")).toBeInTheDocument();
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+    const box = screen
+      .getByText("2 avisos sobre este rango")
+      .closest("[role=status]") as HTMLElement;
+    await user.click(within(box).getByRole("button", { name: "Ver más" }));
+    expect(within(box).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(box).getByText(/Periodos: 2025-01, 2025-02\./)).toBeInTheDocument();
+  });
+
+  it("renders nothing for the warnings when there are none", () => {
+    render(<MetricsNotices warnings={[]} />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByText("Sólo medidas acumulativas sobre el periodo")).toBeInTheDocument();
   });
 });
 

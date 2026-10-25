@@ -106,6 +106,9 @@ for (const roleCase of roleCases) {
     await expect(sidebar).toHaveClass(/w-\[220px\]/);
     await sidebar.getByRole("button").first().click();
     await expect(sidebar).toHaveClass(/w-14/);
+    // Collapsed: icon-only links (the label moves to the tooltip) and no brand text.
+    await expect(sidebar.getByText("ARIA", { exact: true })).toHaveCount(0);
+    await expect(sidebar.getByRole("link").first()).toHaveAttribute("title", /.+/);
     await page.reload();
     await expect(page.locator("aside").first()).toHaveClass(/w-14/);
     await page.locator("aside").first().getByRole("button").first().click();

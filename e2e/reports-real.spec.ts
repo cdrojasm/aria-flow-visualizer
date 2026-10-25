@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -181,6 +181,14 @@ test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }
 
 // "Rango personalizado" is shared by Dashboard and Monitor: pick whole days in the
 // calendar, apply, and check that the reads and the exported report follow that range.
+async function pickCalendarDay(page: Page, iso: string) {
+  const cell = page.locator(`td[data-day="${iso}"] button`);
+  // The calendar opens on the current month; walk back until the day is on screen.
+  for (let i = 0; i < 40 && (await cell.count()) === 0; i += 1)
+    await page.getByRole("button", { name: "Go to the Previous Month" }).click();
+  await cell.click();
+}
+
 for (const route of ["/dashboard", "/monitor"] as const) {
   test(`E10 rango personalizado en ${route}: valida, aplica y se refleja en lecturas y reporte`, async ({
     page,
@@ -206,11 +214,7 @@ for (const route of ["/dashboard", "/monitor"] as const) {
       return { from: iso(-2), to: iso(-1), end: iso(0), tomorrow: iso(1) };
     });
     const day = (iso: string) => page.locator(`td[data-day="${iso}"] button`);
-    const pickDay = async (iso: string) => {
-      for (let i = 0; i < 2 && (await day(iso).count()) === 0; i += 1)
-        await page.getByRole("button", { name: "Go to the Previous Month" }).click();
-      await day(iso).click();
-    };
+    const pickDay = (iso: string) => pickCalendarDay(page, iso);
 
     await page.getByRole("button", { name: "Rango personalizado" }).click();
     const apply = page.getByRole("button", { name: "Aplicar" });
@@ -262,21 +266,33 @@ for (const route of ["/dashboard", "/monitor"] as const) {
       expect(filteredMetrics.range.from).toBe(metrics.range.from);
     }
     if (route === "/monitor") {
-      // Channel options are the values observed in the range; pick the first real one.
-      await page.getByRole("combobox", { name: "Canal", exact: true }).click();
-      const channel = page
-        .getByRole("option")
-        .filter({ hasNotText: /^Todos/ })
-        .first();
-      test.skip((await channel.count()) === 0, "No hay canales observados en el rango.");
-      const channelName = ((await channel.textContent()) ?? "").trim();
+      // Channel options are the values observed in the range and segment options come
+      // from the Biblioteca catalog; one of the two must offer a real value to filter by.
+      let choice: { dimension: "channel" | "segment"; label: string; name: string } | undefined;
+      for (const [dimension, label] of [
+        ["channel", "Canal"],
+        ["segment", "Segmento"],
+      ] as const) {
+        await page.getByRole("combobox", { name: label, exact: true }).click();
+        const option = page
+          .getByRole("option")
+          .filter({ hasNotText: /^Todos/ })
+          .first();
+        if ((await option.count()) > 0) {
+          choice = { dimension, label, name: ((await option.textContent()) ?? "").trim() };
+          break;
+        }
+        await page.keyboard.press("Escape");
+      }
+      expect(choice, "ni Canal ni Segmento ofrecen un valor para filtrar el reporte").toBeTruthy();
+      const channelName = choice!.name;
       const filtered = page.waitForResponse(
         (response) =>
           response.url().includes("/api/v0/metrics/agent") &&
           decodeURIComponent(response.url()).includes(channelName) &&
           response.ok(),
       );
-      await channel.click();
+      await page.getByRole("option", { name: channelName, exact: true }).click();
       await filtered;
       await expect(exportButton).toBeEnabled();
       channelFilter = channelName;
@@ -288,7 +304,7 @@ for (const route of ["/dashboard", "/monitor"] as const) {
     expect(csv).toContain(metrics.range.from);
     expect(csv).toContain(metrics.range.to);
     if (route === "/dashboard") expect(csv).toMatch(/FILTROS APLICADOS\s+status,?"?CLOSED/);
-    else expect(csv).toMatch(/FILTROS APLICADOS\s+channel,?"?/);
+    else expect(csv).toMatch(/FILTROS APLICADOS\s+(channel|segment),?"?/);
     if (route === "/monitor") expect(csv).toContain(channelFilter!);
 
     // Picking a preset leaves the custom range.
@@ -311,4 +327,81 @@ test("E10 rango personalizado: la API rechaza rangos inválidos y devuelve vací
   const empty = await read("2025-01-01T00:00:00", "2025-01-02T00:00:00");
   expect(empty.ok()).toBeTruthy();
   expect(((await empty.json()) as { totals: { alerts: number } }).totals.alerts).toBe(0);
+});
+
+test("E10 rango personalizado: cancelar no cambia el rango ni dispara lecturas", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (value: string) => localStorage.setItem("aria.auth.accessToken", value),
+    accessToken,
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByRole("button", { name: "Exportar reporte" })).toBeEnabled({
+    timeout: 30_000,
+  });
+  const customReads: string[] = [];
+  page.on("request", (request) => {
+    const from = new URL(request.url()).searchParams.get("from") ?? "";
+    if (request.url().includes("/api/v0/metrics/overview") && from.endsWith("T00:00:00"))
+      customReads.push(from);
+  });
+  await page.getByRole("button", { name: "Rango personalizado" }).click();
+  await pickCalendarDay(page, "2025-01-10");
+  await page.getByRole("button", { name: "Cancelar" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Rango personalizado" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Último día" })).toBeVisible();
+  expect(customReads).toEqual([]);
+});
+
+test("E10 rango personalizado antiguo que cruza de mes: aviso de periodo parcial y reporte vacío", async ({
+  page,
+}) => {
+  await page.addInitScript(
+    (value: string) => localStorage.setItem("aria.auth.accessToken", value),
+    accessToken,
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByRole("button", { name: "Exportar reporte" })).toBeEnabled({
+    timeout: 30_000,
+  });
+  await page.getByRole("button", { name: "Rango personalizado" }).click();
+  await pickCalendarDay(page, "2025-01-30");
+  await pickCalendarDay(page, "2025-02-02");
+
+  const response = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/v0/metrics/overview") &&
+      r.url().includes("2025-01-30T00%3A00%3A00") &&
+      r.ok(),
+  );
+  await page.getByRole("button", { name: "Aplicar" }).click();
+  const metrics = (await (await response).json()) as {
+    range: { from: string; to: string };
+    totals: { alerts: number };
+    warnings: { code: string; periods: string[] }[];
+  };
+  // Crosses January and February; whole days up to the 3rd 00:00.
+  expect(metrics.range.from).toMatch(/^2025-01-30T00:00:00/);
+  expect(metrics.range.to).toMatch(/^2025-02-03T00:00:00/);
+  expect(metrics.totals.alerts).toBe(0);
+  expect(metrics.warnings.map((w) => w.code)).toContain("partial_period");
+
+  // An empty range is a normal screen: the warning in short form, the detail on demand,
+  // and no load error.
+  await expect(page.getByText(/No se pudieron cargar/)).toHaveCount(0);
+  const warning = page.getByRole("status").filter({ hasText: "Datos de más de 90 días" });
+  await expect(warning).toBeVisible();
+  await expect(page.getByText(/Los periodos? más antiguos?|más de 90 días atrás/)).toHaveCount(0);
+  await warning.getByRole("button", { name: "Ver más" }).click();
+  await expect(warning).toContainText("Periodos:");
+  await warning.getByRole("button", { name: "Ver menos" }).click();
+  await expect(warning).not.toContainText("Periodos:");
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar reporte" }).click();
+  const csv = (await readFile((await (await download).path())!, "utf8")).replace("\uFEFF", "");
+  expect(csv).toContain(metrics.range.from);
+  expect(csv).toContain(metrics.range.to);
 });

@@ -6,12 +6,22 @@ import { expect, test, type Page } from "@playwright/test";
 // The monitor splits its indicators in tabs; each one owns its own content.
 async function expectMonitorTabs(page: Page) {
   const tabs = [
-    { name: "Indicadores generales", content: /Errores de ejecución|Fraude no detectado/i },
-    { name: "Indicadores de área", content: /Procesado por ARIA/i },
-    { name: "Analistas y otros canales", content: /Analistas/ },
-    { name: "Explicabilidad", content: /Alucinaciones/ },
-    { name: "Indicadores técnicos", content: /Pasos del workflow/ },
-    { name: "% Recomendaciones", content: /sin datos|Aceptadas|Ignoradas/i },
+    {
+      name: "Indicadores generales",
+      content: ["Fraude no detectado", "Falsos positivos", "Errores LLM"],
+    },
+    { name: "Indicadores de área", content: ["Procesado por ARIA", "Latencia LLM media"] },
+    { name: "Analistas y otros canales", content: ["Procesado por analistas"] },
+    { name: "Explicabilidad", content: ["Alucinaciones", "Uso correcto de datos"] },
+    {
+      name: "Indicadores técnicos",
+      content: [
+        "Pasos del workflow",
+        "Llamadas LLM por modelo",
+        "Investigación delegada por fuente",
+      ],
+    },
+    { name: "% Recomendaciones", content: ["% Recomendaciones"] },
   ];
   await expect(page.getByRole("tab")).toHaveCount(tabs.length);
   // Opens on the first tab (nothing stored yet) and shows one tab's content at a time.
@@ -26,15 +36,68 @@ async function expectMonitorTabs(page: Page) {
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("tabpanel").getByText(tab.content).first()).toBeVisible();
+    await expect(page.getByRole("tabpanel")).toHaveCount(1);
+    for (const text of tab.content)
+      await expect(
+        page.getByRole("tabpanel").getByText(text, { exact: false }).first(),
+      ).toBeVisible();
+    // The other tabs' content is not on screen.
+    for (const other of tabs.filter((t) => t.name !== tab.name))
+      for (const text of other.content.filter((t) => !tab.content.includes(t)))
+        await expect(page.getByRole("tabpanel").getByText(text, { exact: true })).toHaveCount(0);
     // Voicebot and Bidi are disabled for now: no section for them in any tab.
     await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);
     // The scope note and range warnings stay above the tabs whichever one is open.
     await expect(page.getByText("Sólo medidas acumulativas sobre el periodo")).toBeVisible();
   }
+
+  // Arrow keys move between tabs.
+  await page.getByRole("tab", { name: tabs[0].name }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: tabs[1].name })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: tabs[0].name })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+
+  // Changing the range keeps the open tab and refreshes its data.
+  await page.getByRole("tab", { name: "Indicadores técnicos" }).click();
+  const week = page.waitForResponse(
+    (response) => response.url().includes("/api/v0/metrics/technical") && response.ok(),
+  );
+  await page.getByRole("button", { name: "Semana" }).click();
+  await week;
+  await expect(page.getByRole("tab", { name: "Indicadores técnicos" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("heading", { name: "Pasos del workflow" })).toBeVisible();
+
+  // The report exports from any tab, not only the first one.
+  await expect(page.getByRole("button", { name: "Exportar reporte" })).toBeEnabled();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Exportar reporte" }).click();
+  expect((await download).suggestedFilename()).toMatch(/^reporte-monitor-.*\.csv$/);
+
+  // At tablet width the tab list wraps inside its container instead of overflowing it
+  // (the app's fixed sidebar means phone widths are out of scope for the whole layout).
+  await page.setViewportSize({ width: 800, height: 800 });
+  const listBox = (await page.getByRole("tablist").boundingBox())!;
+  for (const tab of tabs) {
+    const box = await page.getByRole("tab", { name: tab.name }).boundingBox();
+    expect(box, tab.name).toBeTruthy();
+    expect(box!.x + box!.width, tab.name).toBeLessThanOrEqual(listBox.x + listBox.width + 1);
+    expect(box!.x + box!.width, tab.name).toBeLessThanOrEqual(800);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+
   // The last tab survives a reload.
   await page.reload({ waitUntil: "networkidle" });
-  await expect(page.getByRole("tab", { name: tabs[5].name })).toHaveAttribute(
+  await expect(page.getByRole("tab", { name: "Indicadores técnicos" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
