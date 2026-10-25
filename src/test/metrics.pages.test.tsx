@@ -296,17 +296,55 @@ describe("/dashboard", () => {
 });
 
 describe("/monitor", () => {
-  it("shows 'sin datos' for LLM-judge rates with no evaluations and the recommendations reason", async () => {
+  it("splits the page in tabs and keeps each section's data in its own tab", async () => {
     permissions = ["monitor"];
+    const user = userEvent.setup();
     renderPage(MonitorRoute.options.component as ComponentType);
-    expect(
-      await screen.findByText(/Las recomendaciones aún no se registran por alerta/),
-    ).toBeInTheDocument();
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "Indicadores generales",
+      "Indicadores de área",
+      "Analistas y otros canales",
+      "Explicabilidad",
+      "Indicadores técnicos",
+      "% Recomendaciones",
+    ]);
+    // Only the first tab is open; Voicebot and Bidi are disabled everywhere.
+    expect(screen.getByRole("tab", { name: "Indicadores generales" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText("Fraude no detectado")).toBeInTheDocument();
+    expect(screen.queryByText("classification")).not.toBeInTheDocument();
+    expect(screen.queryByText("Voicebot")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Explicabilidad" }));
     const hallucinations = screen.getByText("Alucinaciones").parentElement as HTMLElement;
     await waitFor(() => expect(within(hallucinations).getByText("sin datos")).toBeInTheDocument());
     const dataUse = screen.getByText("Uso correcto de datos").parentElement as HTMLElement;
     expect(within(dataUse).getByText("sin datos")).toBeInTheDocument();
-    expect(screen.getByText("classification")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Indicadores técnicos" }));
+    expect(await screen.findByText("classification")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "% Recomendaciones" }));
+    expect(
+      await screen.findByText(/Las recomendaciones aún no se registran por alerta/),
+    ).toBeInTheDocument();
+  });
+
+  it("remembers the last tab and ignores an unknown stored value", async () => {
+    permissions = ["monitor"];
+    localStorage.setItem("aria.monitor.tab", "tecnicos");
+    const view = renderPage(MonitorRoute.options.component as ComponentType);
+    expect(await screen.findByText("classification")).toBeInTheDocument();
+    view.unmount();
+    localStorage.setItem("aria.monitor.tab", "no-existe");
+    renderPage(MonitorRoute.options.component as ComponentType);
+    expect(
+      await screen.findByRole("tab", { name: "Indicadores generales", selected: true }),
+    ).toBeInTheDocument();
+    localStorage.removeItem("aria.monitor.tab");
   });
 });
 

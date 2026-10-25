@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import {
@@ -63,6 +64,27 @@ export const Route = createFileRoute("/monitor")({
 
 // Above this share of failed steps / LLM errors in the range the agent is
 // flagged as degraded (derived from the range's sums, not a live probe).
+const MONITOR_TABS = [
+  { value: "general", label: "Indicadores generales" },
+  { value: "area", label: "Indicadores de área" },
+  { value: "analistas", label: "Analistas y otros canales" },
+  { value: "explicabilidad", label: "Explicabilidad" },
+  { value: "tecnicos", label: "Indicadores técnicos" },
+  { value: "recomendaciones", label: "% Recomendaciones" },
+] as const;
+type MonitorTab = (typeof MONITOR_TABS)[number]["value"];
+const MONITOR_TAB_KEY = "aria.monitor.tab";
+
+// Last tab the user looked at; falls back to the first one (private window, unknown value).
+function readMonitorTab(): MonitorTab {
+  try {
+    const saved = localStorage.getItem(MONITOR_TAB_KEY);
+    return MONITOR_TABS.find((t) => t.value === saved)?.value ?? "general";
+  } catch {
+    return "general";
+  }
+}
+
 const DEGRADED_THRESHOLD = 0.05;
 
 // Voicebot and Bidi are not in operation yet: their sections stay defined but hidden.
@@ -92,6 +114,15 @@ function mergeWarnings(...lists: (ApiMetricsWarning[] | undefined)[]): ApiMetric
 function MonitorPage() {
   const { user } = useRole();
   const [range, setRange] = useState<RangeState>(() => initialRange());
+  const [tab, setTab] = useState<MonitorTab>(readMonitorTab);
+  const changeTab = (value: string) => {
+    setTab(value as MonitorTab);
+    try {
+      localStorage.setItem(MONITOR_TAB_KEY, value);
+    } catch {
+      // Private window: the choice only lasts for this visit.
+    }
+  };
   const [filters, setFilters] = useState<FilterSelection>({});
   const query = toMetricsQuery({ from: range.from, to: range.to }, filters);
   const key = [{ from: range.from, to: range.to }, query.filters];
@@ -141,6 +172,52 @@ function MonitorPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const renderMethods = (include: (method: ApiResolutionMethod) => boolean) =>
+    METHOD_SECTIONS.filter(({ method }) => include(method)).map(({ method, title, icon }) => (
+      <MethodSection
+        key={method}
+        title={title}
+        icon={icon}
+        stats={methodStats(method)}
+        total={agent?.totals.alerts ?? 0}
+      >
+        {method === "aria" && (
+          <>
+            <KpiCard
+              label="Latencia LLM media"
+              value={
+                llm
+                  ? formatDuration(averageSeconds(llm.latency.sum_seconds, llm.latency.count))
+                  : "—"
+              }
+              tone="warning"
+              detail={llm ? `${formatCount(llm.latency.count)} llamadas medidas` : ""}
+              icon={<Zap className="h-4 w-4" />}
+            />
+            <KpiCard
+              label="Tokens por llamada"
+              value={
+                llm
+                  ? (() => {
+                      const r = ratio(llm.input_tokens + llm.output_tokens, llm.calls);
+                      return r === null ? NO_DATA : formatCount(r);
+                    })()
+                  : "—"
+              }
+              unit="tok"
+              tone="primary"
+              detail={
+                llm
+                  ? `${formatCount(llm.input_tokens)} entrada · ${formatCount(llm.output_tokens)} salida`
+                  : ""
+              }
+              icon={<Brain className="h-4 w-4" />}
+            />
+          </>
+        )}
+      </MethodSection>
+    ));
 
   return (
     <DashboardLayout>
@@ -201,229 +278,205 @@ function MonitorPage() {
             <LoadingOverlay label="Calculando indicadores para el rango seleccionado…" />
           )}
 
-          <section className="space-y-4">
-            <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">
-              Indicadores operativos
-            </h2>
-            <div className="space-y-3">
-              <h3 className="text-[11px] font-semibold text-text-secondary uppercase tracking-wide">
-                General
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <KpiCard
-                  label="Fraude no detectado"
-                  value={q ? formatPct(undetectedFraudRate(q)) : "—"}
-                  tone="danger"
-                  detail={
-                    q
-                      ? `${formatCount(q.undetected_fraud)} de ${formatCount(q.decided)} decididas`
-                      : ""
-                  }
-                  icon={<ShieldAlert className="h-4 w-4" />}
-                  badge={<MaturationBadge maturation={maturation} />}
-                />
-                <KpiCard
-                  label="Falsos positivos"
-                  value={q ? formatPct(falsePositiveRate(q)) : "—"}
-                  tone="warning"
-                  detail={
-                    q
-                      ? `${formatCount(q.false_positives)} de ${formatCount(q.decided)} decididas`
-                      : ""
-                  }
-                  icon={<AlertTriangle className="h-4 w-4" />}
-                  badge={<MaturationBadge maturation={maturation} />}
-                />
-                <KpiCard
-                  label="Errores de ejecución"
-                  value={steps ? formatPct(stepFailRate) : "—"}
-                  tone="danger"
-                  detail={
-                    steps
-                      ? `${formatCount(steps.failed)} pasos fallidos de ${formatCount(steps.executions)} · ${formatCount(steps.retries)} reintentos`
-                      : ""
-                  }
-                  icon={<AlertTriangle className="h-4 w-4" />}
-                />
-                <KpiCard
-                  label="Errores LLM"
-                  value={llm ? formatPct(llmErrorRate) : "—"}
-                  tone="danger"
-                  detail={
-                    llm ? `${formatCount(llm.errors)} de ${formatCount(llm.calls)} llamadas` : ""
-                  }
-                  icon={<Cpu className="h-4 w-4" />}
-                />
-                <KpiCard
-                  label="Disponibilidad"
-                  value={NO_DATA}
-                  tone="muted"
-                  detail="Aún no hay una fuente de disponibilidad (uptime) conectada."
-                  icon={<CheckCircle2 className="h-4 w-4" />}
-                />
-              </div>
-            </div>
+          <Tabs value={tab} onValueChange={changeTab} className="space-y-4">
+            <TabsList
+              aria-label="Secciones del monitor"
+              className="h-auto flex-wrap justify-start gap-1"
+            >
+              {MONITOR_TABS.map((t) => (
+                <TabsTrigger key={t.value} value={t.value} className="text-[12px]">
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
 
-            {METHOD_SECTIONS.map(({ method, title, icon }) => (
-              <MethodSection
-                key={method}
-                title={title}
-                icon={icon}
-                stats={methodStats(method)}
-                total={agent?.totals.alerts ?? 0}
-              >
-                {method === "aria" && (
-                  <>
-                    <KpiCard
-                      label="Latencia LLM media"
-                      value={
-                        llm
-                          ? formatDuration(
-                              averageSeconds(llm.latency.sum_seconds, llm.latency.count),
-                            )
-                          : "—"
-                      }
-                      tone="warning"
-                      detail={llm ? `${formatCount(llm.latency.count)} llamadas medidas` : ""}
-                      icon={<Zap className="h-4 w-4" />}
-                    />
-                    <KpiCard
-                      label="Tokens por llamada"
-                      value={
-                        llm
-                          ? (() => {
-                              const r = ratio(llm.input_tokens + llm.output_tokens, llm.calls);
-                              return r === null ? NO_DATA : formatCount(r);
-                            })()
-                          : "—"
-                      }
-                      unit="tok"
-                      tone="primary"
-                      detail={
-                        llm
-                          ? `${formatCount(llm.input_tokens)} entrada · ${formatCount(llm.output_tokens)} salida`
-                          : ""
-                      }
-                      icon={<Brain className="h-4 w-4" />}
-                    />
-                  </>
-                )}
-              </MethodSection>
-            ))}
-
-            <div className={`${CARD} p-5`}>
-              <div className="flex items-center gap-2 mb-4">
-                <Brain className="h-4 w-4 text-primary" />
-                <h3 className="text-[13px] font-semibold text-text-primary">Explicabilidad</h3>
-                {evals && (
-                  <span className="text-[11px] text-text-secondary">
-                    · {formatCount(evals.evaluated)} decisiones evaluadas por muestreo (LLM-judge)
-                    {evals.invalid > 0
-                      ? ` · ${formatCount(evals.invalid)} evaluaciones inválidas`
-                      : ""}
-                  </span>
-                )}
+            <TabsContent value="general" className="space-y-4">
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <KpiCard
+                    label="Fraude no detectado"
+                    value={q ? formatPct(undetectedFraudRate(q)) : "—"}
+                    tone="danger"
+                    detail={
+                      q
+                        ? `${formatCount(q.undetected_fraud)} de ${formatCount(q.decided)} decididas`
+                        : ""
+                    }
+                    icon={<ShieldAlert className="h-4 w-4" />}
+                    badge={<MaturationBadge maturation={maturation} />}
+                  />
+                  <KpiCard
+                    label="Falsos positivos"
+                    value={q ? formatPct(falsePositiveRate(q)) : "—"}
+                    tone="warning"
+                    detail={
+                      q
+                        ? `${formatCount(q.false_positives)} de ${formatCount(q.decided)} decididas`
+                        : ""
+                    }
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                    badge={<MaturationBadge maturation={maturation} />}
+                  />
+                  <KpiCard
+                    label="Errores de ejecución"
+                    value={steps ? formatPct(stepFailRate) : "—"}
+                    tone="danger"
+                    detail={
+                      steps
+                        ? `${formatCount(steps.failed)} pasos fallidos de ${formatCount(steps.executions)} · ${formatCount(steps.retries)} reintentos`
+                        : ""
+                    }
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                  />
+                  <KpiCard
+                    label="Errores LLM"
+                    value={llm ? formatPct(llmErrorRate) : "—"}
+                    tone="danger"
+                    detail={
+                      llm ? `${formatCount(llm.errors)} de ${formatCount(llm.calls)} llamadas` : ""
+                    }
+                    icon={<Cpu className="h-4 w-4" />}
+                  />
+                  <KpiCard
+                    label="Disponibilidad"
+                    value={NO_DATA}
+                    tone="muted"
+                    detail="Aún no hay una fuente de disponibilidad (uptime) conectada."
+                    icon={<CheckCircle2 className="h-4 w-4" />}
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <ExplainCard
-                  label="Alucinaciones"
-                  value={evals ? formatPct(ratio(evals.hallucinations, evals.evaluated)) : "—"}
-                  description="Decisiones evaluadas cuyo razonamiento afirma hechos que no están en los datos de la alerta."
-                  tone={
-                    evals && (ratio(evals.hallucinations, evals.evaluated) ?? 0) > 0.01
-                      ? "warning"
-                      : "primary"
-                  }
-                />
-                <ExplainCard
-                  label="Uso correcto de datos"
-                  value={evals ? formatPct(ratio(evals.data_use_correct, evals.evaluated)) : "—"}
-                  description="Decisiones evaluadas donde el agente citó y aplicó correctamente los datos disponibles."
-                  tone={
-                    evals && (ratio(evals.data_use_correct, evals.evaluated) ?? 1) < 0.95
-                      ? "warning"
-                      : "primary"
-                  }
-                />
-              </div>
-            </div>
-          </section>
+            </TabsContent>
 
-          <section className="space-y-4">
-            <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">
-              Indicadores técnicos
-            </h2>
-            <TechTable
-              title="Pasos del workflow"
-              icon={<Cpu className="h-4 w-4 text-primary" />}
-              head={["Paso", "Ejecuciones", "Fallidos", "% fallo", "Reintentos", "Duración media"]}
-              rows={(tech?.workflow_steps_by_step ?? []).map((s) => [
-                s.step_name,
-                formatCount(s.executions),
-                formatCount(s.failed),
-                formatPct(ratio(s.failed, s.executions)),
-                formatCount(s.retries),
-                formatDuration(averageSeconds(s.duration.sum_seconds, s.duration.count)),
-              ])}
-            />
-            <TechTable
-              title="Llamadas LLM por modelo"
-              icon={<Brain className="h-4 w-4 text-primary" />}
-              head={[
-                "Modelo",
-                "Llamadas",
-                "Errores",
-                "% error",
-                "Tokens entrada",
-                "Tokens salida",
-                "Latencia media",
-              ]}
-              rows={(tech?.llm_calls_by_model ?? []).map((m) => [
-                m.model,
-                formatCount(m.calls),
-                formatCount(m.errors),
-                formatPct(ratio(m.errors, m.calls)),
-                formatCount(m.input_tokens),
-                formatCount(m.output_tokens),
-                formatDuration(averageSeconds(m.latency.sum_seconds, m.latency.count)),
-              ])}
-            />
-            <TechTable
-              title="Investigación delegada por fuente"
-              icon={<Search className="h-4 w-4 text-primary" />}
-              head={["Fuente", "Llamadas", "OK", "Fallidas", "Timeout", "% OK"]}
-              rows={(tech?.research_calls_by_source ?? []).map((r) => [
-                r.source,
-                formatCount(r.calls),
-                formatCount(r.ok),
-                formatCount(r.failed),
-                formatCount(r.timeout),
-                formatPct(ratio(r.ok, r.calls)),
-              ])}
-            />
-          </section>
+            <TabsContent value="area" className="space-y-4">
+              {renderMethods((m) => m === "aria")}
+            </TabsContent>
 
-          <section className={`${CARD} p-5`}>
-            <div className="flex items-center gap-2 mb-5">
-              <CheckCircle2 className="h-4 w-4 text-primary" />
-              <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">
-                % Recomendaciones
-              </h2>
-            </div>
-            {!agent ? (
-              <p className="text-[12px] text-text-secondary">—</p>
-            ) : !agent.recommendations.available ? (
-              <div className="rounded-lg border border-border bg-surface px-4 py-3 text-[12px] text-text-secondary">
-                <span className="font-semibold text-text-primary">{NO_DATA}.</span>{" "}
-                {agent.recommendations.reason}
+            <TabsContent value="analistas" className="space-y-4">
+              {renderMethods((m) => m !== "aria")}
+            </TabsContent>
+
+            <TabsContent value="explicabilidad">
+              <div className={`${CARD} p-5`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <Brain className="h-4 w-4 text-primary" />
+                  <h3 className="text-[13px] font-semibold text-text-primary">Explicabilidad</h3>
+                  {evals && (
+                    <span className="text-[11px] text-text-secondary">
+                      · {formatCount(evals.evaluated)} decisiones evaluadas por muestreo (LLM-judge)
+                      {evals.invalid > 0
+                        ? ` · ${formatCount(evals.invalid)} evaluaciones inválidas`
+                        : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ExplainCard
+                    label="Alucinaciones"
+                    value={evals ? formatPct(ratio(evals.hallucinations, evals.evaluated)) : "—"}
+                    description="Decisiones evaluadas cuyo razonamiento afirma hechos que no están en los datos de la alerta."
+                    tone={
+                      evals && (ratio(evals.hallucinations, evals.evaluated) ?? 0) > 0.01
+                        ? "warning"
+                        : "primary"
+                    }
+                  />
+                  <ExplainCard
+                    label="Uso correcto de datos"
+                    value={evals ? formatPct(ratio(evals.data_use_correct, evals.evaluated)) : "—"}
+                    description="Decisiones evaluadas donde el agente citó y aplicó correctamente los datos disponibles."
+                    tone={
+                      evals && (ratio(evals.data_use_correct, evals.evaluated) ?? 1) < 0.95
+                        ? "warning"
+                        : "primary"
+                    }
+                  />
+                </div>
               </div>
-            ) : (
-              <RecommendationBars
-                accepted={agent.recommendations.accepted ?? 0}
-                ignored={agent.recommendations.ignored ?? 0}
+            </TabsContent>
+
+            <TabsContent value="tecnicos" className="space-y-4">
+              <TechTable
+                title="Pasos del workflow"
+                icon={<Cpu className="h-4 w-4 text-primary" />}
+                head={[
+                  "Paso",
+                  "Ejecuciones",
+                  "Fallidos",
+                  "% fallo",
+                  "Reintentos",
+                  "Duración media",
+                ]}
+                rows={(tech?.workflow_steps_by_step ?? []).map((s) => [
+                  s.step_name,
+                  formatCount(s.executions),
+                  formatCount(s.failed),
+                  formatPct(ratio(s.failed, s.executions)),
+                  formatCount(s.retries),
+                  formatDuration(averageSeconds(s.duration.sum_seconds, s.duration.count)),
+                ])}
               />
-            )}
-          </section>
+              <TechTable
+                title="Llamadas LLM por modelo"
+                icon={<Brain className="h-4 w-4 text-primary" />}
+                head={[
+                  "Modelo",
+                  "Llamadas",
+                  "Errores",
+                  "% error",
+                  "Tokens entrada",
+                  "Tokens salida",
+                  "Latencia media",
+                ]}
+                rows={(tech?.llm_calls_by_model ?? []).map((m) => [
+                  m.model,
+                  formatCount(m.calls),
+                  formatCount(m.errors),
+                  formatPct(ratio(m.errors, m.calls)),
+                  formatCount(m.input_tokens),
+                  formatCount(m.output_tokens),
+                  formatDuration(averageSeconds(m.latency.sum_seconds, m.latency.count)),
+                ])}
+              />
+              <TechTable
+                title="Investigación delegada por fuente"
+                icon={<Search className="h-4 w-4 text-primary" />}
+                head={["Fuente", "Llamadas", "OK", "Fallidas", "Timeout", "% OK"]}
+                rows={(tech?.research_calls_by_source ?? []).map((r) => [
+                  r.source,
+                  formatCount(r.calls),
+                  formatCount(r.ok),
+                  formatCount(r.failed),
+                  formatCount(r.timeout),
+                  formatPct(ratio(r.ok, r.calls)),
+                ])}
+              />
+            </TabsContent>
+
+            <TabsContent value="recomendaciones">
+              <section className={`${CARD} p-5`}>
+                <div className="flex items-center gap-2 mb-5">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <h2 className="text-[13px] font-semibold text-text-primary uppercase tracking-wider">
+                    % Recomendaciones
+                  </h2>
+                </div>
+                {!agent ? (
+                  <p className="text-[12px] text-text-secondary">—</p>
+                ) : !agent.recommendations.available ? (
+                  <div className="rounded-lg border border-border bg-surface px-4 py-3 text-[12px] text-text-secondary">
+                    <span className="font-semibold text-text-primary">{NO_DATA}.</span>{" "}
+                    {agent.recommendations.reason}
+                  </div>
+                ) : (
+                  <RecommendationBars
+                    accepted={agent.recommendations.accepted ?? 0}
+                    ignored={agent.recommendations.ignored ?? 0}
+                  />
+                )}
+              </section>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </DashboardLayout>

@@ -1,7 +1,45 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// The monitor splits its indicators in tabs; each one owns its own content.
+async function expectMonitorTabs(page: Page) {
+  const tabs = [
+    { name: "Indicadores generales", content: /Errores de ejecución|Fraude no detectado/i },
+    { name: "Indicadores de área", content: /Procesado por ARIA/i },
+    { name: "Analistas y otros canales", content: /Analistas/ },
+    { name: "Explicabilidad", content: /Alucinaciones/ },
+    { name: "Indicadores técnicos", content: /Pasos del workflow/ },
+    { name: "% Recomendaciones", content: /sin datos|Aceptadas|Ignoradas/i },
+  ];
+  await expect(page.getByRole("tab")).toHaveCount(tabs.length);
+  // Opens on the first tab (nothing stored yet) and shows one tab's content at a time.
+  await expect(page.getByRole("tab", { name: tabs[0].name })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await expect(page.getByRole("heading", { name: "Pasos del workflow" })).toHaveCount(0);
+  for (const tab of tabs) {
+    await page.getByRole("tab", { name: tab.name }).click();
+    await expect(page.getByRole("tab", { name: tab.name })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("tabpanel").getByText(tab.content).first()).toBeVisible();
+    // Voicebot and Bidi are disabled for now: no section for them in any tab.
+    await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);
+    // The scope note and range warnings stay above the tabs whichever one is open.
+    await expect(page.getByText("Sólo medidas acumulativas sobre el periodo")).toBeVisible();
+  }
+  // The last tab survives a reload.
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByRole("tab", { name: tabs[5].name })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("tab", { name: tabs[0].name }).click();
+}
 
 test("observability pages, metrics reads, audit trail, and expired rollup cleanup", async ({
   page,
@@ -67,10 +105,7 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
     await expect(detail).toHaveCount(0);
     await scopeNote.locator("xpath=..").getByRole("button", { name: "Ver más" }).click();
     await expect(detail).toBeVisible();
-    // Voicebot and Bidi are disabled for now: no section for them in the monitor.
-    if (route === "/monitor") {
-      await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);
-    }
+    if (route === "/monitor") await expectMonitorTabs(page);
     await expect(page.locator("body")).not.toBeEmpty();
   }
   expect(pageErrors).toEqual([]);
