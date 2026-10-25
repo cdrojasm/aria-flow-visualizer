@@ -27,6 +27,7 @@ export function CreateEmptyDatasetModal({ open, onClose }: { open: boolean; onCl
   return (
     <SideDrawer
       open={open}
+      dirty={name.trim() !== "" || fields.length > 0}
       onOpenChange={(o) => {
         if (!o) {
           reset();

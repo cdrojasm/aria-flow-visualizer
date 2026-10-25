@@ -26,6 +26,7 @@ const SIZE_CLASS = {
   md: "max-w-[460px]",
   lg: "max-w-[640px]",
   xl: "max-w-[860px]",
+  full: "max-w-[1152px]",
 } as const;
 
 export function SideDrawer({
@@ -38,6 +39,7 @@ export function SideDrawer({
   size = "md",
   dirty = false,
   proposedByAria = false,
+  bare = false,
   className,
 }: {
   open: boolean;
@@ -51,6 +53,8 @@ export function SideDrawer({
   dirty?: boolean;
   /** Mark the form as pre-filled by the ARIA agent for the user to review. */
   proposedByAria?: boolean;
+  /** Children own their padding, scrolling and footer (multi-step wizards). */
+  bare?: boolean;
   className?: string;
 }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -109,9 +113,13 @@ export function SideDrawer({
                 <X className="h-4 w-4" />
               </DialogPrimitive.Close>
             </header>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-4 py-4">
-              {children}
-            </div>
+            {bare ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
+            ) : (
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-4 py-4">
+                {children}
+              </div>
+            )}
             {footer && (
               <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-card px-4 py-3">
                 {footer}

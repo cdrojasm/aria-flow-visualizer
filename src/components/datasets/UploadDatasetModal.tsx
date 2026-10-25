@@ -53,6 +53,7 @@ export function UploadDatasetModal({
   return (
     <SideDrawer
       open={open}
+      dirty={file !== null && !uploadMutation.isPending}
       onOpenChange={(o) => {
         if (!o) {
           reset();

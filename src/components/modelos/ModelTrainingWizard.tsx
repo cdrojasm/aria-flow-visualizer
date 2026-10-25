@@ -7,13 +7,7 @@ import {
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { Field } from "@/components/configuracion/shared/FormControls";
 import {
@@ -383,15 +377,14 @@ export function ModelTrainingWizard({ open, onClose }: { open: boolean; onClose:
     setNotice("");
   };
   return (
-    <Dialog open={open} onOpenChange={(value) => !value && !pending && onClose()}>
-      <DialogContent className="flex flex-col gap-0 p-0 overflow-hidden w-[96vw] max-w-6xl h-[90vh]">
-        <DialogHeader className="px-6 py-5 pr-12 border-b border-border">
-          <DialogTitle>Crear y entrenar modelo</DialogTitle>
-          <DialogDescription>
-            Configura un modelo real sobre un dataset del sistema. Cada borrador conserva sus
-            características y parámetros.
-          </DialogDescription>
-        </DialogHeader>
+    <SideDrawer
+      open={open}
+      onOpenChange={(value) => !value && !pending && onClose()}
+      size="full"
+      bare
+      title="Crear y entrenar modelo"
+      description="Configura un modelo real sobre un dataset del sistema. Cada borrador conserva sus características y parámetros."
+    >
         <SectionTabs
           label="Pasos del entrenamiento"
           items={["Datos y objetivo", "Características", "XGBoost", "Revisión"].map((label, i) => ({
@@ -1118,7 +1111,6 @@ export function ModelTrainingWizard({ open, onClose }: { open: boolean; onClose:
             )}
           </div>
         </footer>
-      </DialogContent>
-    </Dialog>
+    </SideDrawer>
   );
 }

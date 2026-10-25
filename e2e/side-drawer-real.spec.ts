@@ -2,7 +2,8 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 
 // PENDIENTES_MVC #17: every create/edit form opens in the same right-hand
 // SideDrawer (fixed, overlay, close button, Esc / click-outside, unsaved-
-// changes prompt). Real API through nginx; nothing is mocked.
+// changes prompt). Runs as channel_manager, the only role that reaches Testing,
+// Modelos, Biblioteca and the Agente tab of Configuración. Real API through nginx; nothing is mocked.
 
 async function login(api: APIRequestContext, email: string, password: string): Promise<string> {
   const response = await api.post("/api/v0/auth/login", { data: { email, password } });
@@ -50,9 +51,12 @@ test.describe("drawer lateral único", () => {
   let token: string;
 
   test.beforeEach(async ({ page, request }) => {
-    const email = process.env.E2E_MANAGER_EMAIL;
-    const password = process.env.E2E_MANAGER_PASSWORD;
-    test.skip(!email || !password, "Define E2E_MANAGER_EMAIL y E2E_MANAGER_PASSWORD.");
+    const email = process.env.E2E_CHANNEL_MANAGER_EMAIL;
+    const password = process.env.E2E_CHANNEL_MANAGER_PASSWORD;
+    test.skip(
+      !email || !password,
+      "Define E2E_CHANNEL_MANAGER_EMAIL y E2E_CHANNEL_MANAGER_PASSWORD.",
+    );
     token = await login(request, email!, password!);
     await authenticatePage(page, token);
   });
@@ -86,29 +90,21 @@ test.describe("drawer lateral único", () => {
     }
   });
 
-  test("Modelos: Nuevo modelo usa el drawer, valida y avisa de cambios sin guardar", async ({
+  test("Modelos: Nuevo modelo abre el asistente de entrenamiento en el drawer", async ({
     page,
   }) => {
     await page.goto("/modelos");
     await page.getByRole("button", { name: "Nuevo modelo" }).click();
-    const drawer = await expectRightDrawer(page, "Nuevo modelo");
-    await expect(drawer.getByRole("button", { name: "Crear modelo" })).toBeDisabled();
-    await closeWithButton(page); // pristine form closes without asking
+    const drawer = await expectRightDrawer(page, "Crear y entrenar modelo");
+    await expect(drawer.getByRole("navigation", { name: "Pasos del entrenamiento" })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Continuar" })).toBeDisabled();
+    await page.getByPlaceholder("xgboost-historico-v1").fill("borrador-e2e-drawer");
+    await closeWithButton(page);
 
     await page.getByRole("button", { name: "Nuevo modelo" }).click();
-    await page.getByPlaceholder("Ej: xus-v1").fill("borrador-e2e-drawer");
-    await expect(
-      page.getByTestId("side-drawer").getByRole("button", { name: "Crear modelo" }),
-    ).toBeDisabled(); // still needs dataset, target, labels and transforms
+    await expectRightDrawer(page, "Crear y entrenar modelo");
     await page.keyboard.press("Escape");
-    const prompt = page.getByRole("alertdialog");
-    await expect(prompt.getByText("¿Descartar los cambios?")).toBeVisible();
-    await prompt.getByRole("button", { name: "Descartar" }).click();
     await expect(page.getByTestId("side-drawer")).toBeHidden();
-
-    // Discarding resets the draft.
-    await page.getByRole("button", { name: "Nuevo modelo" }).click();
-    await expect(page.getByPlaceholder("Ej: xus-v1")).toHaveValue("");
   });
 
   test("Biblioteca: Dataset vacío crea el dataset desde el drawer y abre su detalle", async ({
@@ -123,7 +119,8 @@ test.describe("drawer lateral único", () => {
       const drawer = await expectRightDrawer(page, "Crear dataset vacío");
       await expect(drawer.getByRole("button", { name: "Crear dataset" })).toBeDisabled();
       await page.getByPlaceholder("Ej: casos_revision_manual").fill(name);
-      const columns = page.getByPlaceholder("Ej: id_transaccion");
+      // The tag input loses its placeholder after the first tag: use the last textbox.
+      const columns = drawer.getByRole("textbox").last();
       await columns.fill("id_transaccion");
       await columns.press("Enter");
       await columns.fill("monto");
@@ -158,6 +155,7 @@ test.describe("drawer lateral único", () => {
     const prompt = page.getByRole("alertdialog");
     await expect(prompt.getByText("¿Descartar los cambios?")).toBeVisible();
     await prompt.getByRole("button", { name: "Seguir editando" }).click();
+    await expect(page.getByRole("alertdialog")).toBeHidden();
     await expect(page.getByPlaceholder("Ej: casos_revision_manual")).toHaveValue(
       "borrador_e2e_drawer",
     );
@@ -184,16 +182,17 @@ test.describe("drawer lateral único: Configuración", () => {
   let token: string;
 
   test.beforeEach(async ({ page, request }) => {
-    const email = process.env.E2E_RELEASE_MANAGER_EMAIL;
-    const password = process.env.E2E_RELEASE_MANAGER_PASSWORD;
+    const email = process.env.E2E_CHANNEL_MANAGER_EMAIL;
+    const password = process.env.E2E_CHANNEL_MANAGER_PASSWORD;
     test.skip(
       !email || !password,
-      "Define E2E_RELEASE_MANAGER_EMAIL y E2E_RELEASE_MANAGER_PASSWORD.",
+      "Define E2E_CHANNEL_MANAGER_EMAIL y E2E_CHANNEL_MANAGER_PASSWORD.",
     );
     token = await login(request, email!, password!);
     await authenticatePage(page, token);
     await page.goto("/configuracion");
     await page.getByRole("button", { name: "Agente", exact: true }).click();
+    await page.getByRole("button", { name: "Analista", exact: true }).click();
   });
 
   for (const catalog of [
@@ -219,7 +218,7 @@ test.describe("drawer lateral único: Configuración", () => {
 
       await drawer.getByPlaceholder(catalog.placeholder).fill(value);
       await drawer.getByRole("button", { name: "Agregar" }).click();
-      await expect(drawer.getByRole("cell", { name: value })).toBeVisible();
+      await expect(drawer.getByRole("cell", { name: value, exact: true })).toBeVisible();
 
       // The confirmation stacks above the drawer and the drawer survives it.
       await drawer
@@ -228,7 +227,7 @@ test.describe("drawer lateral único: Configuración", () => {
       const confirm = page.getByRole("alertdialog");
       await expect(confirm.getByText(catalog.confirmTitle)).toBeVisible();
       await confirm.getByRole("button", { name: "Eliminar", exact: true }).click();
-      await expect(drawer.getByRole("cell", { name: value })).toHaveCount(0);
+      await expect(drawer.getByRole("cell", { name: value, exact: true })).toHaveCount(0);
 
       await closeWithButton(page);
     });
