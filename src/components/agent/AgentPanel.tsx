@@ -19,9 +19,18 @@ import {
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   changeAgentInsight,
+  confirmFlagDraft,
   confirmModusOperandiDraft,
+  confirmSimilarCaseDraft,
+  confirmTaxonomyDraft,
+  confirmWatchlistDraft,
   createAgentSession,
+  generateFlagDraft,
   generateModusOperandiDraft,
+  generateSimilarCaseDraft,
+  generateTaxonomyDraft,
+  generateWatchlistDraft,
+  listAgentDraftActions,
   getAgentSessionSummary,
   listAgentInsights,
   listAgentMessages,
@@ -30,11 +39,18 @@ import {
   type AgentInsight,
   type AgentMessage,
   type AgentSession,
-  type ModusOperandiDraft,
+  type AgentLibraryDraft,
 } from "@/lib/api/agent.functions";
-import { listModusOperandiLibraryEntries } from "@/lib/api/knowledgeLibrary.functions";
+import {
+  listFlagLibraryEntries,
+  listModusOperandiLibraryEntries,
+  listSimilarCaseLibraryEntries,
+  listTaxonomyLibraryEntries,
+} from "@/lib/api/knowledgeLibrary.functions";
+import { listWatchlists } from "@/lib/api/watchlist.functions";
 import { AgentOptimizerPanel } from "./AgentOptimizerPanel";
 import type { Role } from "@/lib/api/auth.functions";
+import { SideDrawer } from "@/components/ui/side-drawer";
 
 const MESSAGE_LIMIT = 8_000;
 const ALLOWED_ROUTES = ["/configuracion", "/testing", "/biblioteca", "/modelos"];
@@ -46,6 +62,21 @@ const PAGE_LABELS: Record<string, string> = {
 };
 
 type PendingMessage = { id: string; content: string; failed: boolean };
+type DraftKind = "modus_operandi" | "flag" | "similar_case" | "taxonomy" | "watchlist";
+type DraftRequest = {
+  kind: DraftKind;
+  clientMessageId: string;
+  operation: "create" | "update";
+  targetId?: string;
+};
+
+function draftTitle(kind: DraftKind, content?: Record<string, unknown>) {
+  if (kind === "modus_operandi") return "modus operandi";
+  if (kind === "similar_case") return "caso similar";
+  if (kind === "taxonomy") return "taxonomía";
+  if (kind === "watchlist") return "watchlist";
+  return content?.flag_type === "yellow" ? "yellow flag" : "red flag";
+}
 
 function newClientMessageId() {
   return (
@@ -119,10 +150,12 @@ export function AgentPanel({
   const [composer, setComposer] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [lastUserMessage, setLastUserMessage] = useState<AgentMessage | null>(null);
-  const [draft, setDraft] = useState<ModusOperandiDraft | null>(null);
+  const [draft, setDraft] = useState<AgentLibraryDraft | null>(null);
+  const [draftKind, setDraftKind] = useState<DraftKind>("modus_operandi");
   const [operation, setOperation] = useState<"create" | "update">("create");
   const [targetId, setTargetId] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [draftDrawerOpen, setDraftDrawerOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const launcher = useDraggablePosition("agent-launcher", {
@@ -139,6 +172,12 @@ export function AgentPanel({
     queryFn: listAgentSessions,
     enabled: visible,
     refetchInterval: 8_000,
+  });
+  const draftActionsQuery = useQuery({
+    queryKey: ["agentDraftActions"],
+    queryFn: listAgentDraftActions,
+    enabled: open,
+    staleTime: 60_000,
   });
   const sessions = sessionsQuery.data ?? [];
   const currentSession =
@@ -179,7 +218,27 @@ export function AgentPanel({
   const libraryQuery = useQuery({
     queryKey: ["modusOperandiEntries", false],
     queryFn: () => listModusOperandiLibraryEntries({ data: { activeOnly: false } }),
-    enabled: open && operation === "update",
+    enabled: open && draftKind === "modus_operandi" && operation === "update",
+  });
+  const flagLibraryQuery = useQuery({
+    queryKey: ["flagEntries", false],
+    queryFn: () => listFlagLibraryEntries({ data: { activeOnly: false } }),
+    enabled: open && draftKind === "flag" && operation === "update",
+  });
+  const similarCaseLibraryQuery = useQuery({
+    queryKey: ["similarCaseEntries", false],
+    queryFn: () => listSimilarCaseLibraryEntries({ data: { activeOnly: false } }),
+    enabled: open && draftKind === "similar_case" && operation === "update",
+  });
+  const taxonomyLibraryQuery = useQuery({
+    queryKey: ["taxonomyEntries", false],
+    queryFn: () => listTaxonomyLibraryEntries({ data: { activeOnly: false } }),
+    enabled: open && draftKind === "taxonomy" && operation === "update",
+  });
+  const watchlistQuery = useQuery({
+    queryKey: ["watchlists", false],
+    queryFn: () => listWatchlists({ data: { activeOnly: false } }),
+    enabled: open && draftKind === "watchlist" && operation === "update",
   });
   const displayedMessages = useMemo(() => {
     const rows = [...(messages ?? [])];
@@ -272,35 +331,95 @@ export function AgentPanel({
   });
 
   const draftMutation = useMutation({
-    mutationFn: () => {
-      if (!lastUserMessage) throw new Error("MISSING_SOURCE_MESSAGE");
+    mutationFn: ({
+      kind,
+      clientMessageId,
+      operation: draftOperation,
+      targetId: draftTargetId,
+    }: DraftRequest) => {
+      if (kind === "flag")
+        return generateFlagDraft(activeSessionId, clientMessageId, draftOperation, draftTargetId);
+      if (kind === "similar_case")
+        return generateSimilarCaseDraft(
+          activeSessionId,
+          clientMessageId,
+          draftOperation,
+          draftTargetId,
+        );
+      if (kind === "taxonomy")
+        return generateTaxonomyDraft(
+          activeSessionId,
+          clientMessageId,
+          draftOperation,
+          draftTargetId,
+        );
+      if (kind === "watchlist")
+        return generateWatchlistDraft(
+          activeSessionId,
+          clientMessageId,
+          draftOperation,
+          draftTargetId,
+        );
       return generateModusOperandiDraft(
         activeSessionId,
-        lastUserMessage.client_message_id,
-        operation,
-        operation === "update" ? targetId : undefined,
+        clientMessageId,
+        draftOperation,
+        draftTargetId,
       );
     },
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
       setDraft(result);
+      setDraftKind(variables.kind);
+      setDraftDrawerOpen(true);
       setConfirmOpen(false);
       setNotice("");
     },
     onError: (error) => setNotice(safeError(error)),
   });
+  const startDraft = (kind: DraftKind) => {
+    if (!lastUserMessage) return;
+    setDraftKind(kind);
+    setOperation("create");
+    setTargetId("");
+    draftMutation.mutate({
+      kind,
+      clientMessageId: lastUserMessage.client_message_id,
+      operation: "create",
+    });
+  };
+  const regenerateDraft = () => {
+    if (!lastUserMessage) return;
+    draftMutation.mutate({
+      kind: draftKind,
+      clientMessageId: lastUserMessage.client_message_id,
+      operation,
+      ...(operation === "update" && targetId ? { targetId } : {}),
+    });
+  };
   const confirmMutation = useMutation({
     mutationFn: () => {
       const item = draft?.content.items?.[0];
       if (!draft || !item) throw new Error("DRAFT_NOT_FOUND");
+      if (draftKind === "flag")
+        return confirmFlagDraft(activeSessionId, draft.package_id, item.item_id);
+      if (draftKind === "similar_case")
+        return confirmSimilarCaseDraft(activeSessionId, draft.package_id, item.item_id);
+      if (draftKind === "taxonomy")
+        return confirmTaxonomyDraft(activeSessionId, draft.package_id, item.item_id);
+      if (draftKind === "watchlist")
+        return confirmWatchlistDraft(activeSessionId, draft.package_id, item.item_id);
       return confirmModusOperandiDraft(activeSessionId, draft.package_id, item.item_id);
     },
     onSuccess: async () => {
       setConfirmOpen(false);
-      setNotice("El modus operandi se confirmó y ya está en la Biblioteca.");
+      setNotice(`El ${draftTitle(draftKind)} se confirmó y ya está en la Biblioteca.`);
       setDraft(null);
+      setDraftDrawerOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["modusOperandiEntries"] }),
         queryClient.invalidateQueries({ queryKey: ["libraryModusOperandi"] }),
+        queryClient.invalidateQueries({ queryKey: ["flagEntries"] }),
+        queryClient.invalidateQueries({ queryKey: ["similarCaseEntries"] }),
       ]);
     },
     onError: (error) => {
@@ -322,6 +441,22 @@ export function AgentPanel({
     (insight) => !referencedInsightIds.has(insight.insight_id),
   );
   const draftItem = draft?.content.items?.[0];
+  const targetOptions =
+    draftKind === "modus_operandi"
+      ? (libraryQuery.data ?? []).map((entry) => ({ id: entry.id, label: entry.title }))
+      : draftKind === "flag"
+        ? (flagLibraryQuery.data ?? []).map((entry) => ({ id: entry.id, label: entry.name }))
+        : draftKind === "similar_case"
+          ? (similarCaseLibraryQuery.data ?? []).map((entry) => ({
+              id: entry.id,
+              label: entry.text,
+            }))
+          : draftKind === "taxonomy"
+            ? (taxonomyLibraryQuery.data ?? []).map((entry) => ({
+                id: entry.id,
+                label: entry.name,
+              }))
+            : (watchlistQuery.data ?? []).map((entry) => ({ id: entry.id, label: entry.name }));
   const checksPass = Boolean(
     draft &&
     draft.verifications.length &&
@@ -511,15 +646,32 @@ export function AgentPanel({
                     )}
                     {message.role === "user" &&
                       lastUserMessage?.client_message_id === message.client_message_id && (
-                        <button
-                          type="button"
-                          onClick={() => draftMutation.mutate()}
-                          disabled={draftMutation.isPending}
-                          aria-label="Crear borrador de modus operandi desde este mensaje"
-                          className="mt-1 block rounded border border-white/40 px-1.5 py-0.5 text-[11px] hover:bg-white/10"
-                        >
-                          {draftMutation.isPending ? "Preparando borrador…" : "Crear borrador"}
-                        </button>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {(draftActionsQuery.data ?? []).map(({ action_id: kind }) => {
+                            const label =
+                              kind === "modus_operandi"
+                                ? "modus operandi"
+                                : kind === "similar_case"
+                                  ? "caso similar"
+                                  : kind === "taxonomy"
+                                    ? "taxonomía"
+                                    : kind;
+                            return (
+                              <button
+                                key={kind}
+                                type="button"
+                                onClick={() => startDraft(kind)}
+                                disabled={draftMutation.isPending}
+                                aria-label={`Crear borrador de ${label} desde este mensaje`}
+                                className="rounded border border-white/40 px-1.5 py-0.5 text-[11px] hover:bg-white/10 disabled:opacity-50"
+                              >
+                                {draftMutation.isPending && draftKind === kind
+                                  ? "Preparando borrador…"
+                                  : `Crear borrador de ${label}`}
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
                   </article>
                   <MessageReferences message={message} />
@@ -557,12 +709,13 @@ export function AgentPanel({
               />
             ))}
             {draft && draftItem && (
-              <DraftCard
-                draft={draft}
-                item={draftItem}
-                canConfirm={checksPass}
-                onConfirm={() => setConfirmOpen(true)}
-              />
+              <button
+                type="button"
+                onClick={() => setDraftDrawerOpen(true)}
+                className="rounded border border-primary/30 px-2 py-1 text-xs text-primary"
+              >
+                Abrir propuesta de {draftTitle(draftKind, draftItem.draft)}
+              </button>
             )}
             {pending.some((item) => !item.failed) && (
               <div className="text-right text-[11px] text-text-secondary">Enviando…</div>
@@ -599,17 +752,17 @@ export function AgentPanel({
                   onChange={(event) => setTargetId(event.target.value)}
                   className="min-w-0 flex-1 rounded border border-border bg-card px-2 py-1 text-xs"
                 >
-                  <option value="">Selecciona modus operandi</option>
-                  {(libraryQuery.data ?? []).map((entry) => (
+                  <option value="">Selecciona {draftTitle(draftKind)}</option>
+                  {targetOptions.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      {entry.title}
+                      {entry.label}
                     </option>
                   ))}
                 </select>
               )}
               <button
                 type="button"
-                onClick={() => draftMutation.mutate()}
+                onClick={regenerateDraft}
                 disabled={draftMutation.isPending || (operation === "update" && !targetId)}
                 className="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
               >
@@ -692,6 +845,31 @@ export function AgentPanel({
           />
         </aside>
       )}
+      <SideDrawer
+        open={draftDrawerOpen && Boolean(draft && draftItem)}
+        onOpenChange={setDraftDrawerOpen}
+        title={
+          draftItem ? `Propuesta de ${draftTitle(draftKind, draftItem.draft)}` : "Propuesta ARIA"
+        }
+        description="Revisa el borrador verificado antes de confirmar su aplicación."
+        proposedByAria
+        size="lg"
+        footer={
+          <button
+            type="button"
+            disabled={!checksPass || confirmMutation.isPending}
+            onClick={() => {
+              setDraftDrawerOpen(false);
+              setConfirmOpen(true);
+            }}
+            className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Revisar y confirmar
+          </button>
+        }
+      >
+        {draft && draftItem ? <DraftCard draft={draft} item={draftItem} kind={draftKind} /> : null}
+      </SideDrawer>
       {confirmOpen && draftItem && (
         <div
           className="fixed inset-0 z-[60] grid place-items-center bg-black/40 p-4"
@@ -871,18 +1049,17 @@ function InsightRow({
 function DraftCard({
   draft,
   item,
-  canConfirm,
-  onConfirm,
+  kind,
 }: {
-  draft: ModusOperandiDraft;
-  item: NonNullable<ModusOperandiDraft["content"]["items"]>[number];
-  canConfirm: boolean;
-  onConfirm: () => void;
+  draft: AgentLibraryDraft;
+  item: NonNullable<AgentLibraryDraft["content"]["items"]>[number];
+  kind: DraftKind;
 }) {
+  const title = draftTitle(kind, item.draft);
   return (
     <article className="rounded-lg border border-primary/30 bg-card p-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Borrador de modus operandi</h3>
+        <h3 className="text-sm font-semibold">Borrador de {title}</h3>
         <span
           className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${canConfirm ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}
         >
@@ -921,18 +1098,20 @@ function DraftCard({
           </div>
         ))}
       </div>
+      {item.questions.length > 0 && (
+        <div className="mt-3 rounded-md border border-warning/40 bg-warning/5 p-2 text-xs">
+          <p className="font-semibold">Puntos por completar</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4">
+            {item.questions.map((question, index) => (
+              <li key={`${index}-${question}`}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="mt-2 text-[11px] text-text-secondary">
         Para ajustar el borrador, explica el cambio en el chat y genera una nueva versión; esta
         propuesta sellada no se edita localmente.
       </p>
-      <button
-        type="button"
-        disabled={!canConfirm}
-        onClick={onConfirm}
-        className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        Revisar diff y confirmar
-      </button>
     </article>
   );
 }

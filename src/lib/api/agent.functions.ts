@@ -109,7 +109,13 @@ export type AgentAuditEvent = {
   duration_ms: number | null;
   cost_micros: number | null;
   specialist:
-    "optimizer" | "configuration" | "library" | "vector_store" | "model" | "dataset" | null;
+    | "optimizer"
+    | "configuration"
+    | "library"
+    | "vector_store"
+    | "model"
+    | "dataset"
+    | null;
   tool:
     | "read"
     | "write"
@@ -216,7 +222,7 @@ export type AgentDraftVerification = {
   created_at: string | null;
 };
 
-export type ModusOperandiDraft = {
+export type AgentLibraryDraft = {
   package_id: string;
   session_id: string;
   status: string;
@@ -240,6 +246,8 @@ export type ModusOperandiDraft = {
   verifications: AgentDraftVerification[];
 };
 
+export type ModusOperandiDraft = AgentLibraryDraft;
+
 export type AgentConfirmation = {
   confirmation_id: string;
   package_id: string;
@@ -248,6 +256,20 @@ export type AgentConfirmation = {
 };
 
 const path = "/api/v0/agent";
+
+export type AgentDraftAction = {
+  action_id: "modus_operandi" | "flag" | "similar_case" | "taxonomy" | "watchlist";
+  label: string;
+  endpoint_kind: string;
+  operations: Array<"create" | "update">;
+  required_permissions: string[];
+  fields: string[];
+  context: string[];
+};
+
+export function listAgentDraftActions() {
+  return apiFetch<AgentDraftAction[]>(`${path}/draft-actions`);
+}
 
 export function listAgentSessions() {
   return apiFetch<AgentSession[]>(`${path}/sessions?limit=50`);
@@ -405,6 +427,110 @@ export function generateModusOperandiDraft(
 export function confirmModusOperandiDraft(sessionId: string, packageId: string, itemId: string) {
   return apiFetch<AgentConfirmation>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/modus-operandi-drafts/${encodeURIComponent(packageId)}/confirm`,
+    { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+export function generateFlagDraft(
+  sessionId: string,
+  clientMessageId: string,
+  operation: "create" | "update",
+  targetId?: string,
+) {
+  return apiFetch<AgentLibraryDraft>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/flag-drafts`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_message_id: clientMessageId,
+        operation,
+        ...(targetId ? { target_id: targetId } : {}),
+      }),
+    },
+  );
+}
+
+export function confirmFlagDraft(sessionId: string, packageId: string, itemId: string) {
+  return apiFetch<AgentConfirmation>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/flag-drafts/${encodeURIComponent(packageId)}/confirm`,
+    { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+export function generateSimilarCaseDraft(
+  sessionId: string,
+  clientMessageId: string,
+  operation: "create" | "update",
+  targetId?: string,
+) {
+  return apiFetch<AgentLibraryDraft>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/similar-case-drafts`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_message_id: clientMessageId,
+        operation,
+        ...(targetId ? { target_id: targetId } : {}),
+      }),
+    },
+  );
+}
+
+export function confirmSimilarCaseDraft(sessionId: string, packageId: string, itemId: string) {
+  return apiFetch<AgentConfirmation>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/similar-case-drafts/${encodeURIComponent(packageId)}/confirm`,
+    { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+function generateLibraryDraft(
+  sessionId: string,
+  kind: "taxonomy" | "watchlist",
+  clientMessageId: string,
+  operation: "create" | "update",
+  targetId?: string,
+) {
+  return apiFetch<AgentLibraryDraft>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/${kind}-drafts`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        client_message_id: clientMessageId,
+        operation,
+        ...(targetId ? { target_id: targetId } : {}),
+      }),
+    },
+  );
+}
+
+export function generateTaxonomyDraft(
+  sessionId: string,
+  clientMessageId: string,
+  operation: "create" | "update",
+  targetId?: string,
+) {
+  return generateLibraryDraft(sessionId, "taxonomy", clientMessageId, operation, targetId);
+}
+
+export function confirmTaxonomyDraft(sessionId: string, packageId: string, itemId: string) {
+  return apiFetch<AgentConfirmation>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/taxonomy-drafts/${encodeURIComponent(packageId)}/confirm`,
+    { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+export function generateWatchlistDraft(
+  sessionId: string,
+  clientMessageId: string,
+  operation: "create" | "update",
+  targetId?: string,
+) {
+  return generateLibraryDraft(sessionId, "watchlist", clientMessageId, operation, targetId);
+}
+
+export function confirmWatchlistDraft(sessionId: string, packageId: string, itemId: string) {
+  return apiFetch<AgentConfirmation>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/watchlist-drafts/${encodeURIComponent(packageId)}/confirm`,
     { method: "POST", body: JSON.stringify({ item_id: itemId }) },
   );
 }
