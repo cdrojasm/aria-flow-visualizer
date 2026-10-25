@@ -22,6 +22,7 @@ type Configuration = {
   infra: Record<string, unknown>;
   test: Record<string, unknown>;
   segments: Record<string, Segment>;
+  parent_ref?: { configuration_id: string; version: number } | null;
 };
 
 async function login(api: APIRequestContext, email: string, password: string): Promise<Auth> {
@@ -96,6 +97,21 @@ test("configuración real: ediciones concurrentes por canal y por campo", async 
   expect(seedResponse.status(), await seedResponse.text()).toBe(201);
   let current = (await seedResponse.json()) as Configuration;
 
+  const branchResponse = await createConfiguration(request, manager.access_token, {
+    ...draftFrom(current, () => {}),
+    name: `${uniqueName} rama`,
+    configuration_id: null,
+    based_on_version: null,
+    parent_ref: { configuration_id: current.configuration_id, version: current.version },
+  });
+  expect(branchResponse.status(), await branchResponse.text()).toBe(201);
+  const branch = (await branchResponse.json()) as Configuration;
+  expect(branch.configuration_id).not.toBe(current.configuration_id);
+  expect(branch.parent_ref).toEqual({
+    configuration_id: current.configuration_id,
+    version: current.version,
+  });
+
   // Caso 1: una sola persona edita y guarda una nueva versión.
   const soloDescription = "Cambio individual guardado.";
   const soloResponse = await createConfiguration(
@@ -109,6 +125,19 @@ test("configuración real: ediciones concurrentes por canal y por campo", async 
   current = (await soloResponse.json()) as Configuration;
   expect(current.version).toBe(2);
   expect(current.description).toBe(soloDescription);
+  expect(current.parent_ref).toEqual({
+    configuration_id: current.configuration_id,
+    version: 1,
+  });
+  const graphResponse = await request.get("/api/v0/configurations/graph", {
+    headers: { Authorization: `Bearer ${manager.access_token}` },
+  });
+  expect(graphResponse.ok(), `grafo de configuración: ${await graphResponse.text()}`).toBeTruthy();
+  const graph = (await graphResponse.json()) as Configuration[];
+  expect(
+    graph.find((node) => node.configuration_id === current.configuration_id && node.version === 2)
+      ?.parent_ref,
+  ).toEqual({ configuration_id: current.configuration_id, version: 1 });
 
   // Caso 2: dos personas parten de v2 y editan canales distintos. La segunda
   // escritura se basa deliberadamente en la versión anterior y debe conservar

@@ -212,6 +212,7 @@ export type CreateConfigurationRequest = {
   // Optimistic-concurrency guard: the version this draft was loaded from.
   // Backend returns 409 if the lineage has since moved past it.
   based_on_version?: number | null;
+  parent_ref?: { configuration_id: string; version: number } | null;
   description?: string;
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
@@ -236,6 +237,7 @@ export type ConfigurationSummaryResponse = {
   ever_tested: boolean;
   created_at: string;
   updated_at: string;
+  parent_ref: { configuration_id: string; version: number } | null;
 };
 
 export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
@@ -287,6 +289,10 @@ export type ConfigurationDeployRequestPreview = Pick<
 
 export function listConfigurations(): Promise<ConfigurationSummaryResponse[]> {
   return apiFetch("/api/v0/configurations");
+}
+
+export function getConfigurationGraph(): Promise<ConfigurationSummaryResponse[]> {
+  return apiFetch("/api/v0/configurations/graph");
 }
 
 export async function getActiveConfiguration(): Promise<ConfigurationDetailResponse | null> {

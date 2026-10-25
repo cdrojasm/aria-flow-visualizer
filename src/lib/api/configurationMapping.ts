@@ -429,6 +429,7 @@ export function toCreateConfigurationRequest(
     description: string;
     configurationId: string | null;
     basedOnVersion?: number | null;
+    parentRef?: { configuration_id: string; version: number } | null;
     createdBy?: string | null;
   },
 ): CreateConfigurationRequest {
@@ -443,6 +444,7 @@ export function toCreateConfigurationRequest(
     name: opts.name,
     configuration_id: opts.configurationId,
     based_on_version: opts.basedOnVersion ?? null,
+    parent_ref: opts.parentRef ?? null,
     description: opts.description,
     general: {
       migration_window_enabled: settings.migrationWindowEnabled,

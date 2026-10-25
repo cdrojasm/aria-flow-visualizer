@@ -58,6 +58,7 @@ import {
 } from "@/data/configs";
 import {
   listConfigurations,
+  getConfigurationGraph,
   getActiveConfiguration,
   listConfigurationVersions,
   getConfigurationVersion,
@@ -210,6 +211,7 @@ type DraftState = {
   // the backend can reject the save (409) if the lineage moved on since.
   // undefined for a brand-new lineage (nothing to conflict with).
   basedOnVersion?: number;
+  parentRef?: { configuration_id: string; version: number } | null;
 };
 
 type PendingSave = {
@@ -335,6 +337,12 @@ function ConfiguracionPage() {
   const configsQuery = useQuery({
     queryKey: ["configurations"],
     queryFn: () => listConfigurations(),
+  });
+
+  const configurationGraphQuery = useQuery({
+    queryKey: ["configurationGraph"],
+    queryFn: getConfigurationGraph,
+    refetchInterval: 30_000,
   });
   const activeQuery = useQuery({
     queryKey: ["activeConfiguration"],
@@ -906,6 +914,7 @@ function ConfiguracionPage() {
       description: selectedConfig.description,
       configurationId: wasTemp ? null : selectedConfigId,
       basedOnVersion: wasTemp ? null : selectedDraft?.basedOnVersion,
+      parentRef: wasTemp ? (selectedDraft?.parentRef ?? null) : null,
     });
   };
 
@@ -1300,6 +1309,10 @@ function ConfiguracionPage() {
         workingCopy: clonedSettings,
         baseline: structuredClone(clonedSettings),
         dirtyTabs: [],
+        parentRef:
+          baseItem && baseVersionLabel != null
+            ? { configuration_id: baseItem.id, version: baseVersionLabel }
+            : null,
       },
     }));
     setSelectedConfigId(id);
@@ -1760,6 +1773,52 @@ function ConfiguracionPage() {
             </div>
           </div>
         </section>
+        )}
+
+        {(isChannelManager || isReleaseManager || isManager) && (
+          <section className="bg-card rounded-xl border border-border p-5">
+            <div className="mb-3">
+              <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
+                Grafo de versiones
+              </h2>
+              <p className="mt-1 text-[12px] text-text-secondary">
+                Historial de solo lectura. Cada versión muestra la versión de origen que la precede.
+              </p>
+            </div>
+            {configurationGraphQuery.isPending ? (
+              <p className="text-[12px] text-text-secondary">Cargando versiones…</p>
+            ) : configurationGraphQuery.isError ? (
+              <p role="alert" className="text-[12px] text-danger">
+                No se pudo cargar el grafo de versiones.
+              </p>
+            ) : configurationGraphQuery.data?.length ? (
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {configurationGraphQuery.data.map((node) => (
+                  <button
+                    key={`${node.configuration_id}:${node.version}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedConfigId(node.configuration_id);
+                      setSelectedVersion(node.version);
+                    }}
+                    className="rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5"
+                  >
+                    <span className="block text-[13px] font-medium text-text-primary">
+                      {node.name}:v{node.version}
+                      {node.active ? " · Activa" : ""}
+                    </span>
+                    <span className="mt-1 block text-[11px] text-text-secondary">
+                      {node.parent_ref
+                        ? `Derivada de ${node.parent_ref.configuration_id}:v${node.parent_ref.version}`
+                        : "Versión raíz"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-text-secondary">Todavía no hay versiones guardadas.</p>
+            )}
+          </section>
         )}
 
         {isDeployApprover && (
