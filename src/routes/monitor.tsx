@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
+import { FilterBar, PageHeader } from "@/components/PageHeader";
 import {
   CARD,
   ErrorBox,
@@ -232,20 +233,10 @@ function MonitorPage() {
           </div>
         )}
 
-        <div className="sticky top-0 z-20 -mx-8 px-8 py-4 bg-background border-b border-border flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <h1 className="text-[20px] font-semibold text-text-primary">Monitor del Agente</h1>
-            <HealthBadge health={health} />
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <MetricsFilterBar
-              value={filters}
-              onChange={setFilters}
-              dimensions={["segment", "channel", "subchannel", "amount_tier", "configuration_id"]}
-              range={{ from: range.from, to: range.to }}
-              canReadObservedValues={Boolean(user?.permissions.includes("dashboard"))}
-            />
-            <RangeControl value={range} onChange={setRange} />
+        <PageHeader
+          title="Monitor del Agente"
+          badge={<HealthBadge health={health} />}
+          actions={
             <Button
               variant="outline"
               size="sm"
@@ -262,8 +253,21 @@ function MonitorPage() {
               <Download className="h-3.5 w-3.5" />
               Exportar reporte
             </Button>
-          </div>
-        </div>
+          }
+        />
+        <FilterBar
+          activeCount={Object.values(filters).filter(Boolean).length}
+          onClear={() => setFilters({})}
+          trailing={<RangeControl value={range} onChange={setRange} />}
+        >
+          <MetricsFilterBar
+            value={filters}
+            onChange={setFilters}
+            dimensions={["segment", "channel", "subchannel", "amount_tier", "configuration_id"]}
+            range={{ from: range.from, to: range.to }}
+            canReadObservedValues={Boolean(user?.permissions.includes("dashboard"))}
+          />
+        </FilterBar>
 
         {agentQuery.isError && (
           <ErrorBox error={agentQuery.error} what="los indicadores del agente" />

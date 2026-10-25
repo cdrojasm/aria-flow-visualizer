@@ -104,6 +104,24 @@ test.beforeAll(async ({ playwright }) => {
   }
 });
 
+// Sum of one column over the rows under a header line, up to the next blank line.
+function sumColumn(csv: string, headerStart: string, column: string): number {
+  const lines = csv.split(/\r?\n/);
+  const at = lines.findIndex((line) => line.startsWith(headerStart));
+  expect(at, `no "${headerStart}" section in the report`).toBeGreaterThanOrEqual(0);
+  const index = lines[at].split(",").indexOf(column);
+  expect(index).toBeGreaterThanOrEqual(0);
+  let total = 0;
+  for (const line of lines.slice(at + 1)) {
+    if (!line.trim()) break;
+    total += Number(line.split(",")[index]) || 0;
+  }
+  return total;
+}
+
+// Reports print counts the way the page does (es-CO thousands separator from 1.000 up).
+const count = (value: number) => value.toLocaleString("es-CO");
+
 test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }) => {
   await page.addInitScript(
     (value: string) => localStorage.setItem("aria.auth.accessToken", value),
@@ -134,26 +152,38 @@ test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }
       countLabel: "Alertas",
     },
   ]) {
-    const responsePromise = page.waitForResponse(
-      (response) => response.url().includes(report.endpoint) && response.ok(),
-    );
-    const technicalPromise =
-      report.path === "/monitor"
-        ? page.waitForResponse(
-            (response) => response.url().includes("/api/v0/metrics/technical") && response.ok(),
-          )
-        : undefined;
-    await page.goto(report.path);
-    const metricsResponse = await responsePromise;
-    const metrics = (await metricsResponse.json()) as {
+    // Live traffic can make the page read the metrics again before the export: the CSV is
+    // built from the latest read, so compare against the latest one the page received.
+    type Technical = {
+      range: { from: string; to: string };
+      workflow_steps: { executions: number };
+      llm_calls: { calls: number };
+    };
+    let metrics: {
       range: { from: string; to: string; timezone: string };
       totals?: { alerts: number };
       fraud_quality?: { undetected_fraud: number };
-    };
-    const technical = technicalPromise ? await (await technicalPromise).json() : undefined;
-    if (technical) {
-      expect(technical.range.from).toBe(metrics.range.from);
-      expect(technical.range.to).toBe(metrics.range.to);
+    } | null = null;
+    let technical: Technical | undefined;
+    const reads: Promise<void>[] = [];
+    page.on("response", (response) => {
+      if (!response.ok()) return;
+      if (response.url().includes(report.endpoint))
+        reads.push(response.json().then((body) => void (metrics = body)));
+      else if (report.path === "/monitor" && response.url().includes("/api/v0/metrics/technical"))
+        reads.push(response.json().then((body) => void (technical = body)));
+    });
+    await page.goto(report.path);
+    await expect(page.getByRole("button", { name: "Exportar reporte" })).toBeEnabled({
+      timeout: 30_000,
+    });
+    await page.waitForLoadState("networkidle");
+    await Promise.all(reads);
+    expect(metrics, "the page never read the metrics").toBeTruthy();
+    if (report.path === "/monitor") {
+      expect(technical, "the monitor never read the technical metrics").toBeTruthy();
+      expect(technical!.range.from).toBe(metrics!.range.from);
+      expect(technical!.range.to).toBe(metrics!.range.to);
     }
     const downloadPromise = page.waitForEvent("download");
     await page.getByRole("button", { name: "Exportar reporte" }).click();
@@ -165,15 +195,22 @@ test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }
     expect(path).toBeTruthy();
     const csv = (await readFile(path!, "utf8")).replace(/^\uFEFF/, "");
     expect(csv).toContain(report.title);
-    expect(csv).toContain(metrics.range.from);
-    expect(csv).toContain(metrics.range.to);
-    expect(csv).toContain(metrics.range.timezone);
+    expect(csv).toContain(metrics!.range.from);
+    expect(csv).toContain(metrics!.range.to);
+    expect(csv).toContain(metrics!.range.timezone);
     for (const section of report.checks) expect(csv).toContain(section);
-    if (report.path === "/dashboard") expect(csv).toContain(String(metrics.totals!.alerts));
+    if (report.path === "/dashboard") expect(csv).toContain(count(metrics!.totals!.alerts));
     else {
-      expect(csv).toContain(String(metrics.fraud_quality!.undetected_fraud));
-      expect(csv).toContain(String(technical.workflow_steps.executions));
-      expect(csv).toContain(String(technical.llm_calls.calls));
+      expect(csv).toContain(count(metrics!.fraud_quality!.undetected_fraud));
+      // The report prints one row per period (a 24 h window can span two Bogotá days) and one
+      // per step/model, so the totals are checked as sums of the printed rows.
+      expect(sumColumn(csv, "Periodo,Nivel,Parcial,Maduración,Ejecuciones", "Ejecuciones")).toBe(
+        technical!.workflow_steps.executions,
+      );
+      expect(sumColumn(csv, "Paso,Ejecuciones", "Ejecuciones")).toBe(
+        technical!.workflow_steps.executions,
+      );
+      expect(sumColumn(csv, "Modelo,Llamadas", "Llamadas")).toBe(technical!.llm_calls.calls);
     }
     expect(csv).toContain(report.countLabel);
   }
@@ -182,7 +219,7 @@ test("E10 API/UI real: exporta reportes de Dashboard y Monitor", async ({ page }
 // "Rango personalizado" is shared by Dashboard and Monitor: pick whole days in the
 // calendar, apply, and check that the reads and the exported report follow that range.
 async function pickCalendarDay(page: Page, iso: string) {
-  const cell = page.locator(`td[data-day="${iso}"] button`);
+  const cell = page.locator(`td[data-day="${iso}"]:not([data-outside="true"]) button`);
   // The calendar opens on the current month; walk back until the day is on screen.
   for (let i = 0; i < 40 && (await cell.count()) === 0; i += 1)
     await page.getByRole("button", { name: "Go to the Previous Month" }).click();
@@ -213,7 +250,9 @@ for (const route of ["/dashboard", "/monitor"] as const) {
       };
       return { from: iso(-2), to: iso(-1), end: iso(0), tomorrow: iso(1) };
     });
-    const day = (iso: string) => page.locator(`td[data-day="${iso}"] button`);
+    // A day may also show as a greyed "outside" cell in the neighbouring month's grid.
+    const day = (iso: string) =>
+      page.locator(`td[data-day="${iso}"]:not([data-outside="true"]) button`);
     const pickDay = (iso: string) => pickCalendarDay(page, iso);
 
     await page.getByRole("button", { name: "Rango personalizado" }).click();

@@ -265,3 +265,137 @@ test("test run detail lists cases in a compact table", async ({ page }) => {
   const firstCell = table.getByRole("row").nth(1).getByRole("cell").first();
   await expect(firstCell).toHaveText(/^[0-9a-f]{6}…$/);
 });
+
+// Dashboard, En proceso, Histórico and Monitor share one layout: the title and the page's
+// actions up top, and the filters in their own labelled strip right below.
+test.describe("alert pages share the header and the filter bar", () => {
+  const managerEmail = process.env.E2E_MANAGER_EMAIL;
+  const managerPassword = process.env.E2E_MANAGER_PASSWORD;
+
+  const pages = [
+    { path: "/dashboard", title: "Dashboard", action: "Exportar reporte", range: true },
+    { path: "/cola", title: "Alertas en progreso", action: "Actualizar", range: false },
+    {
+      path: "/historico-fraude",
+      title: "Histórico de Gestión de Fraude",
+      action: "Descargar plantilla",
+      range: true,
+    },
+    { path: "/monitor", title: "Monitor del Agente", action: "Exportar reporte", range: true },
+  ] as const;
+
+  for (const spec of pages) {
+    test(`${spec.path}: header, filter strip, active count and clear`, async ({ page }) => {
+      test.skip(!managerEmail || !managerPassword, "E2E_MANAGER_EMAIL/PASSWORD are required");
+      const response = await page.request.post(`${baseURL}/api/v0/auth/login`, {
+        data: { email: managerEmail, password: managerPassword },
+      });
+      expect(response.ok()).toBeTruthy();
+      const { access_token: token } = (await response.json()) as { access_token: string };
+      await page.addInitScript(
+        (value) => localStorage.setItem("aria.auth.accessToken", value),
+        token,
+      );
+      await page.goto(spec.path);
+
+      const title = page.getByRole("heading", { name: spec.title, level: 1 });
+      const bar = page.getByRole("region", { name: "Filtros" });
+      await expect(title).toBeVisible({ timeout: 30_000 });
+      await expect(bar).toBeVisible();
+      await expect(bar).toContainText("Filtros");
+
+      // Three separate zones: the title row, the filter strip below it, then the content.
+      const [titleBox, barBox] = await Promise.all([title.boundingBox(), bar.boundingBox()]);
+      expect(barBox!.y).toBeGreaterThanOrEqual(titleBox!.y + titleBox!.height);
+      // No filter control lives in the sticky title row any more.
+      await expect(
+        title.locator("xpath=ancestor::div[contains(@class,'sticky')][1]").getByRole("combobox"),
+      ).toHaveCount(0);
+      // The page's own action sits on the title row, not inside the filter strip.
+      const action = page.getByRole("button", { name: spec.action, exact: true });
+      await expect(action).toBeVisible();
+      await expect(bar.getByRole("button", { name: spec.action, exact: true })).toHaveCount(0);
+      const actionBox = (await action.boundingBox())!;
+      expect(
+        Math.abs(actionBox.y + actionBox.height / 2 - (titleBox!.y + titleBox!.height / 2)),
+      ).toBeLessThan(40);
+      // The date range belongs to the strip (only where the page has one).
+      await expect(bar.getByRole("button", { name: "Semana", exact: true })).toHaveCount(
+        spec.range ? 1 : 0,
+      );
+
+      // Choosing a filter shows the active count; "Limpiar filtros" resets it.
+      await expect(page.getByTestId("active-filters-count")).toHaveCount(0);
+      await expect(bar.getByRole("button", { name: "Limpiar filtros" })).toHaveCount(0);
+      const boxes = bar.getByRole("combobox");
+      let chosen = -1;
+      for (let i = 0; i < (await boxes.count()) && chosen < 0; i += 1) {
+        if (await boxes.nth(i).isDisabled()) continue;
+        await boxes.nth(i).click();
+        const option = page
+          .getByRole("option")
+          .filter({ hasNotText: /^Todos/ })
+          .first();
+        if ((await option.count()) === 0) {
+          await page.keyboard.press("Escape");
+          continue;
+        }
+        await option.click();
+        chosen = i;
+      }
+      expect(chosen, "ningún filtro ofrece un valor para elegir").toBeGreaterThanOrEqual(0);
+      await expect(page.getByTestId("active-filters-count")).toHaveText("1");
+      const chosenText = (await boxes.nth(chosen).innerText()).trim();
+      expect(chosenText).not.toMatch(/^Todos/);
+      await bar.getByRole("button", { name: "Limpiar filtros" }).click();
+      await expect(page.getByTestId("active-filters-count")).toHaveCount(0);
+      await expect(boxes.nth(chosen)).toContainText(/^Todos|^[A-Za-z]/);
+      expect((await boxes.nth(chosen).innerText()).trim()).not.toBe(chosenText);
+    });
+  }
+
+  test("/cola: Actualizar and its last-update indicator are two different things", async ({
+    page,
+  }) => {
+    test.skip(!managerEmail || !managerPassword, "E2E_MANAGER_EMAIL/PASSWORD are required");
+    const response = await page.request.post(`${baseURL}/api/v0/auth/login`, {
+      data: { email: managerEmail, password: managerPassword },
+    });
+    const { access_token: token } = (await response.json()) as { access_token: string };
+    await page.addInitScript(
+      (value) => localStorage.setItem("aria.auth.accessToken", value),
+      token,
+    );
+    await page.goto("/cola");
+    const indicator = page.getByTestId("last-refresh");
+    await expect(indicator).toHaveText(/^Última actualización \d/, { timeout: 30_000 });
+    // The indicator is plain text, never a control; the control is the labelled button.
+    await expect(page.getByRole("button", { name: /Última actualización/ })).toHaveCount(0);
+    const queueRefetch = page.waitForResponse(
+      (r) => r.url().includes("/api/v0/analyst-queue") && r.ok(),
+    );
+    await page.getByRole("button", { name: "Actualizar", exact: true }).click();
+    await queueRefetch;
+  });
+
+  test("/historico-fraude: import buttons live in the header, not in the filter strip", async ({
+    page,
+  }) => {
+    test.skip(!managerEmail || !managerPassword, "E2E_MANAGER_EMAIL/PASSWORD are required");
+    const response = await page.request.post(`${baseURL}/api/v0/auth/login`, {
+      data: { email: managerEmail, password: managerPassword },
+    });
+    const { access_token: token } = (await response.json()) as { access_token: string };
+    await page.addInitScript(
+      (value) => localStorage.setItem("aria.auth.accessToken", value),
+      token,
+    );
+    await page.goto("/historico-fraude");
+    const bar = page.getByRole("region", { name: "Filtros" });
+    await expect(bar).toBeVisible({ timeout: 30_000 });
+    for (const name of ["Descargar plantilla", "Cargar CSV de revisiones"]) {
+      await expect(page.getByRole("button", { name })).toBeVisible();
+      await expect(bar.getByRole("button", { name })).toHaveCount(0);
+    }
+  });
+});

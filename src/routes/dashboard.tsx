@@ -18,6 +18,7 @@ import {
 import { format } from "date-fns";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
+import { FilterBar, PageHeader } from "@/components/PageHeader";
 import {
   CARD,
   ErrorBox,
@@ -531,17 +532,9 @@ function DashboardPage() {
   return (
     <DashboardLayout>
       <div className="px-8 py-6">
-        <div className="sticky top-0 z-20 -mx-8 px-8 py-4 mb-6 bg-background border-b border-border flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-[20px] font-bold text-text-primary">Dashboard</h1>
-          <div className="flex items-center gap-2 flex-wrap">
-            <MetricsFilterBar
-              value={filters}
-              onChange={setFilters}
-              dimensions={["segment", "channel", "subchannel", "amount_tier", "status"]}
-              range={{ from: range.from, to: range.to }}
-              canReadObservedValues
-            />
-            <RangeControl value={range} onChange={setRange} />
+        <PageHeader
+          title="Dashboard"
+          actions={
             <Button
               variant="outline"
               size="sm"
@@ -552,8 +545,21 @@ function DashboardPage() {
               <Download className="h-3.5 w-3.5" />
               Exportar reporte
             </Button>
-          </div>
-        </div>
+          }
+        />
+        <FilterBar
+          activeCount={Object.values(filters).filter(Boolean).length}
+          onClear={() => setFilters({})}
+          trailing={<RangeControl value={range} onChange={setRange} />}
+        >
+          <MetricsFilterBar
+            value={filters}
+            onChange={setFilters}
+            dimensions={["segment", "channel", "subchannel", "amount_tier", "status"]}
+            range={{ from: range.from, to: range.to }}
+            canReadObservedValues
+          />
+        </FilterBar>
 
         {overviewQuery.isError && (
           <ErrorBox error={overviewQuery.error} what="los indicadores del dashboard" />

@@ -3,10 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChevronRight, Hand, Loader2, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { FilterBar, PageHeader } from "@/components/PageHeader";
 import { RefreshControl } from "@/components/RefreshControl";
 import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 import {
   AlertFiltersBar,
+  EMPTY_ALERT_FILTERS,
+  countActiveAlertFilters,
   matchesAlertFilters,
   type AlertFiltersValue,
 } from "@/components/AlertFiltersBar";
@@ -419,13 +422,7 @@ function ColaPage() {
     },
   });
   const analysts = capacityQuery.data?.analysts;
-  const [filters, setFilters] = useState<AlertFiltersValue>({
-    canal: "Todos",
-    subcanal: "Todos",
-    segmento: "Todos",
-    monto: "Todos",
-    reglas: [],
-  });
+  const [filters, setFilters] = useState<AlertFiltersValue>(EMPTY_ALERT_FILTERS);
   const filteredProceso = useMemo(
     () => procesoRows.filter((r) => matchesFilters(r, filters)),
     [procesoRows, filters],
@@ -448,19 +445,21 @@ function ColaPage() {
   return (
     <DashboardLayout>
       <div className="px-8 py-6">
-        {/* Header */}
-        <div className="sticky top-0 z-20 -mx-8 px-8 py-4 mb-6 bg-background border-b border-border flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="text-[20px] font-bold text-text-primary">Alertas en progreso</h1>
+        <PageHeader
+          title="Alertas en progreso"
+          badge={
             <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold tabular-nums">
               {activeCount}
             </span>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <AlertFiltersBar value={filters} onChange={setFilters} />
-            <RefreshControl lastRefresh={lastRefresh} onRefresh={refresh} />
-          </div>
-        </div>
+          }
+          actions={<RefreshControl lastRefresh={lastRefresh} onRefresh={refresh} />}
+        />
+        <FilterBar
+          activeCount={countActiveAlertFilters(filters)}
+          onClear={() => setFilters(EMPTY_ALERT_FILTERS)}
+        >
+          <AlertFiltersBar value={filters} onChange={setFilters} />
+        </FilterBar>
 
         {/* Main tabs */}
         <div className="flex gap-1 border-b border-border mb-6">
