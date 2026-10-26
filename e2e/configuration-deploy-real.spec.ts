@@ -233,6 +233,29 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
           return `${active.configuration_id}:v${active.version}`;
         })
         .toBe(`${configurationId}:v${version}`);
+
+      // El grafo de versiones muestra el comentario de la versión promovida.
+      const graphResponse = await request.get("/api/v0/configurations/graph", {
+        headers: { Authorization: `Bearer ${manager.access_token}` },
+      });
+      expect(graphResponse.ok(), `grafo: ${await graphResponse.text()}`).toBeTruthy();
+      const graph = (await graphResponse.json()) as Array<{
+        configuration_id: string;
+        version: number;
+        promotion_comment: string | null;
+      }>;
+      expect(
+        graph.find((node) => node.configuration_id === configurationId && node.version === version)
+          ?.promotion_comment,
+      ).toBe(requestMessage);
+
+      await approverPage.goto("/configuracion");
+      const graphView = approverPage.getByTestId("configuration-version-graph");
+      await expect(graphView).toBeVisible();
+      await graphView.getByText(`${target.name} v${version}`, { exact: false }).first().click();
+      await expect(approverPage.getByTestId("configuration-graph-detail")).toContainText(
+        `Comentario de promoción: ${requestMessage}`,
+      );
     } finally {
       await approverPage.close();
     }

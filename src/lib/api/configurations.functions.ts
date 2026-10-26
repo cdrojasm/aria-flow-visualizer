@@ -240,6 +240,11 @@ export type ConfigurationSummaryResponse = {
   parent_ref: { configuration_id: string; version: number } | null;
 };
 
+export type ConfigurationGraphNodeResponse = ConfigurationSummaryResponse & {
+  // Message of the approved deploy request that promoted this version.
+  promotion_comment: string | null;
+};
+
 export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
@@ -291,7 +296,7 @@ export function listConfigurations(): Promise<ConfigurationSummaryResponse[]> {
   return apiFetch("/api/v0/configurations");
 }
 
-export function getConfigurationGraph(): Promise<ConfigurationSummaryResponse[]> {
+export function getConfigurationGraph(): Promise<ConfigurationGraphNodeResponse[]> {
   return apiFetch("/api/v0/configurations/graph");
 }
 

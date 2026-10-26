@@ -35,6 +35,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { ConfigurationVersionGraph } from "@/components/configuracion/ConfigurationVersionGraph";
 import { ConfigurationVersionGuide } from "@/components/configuracion/ConfigurationVersionGuide";
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
@@ -1788,7 +1789,7 @@ function ConfiguracionPage() {
                 Grafo de versiones
               </h2>
               <p className="mt-1 text-[12px] text-text-secondary">
-                Historial de solo lectura. Cada versión muestra la versión de origen que la precede.
+                Historial de solo lectura: la configuración seleccionada con su origen y sus ramas, y el comentario de la versión llevada a producción.
               </p>
             </div>
             {configurationGraphQuery.isPending ? (
@@ -1798,29 +1799,15 @@ function ConfiguracionPage() {
                 No se pudo cargar el grafo de versiones.
               </p>
             ) : configurationGraphQuery.data?.length ? (
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {configurationGraphQuery.data.map((node) => (
-                  <button
-                    key={`${node.configuration_id}:${node.version}`}
-                    type="button"
-                    onClick={() => {
-                      setSelectedConfigId(node.configuration_id);
-                      setSelectedVersion(node.version);
-                    }}
-                    className="rounded-lg border border-border px-3 py-2 text-left hover:border-primary/50 hover:bg-primary/5"
-                  >
-                    <span className="block text-[13px] font-medium text-text-primary">
-                      {node.name}:v{node.version}
-                      {node.active ? " · Activa" : ""}
-                    </span>
-                    <span className="mt-1 block text-[11px] text-text-secondary">
-                      {node.parent_ref
-                        ? `Derivada de ${node.parent_ref.configuration_id}:v${node.parent_ref.version}`
-                        : "Versión raíz"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <ConfigurationVersionGraph
+                nodes={configurationGraphQuery.data}
+                selectedConfigurationId={selectedConfigId}
+                selectedVersion={selectedVersion}
+                onSelectVersion={(configurationId, version) => {
+                  setSelectedConfigId(configurationId);
+                  setSelectedVersion(version);
+                }}
+              />
             ) : (
               <p className="text-[12px] text-text-secondary">Todavía no hay versiones guardadas.</p>
             )}
