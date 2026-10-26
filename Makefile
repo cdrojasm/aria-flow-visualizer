@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced test-e2e-agent test-e2e-agent-optimizer
+.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced test-e2e-agent test-e2e-agent-optimizer test-e2e-capability-help
 
 .DEFAULT_GOAL := help
 
@@ -88,6 +88,15 @@ test-e2e-agent: ## Run the real assistant chat and draft confirmation E2E throug
 
 test-e2e-agent-optimizer: ## Run real FP4/FP5 optimizer E2E against nginx localhost
 	npm run test:e2e:agent:optimizer:real
+
+test-e2e-capability-help: ## Run contextual capability help E2E through nginx with one Playwright worker
+	@set -euo pipefail; \
+	lock=/tmp/aria-e2e.lock; \
+	while ! mkdir "$$lock" 2>/dev/null; do sleep 2; done; \
+	trap 'rmdir "$$lock"' EXIT INT TERM; \
+	$(MAKE) build; \
+	$(MAKE) run; \
+	E2E_PLAYWRIGHT_WORKERS=1 npm run test:e2e -- capability-help-real
 
 shell: ## Shell into running app container
 	docker compose exec web sh
