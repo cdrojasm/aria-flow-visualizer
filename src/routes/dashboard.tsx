@@ -511,6 +511,11 @@ function DashboardPage() {
     queryKey: ["metrics", "version-events", { from: range.from, to: range.to }],
     queryFn: () => getVersionEvents({ data: { from: range.from, to: range.to } }),
   });
+  const liveFunnel = useQuery({
+    queryKey: ["metrics", "live"],
+    queryFn: getLiveAlertFunnel,
+    refetchInterval: LIVE_POLL_MS,
+  }).data;
   const data = overviewQuery.data;
   const versionEvents = versionEventsQuery.data ?? [];
 
@@ -557,7 +562,17 @@ function DashboardPage() {
             <span className="inline-flex items-center gap-1.5">
               Dashboard
               <CapabilityInfo label="ciclo de una alerta" title="Del evento al aprendizaje">
-                <LifecycleDiagram />
+                <LifecycleDiagram
+                  counts={
+                    liveFunnel
+                      ? {
+                          Evento: liveFunnel.received,
+                          Analizar: liveFunnel.processing,
+                          Resolver: liveFunnel.escalated + liveFunnel.voicebot_in_call,
+                        }
+                      : undefined
+                  }
+                />
               </CapabilityInfo>
             </span>
           }

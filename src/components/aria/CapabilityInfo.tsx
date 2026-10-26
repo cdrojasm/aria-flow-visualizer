@@ -22,7 +22,10 @@ export function CapabilityInfo({
           <Info className="h-4 w-4" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[min(92vw,560px)] max-h-[75vh] overflow-y-auto p-4" align="start">
+      <PopoverContent
+        className="w-[min(92vw,560px)] max-h-[75vh] overflow-y-auto p-4"
+        align="start"
+      >
         <h3 className="mb-3 text-[13px] font-semibold text-text-primary">{title}</h3>
         {children}
       </PopoverContent>
@@ -31,9 +34,11 @@ export function CapabilityInfo({
 }
 
 const card = "rounded-lg border border-border bg-card p-3";
-const node = "rounded-lg border border-border bg-surface px-3 py-2 text-center text-[11px] font-medium text-text-primary";
+const node =
+  "rounded-lg border border-border bg-surface px-3 py-2 text-center text-[11px] font-medium text-text-primary";
 
-export function LifecycleDiagram() {
+// `counts` (live data) is keyed by stage title; stages without a count render as static.
+export function LifecycleDiagram({ counts }: { counts?: Record<string, number | undefined> }) {
   const stages = [
     ["Evento", "Alerta"],
     ["Preparar", "Reglas y perfil"],
@@ -47,15 +52,62 @@ export function LifecycleDiagram() {
     <div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stages.map(([title, detail], index) => (
-          <div key={title} className={`${node} ${index === 4 ? "border-primary/30 bg-primary/5" : ""}`}>
+          <div
+            key={title}
+            className={`${node} ${index === 4 ? "border-primary/30 bg-primary/5" : ""}`}
+          >
             <div>{title}</div>
             <div className="mt-0.5 text-[10px] font-normal text-text-secondary">{detail}</div>
+            {counts?.[title] !== undefined && (
+              <div className="mt-1 text-[13px] font-semibold tabular-nums text-primary">
+                {counts[title]} ahora
+              </div>
+            )}
           </div>
         ))}
       </div>
       <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
         ARIA procesa la alerta, registra cómo se resolvió y usa resultados maduros para evaluar
         futuras mejoras.
+      </p>
+    </div>
+  );
+}
+
+export function QueueFunnelDiagram({
+  inProcess,
+  pendingAnalyst,
+}: {
+  inProcess?: number;
+  pendingAnalyst?: number;
+}) {
+  const stages = [
+    { title: "Evento", detail: "Llega la alerta", count: undefined },
+    { title: "ARIA analiza", detail: "Modelo, agente y revisión", count: inProcess },
+    { title: "Cola de analista", detail: "ARIA no resuelve sola", count: pendingAnalyst },
+    { title: "Persona decide", detail: "Toma el caso y resuelve", count: undefined },
+  ];
+  return (
+    <div>
+      <ol aria-label="Embudo de la cola" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {stages.map(({ title, detail, count }, index) => (
+          <li
+            key={title}
+            className={`${node} ${index === 2 ? "border-primary/30 bg-primary/5" : ""}`}
+          >
+            <div>{title}</div>
+            <div className="mt-0.5 text-[10px] font-normal text-text-secondary">{detail}</div>
+            {count !== undefined && (
+              <div className="mt-1 text-[13px] font-semibold tabular-nums text-primary">
+                {count} ahora
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-[11px] leading-relaxed text-text-secondary">
+        Una alerta llega a un analista cuando ARIA la deriva: allí queda sin tomar hasta que una
+        persona la toma y decide. Las alertas en proceso aún las analiza ARIA.
       </p>
     </div>
   );
@@ -102,7 +154,8 @@ export function XgboostDiagram() {
       {signals.map(([label, strength]) => (
         <div key={label}>
           <div className="mb-1 flex justify-between gap-2 text-[10px] text-text-secondary">
-            <span>{label}</span><span>{strength}%</span>
+            <span>{label}</span>
+            <span>{strength}%</span>
           </div>
           <div className="h-1.5 rounded-full bg-surface">
             <div className="h-1.5 rounded-full bg-primary" style={{ width: `${strength}%` }} />

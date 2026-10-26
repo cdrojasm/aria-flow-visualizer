@@ -34,6 +34,7 @@ import {
   type InProcessAlert,
 } from "@/lib/api/operations.functions";
 import { STEP_LABELS } from "@/lib/alertSteps";
+import { CapabilityInfo, QueueFunnelDiagram } from "@/components/aria/CapabilityInfo";
 
 export const Route = createFileRoute("/cola")({
   head: () => ({
@@ -446,7 +447,17 @@ function ColaPage() {
     <DashboardLayout>
       <div className="px-8 py-6">
         <PageHeader
-          title="Alertas en progreso"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              Alertas en progreso
+              <CapabilityInfo label="embudo de la cola" title="Del evento a la decisión humana">
+                <QueueFunnelDiagram
+                  inProcess={inProcessQuery.data?.length}
+                  pendingAnalyst={queueQuery.data?.length}
+                />
+              </CapabilityInfo>
+            </span>
+          }
           badge={
             <span className="inline-flex items-center justify-center min-w-[28px] h-6 px-2 rounded-full bg-primary text-primary-foreground text-[12px] font-semibold tabular-nums">
               {activeCount}

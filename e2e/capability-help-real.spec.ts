@@ -1,7 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { expect, test, type APIRequestContext, type Page, type Playwright } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+  type Playwright,
+} from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
@@ -19,20 +26,13 @@ function readBootstrapToken() {
   const project = process.env.LOCAL_DOCKER_PROJECT ?? "aria-local";
   const containerId = execFileSync(
     "docker",
-    [
-      "compose",
-      "-p",
-      project,
-      "-f",
-      "deploy/local/docker/docker-compose.yml",
-      "ps",
-      "-q",
-      "api",
-    ],
+    ["compose", "-p", project, "-f", "deploy/local/docker/docker-compose.yml", "ps", "-q", "api"],
     { cwd: backendDirectory, encoding: "utf8" },
   ).trim();
   if (!containerId) throw new Error("No está iniciado el contenedor API para E2E real.");
-  const inspected = JSON.parse(execFileSync("docker", ["inspect", containerId], { encoding: "utf8" }))[0];
+  const inspected = JSON.parse(
+    execFileSync("docker", ["inspect", containerId], { encoding: "utf8" }),
+  )[0];
   const entry = inspected.Config.Env.find((value: string) =>
     value.startsWith("AUTH_BOOTSTRAP_TOKEN="),
   );
@@ -116,14 +116,20 @@ async function provisionChannelManager(playwright: Playwright) {
         headers,
         data: { name: "ARIA contextual help E2E", email, role: "channel_manager", password },
       });
-  expect(provisioned.ok(), `aprovisionar channel_manager: ${await provisioned.text()}`).toBeTruthy();
+  expect(
+    provisioned.ok(),
+    `aprovisionar channel_manager: ${await provisioned.text()}`,
+  ).toBeTruthy();
   const login = await api.post("/api/v0/auth/login", { data: { email, password } });
   expect(login.ok(), `login E2E: ${await login.text()}`).toBeTruthy();
   accessToken = ((await login.json()) as { access_token: string }).access_token;
 }
 
 async function openAs(page: Page, path: string) {
-  await page.addInitScript((token) => localStorage.setItem("aria.auth.accessToken", token), accessToken);
+  await page.addInitScript(
+    (token) => localStorage.setItem("aria.auth.accessToken", token),
+    accessToken,
+  );
   await page.goto(path);
 }
 
@@ -167,9 +173,46 @@ test.afterAll(async () => {
 });
 
 test("E2E real: la ayuda de ARIA aparece junto a cada tema", async ({ page }) => {
+  const authorized = { headers: { Authorization: `Bearer ${accessToken}` } };
+  // Alerts move while the workers run, so compare against the API with retries.
+  const stageCount = async (diagram: Locator, title: string) => {
+    const text = await diagram.getByText(title, { exact: true }).locator("xpath=..").innerText();
+    return Number(/(\d+) ahora/.exec(text)?.[1] ?? Number.NaN);
+  };
+
   await openAs(page, "/dashboard");
   await page.getByRole("button", { name: "Información: ciclo de una alerta" }).click();
   await expect(page.getByRole("heading", { name: "Del evento al aprendizaje" })).toBeVisible();
+  const lifecycle = page.getByRole("dialog");
+  await expect(async () => {
+    const live = (await (await api!.get("/api/v0/metrics/live", authorized)).json()) as {
+      received: number;
+      processing: number;
+      escalated: number;
+      voicebot_in_call: number;
+    };
+    expect(await stageCount(lifecycle, "Evento")).toBe(live.received);
+    expect(await stageCount(lifecycle, "Analizar")).toBe(live.processing);
+    expect(await stageCount(lifecycle, "Resolver")).toBe(live.escalated + live.voicebot_in_call);
+  }).toPass({ timeout: 30_000 });
+
+  await openAs(page, "/cola");
+  await page.getByRole("button", { name: "Información: embudo de la cola" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Del evento a la decisión humana" }),
+  ).toBeVisible();
+  const funnel = page.getByRole("list", { name: "Embudo de la cola" });
+  await expect(funnel).toContainText("Cola de analista");
+  await expect(async () => {
+    const pending = (await (
+      await api!.get("/api/v0/analyst-queue", authorized)
+    ).json()) as unknown[];
+    const inProcess = (await (
+      await api!.get("/api/v0/analyst-queue/in-process", authorized)
+    ).json()) as unknown[];
+    expect(await stageCount(funnel, "Cola de analista")).toBe(pending.length);
+    expect(await stageCount(funnel, "ARIA analiza")).toBe(inProcess.length);
+  }).toPass({ timeout: 30_000 });
 
   await openAs(page, "/configuracion");
   await page.getByRole("button", { name: "Información: flujo de revisión" }).click();
