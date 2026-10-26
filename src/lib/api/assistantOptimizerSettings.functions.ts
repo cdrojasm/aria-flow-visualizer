@@ -9,6 +9,7 @@ export type AssistantOptimizerSettings = Record<string, boolean | number | strin
   optimizer_enabled: boolean;
   optimizer_max_concurrent_sessions: number;
   optimizer_max_concurrent_runs: number;
+  optimizer_max_parallel_experiments: number;
   optimizer_max_candidates_per_session: number;
   optimizer_session_budget_ceiling_tokens: number;
   optimizer_session_budget_ceiling_usd: number;

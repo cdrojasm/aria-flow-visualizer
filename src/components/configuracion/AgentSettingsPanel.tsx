@@ -113,6 +113,12 @@ const SECTIONS: SectionDefinition[] = [
         max: 100,
       },
       {
+        key: "optimizer_max_parallel_experiments",
+        label: "Experimentos en paralelo por sesión",
+        min: 1,
+        max: 10,
+      },
+      {
         key: "optimizer_max_candidates_per_session",
         label: "Candidatos por sesión",
         min: 1,
@@ -308,8 +314,9 @@ const DEFAULT_SETTINGS: AssistantOptimizerSettings = {
   max_sessions_per_user: 5,
   chat_retention_days: 730,
   optimizer_enabled: false,
-  optimizer_max_concurrent_sessions: 1,
-  optimizer_max_concurrent_runs: 1,
+  optimizer_max_concurrent_sessions: 2,
+  optimizer_max_concurrent_runs: 6,
+  optimizer_max_parallel_experiments: 3,
   optimizer_max_candidates_per_session: 10,
   optimizer_session_budget_ceiling_tokens: 100_000,
   optimizer_session_budget_ceiling_usd: 50,
@@ -440,6 +447,7 @@ export function AgentSettingsPanel({ readOnly = false }: { readOnly?: boolean })
     const capKeys = [
       "optimizer_max_concurrent_sessions",
       "optimizer_max_concurrent_runs",
+      "optimizer_max_parallel_experiments",
       "optimizer_max_candidates_per_session",
       "optimizer_session_budget_ceiling_tokens",
       "optimizer_session_budget_ceiling_usd",
