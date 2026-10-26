@@ -23,6 +23,14 @@ async function checked(response: Awaited<ReturnType<APIRequestContext["get"]>>, 
   return response.json();
 }
 
+async function login(request: APIRequestContext, userEmail: string, password: string) {
+  const session = await checked(
+    await request.post("/api/v0/auth/login", { data: { email: userEmail, password } }),
+    `login ${userEmail}`,
+  );
+  return session.access_token as string;
+}
+
 function readBootstrapToken() {
   const backendDirectory = resolve(process.cwd(), "../backend");
   const project = process.env.LOCAL_DOCKER_PROJECT ?? "aria-local";

@@ -175,7 +175,15 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
     await page
       .getByRole("combobox", { name: "Dataset para sembrar" })
       .selectOption(seedDatasetName);
+    // Schema defaults render first; wait for the seeded fields so the edits below
+    // are not overwritten when the seeding response arrives.
+    const seeded = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v0/scenarios/seed-from-dataset" &&
+        response.request().method() === "POST",
+    );
     await page.getByRole("button", { name: "Sembrar desde dataset" }).click();
+    expect((await seeded).ok()).toBeTruthy();
     await expect(page.getByTestId("scenario-field-editor").first()).toBeVisible();
 
     // Keep a traceable event identifier alongside the schema-mapped field.
