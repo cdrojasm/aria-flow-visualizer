@@ -25,6 +25,7 @@ import {
   type AlertSchemaVersion,
 } from "@/lib/api/alertSchema.functions";
 import { AlertSchemaView, type CanonicalAlertData } from "@/components/alert/AlertSchemaView";
+import { AlertFlowDiagrams } from "@/components/alert/AlertFlowDiagrams";
 import { getDatasets } from "@/lib/api/datasets.functions";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -347,6 +348,13 @@ function RazonamientoTab({
     return <p className="text-[13px] text-text-secondary">El workflow aún no registra pasos.</p>;
   return (
     <div className="space-y-5">
+      <AlertFlowDiagrams
+        steps={detail.steps}
+        status={detail.status}
+        decision={String(stepOutput(detail, "analyst").decision ?? "") || undefined}
+        executedAction={String(stepOutput(detail, "executor").executed_action ?? "") || undefined}
+        analystResolved={Boolean(detail.analyst_resolution)}
+      />
       {schema && (
         <section className="max-w-[860px] bg-card rounded-xl border border-border p-5">
           <h2 className="text-[14px] font-semibold text-text-primary mb-3">Campos del agente</h2>
