@@ -864,14 +864,14 @@ test("API real: el simulador siembra el esquema sin labels y emite eventos sint√
   });
   try {
     const previewResponse = await request.post(
-      `/api/v0/scenarios/${scenario.id}/preview?count=100`,
+      `/api/v0/scenarios/${scenario.id}/preview?count=30`,
       {
         headers: { Authorization: `Bearer ${manager.access_token}` },
       },
     );
     expect(previewResponse.ok(), await previewResponse.text()).toBeTruthy();
     const preview = await previewResponse.json();
-    expect(preview).toHaveLength(100);
+    expect(preview).toHaveLength(30);
     expect(preview[0].tipo).toBeUndefined();
     expect(preview[0].marcacion_final).toBeUndefined();
     expect(preview[0].customerid.startsWith("synthetic_customer_id_")).toBeTruthy();

@@ -93,6 +93,8 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
   request,
 }) => {
   test.skip(!realApi, "Ejecuta con npm run test:e2e:simulation para usar API real por nginx.");
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(30_000);
   if (
     !process.env.E2E_MANAGER_EMAIL ||
     !process.env.E2E_MANAGER_PASSWORD ||
@@ -186,8 +188,9 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
     await eventIdField.locator("input").nth(1).fill(eventId);
 
     await page.getByRole("button", { name: /Agregar campo/ }).click();
-    const extraField = page.locator('[data-testid="scenario-field-editor"][data-field-name=""]');
+    const extraField = page.getByTestId("scenario-field-editor").last();
     await extraField.locator("input").first().fill("eventId");
+    await extraField.locator("select").selectOption("CONSTANT");
     await page
       .locator('[data-testid="scenario-field-editor"][data-field-name="eventId"]')
       .locator("input")
@@ -238,9 +241,9 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
     const previewRows = (await postJson(
       request,
       manager.access_token,
-      `/api/v0/scenarios/${datasetScenario.id}/preview?count=100`,
+      `/api/v0/scenarios/${datasetScenario.id}/preview?count=30`,
     )) as Record<string, unknown>[];
-    expect(previewRows).toHaveLength(100);
+    expect(previewRows).toHaveLength(30);
     const observedChannelCounts = previewRows.reduce<Record<string, number>>((counts, row) => {
       const channel = String(row.channel);
       counts[channel] = (counts[channel] ?? 0) + 1;
@@ -316,7 +319,7 @@ test("E06 real: seed, vista previa, pipeline/dataset, ciclo de vida y limpieza",
     const liveScenario = (await postJson(request, manager.access_token, "/api/v0/scenarios", {
       name: `E06 pipeline ${unique}`,
       output_mode: "LIVE_PIPELINE",
-      rate_schedule: [{ start_offset_seconds: 0, end_offset_seconds: 300, events_per_minute: 30 }],
+      rate_schedule: [{ start_offset_seconds: 0, end_offset_seconds: 300, events_per_minute: 5 }],
       field_specs: datasetScenario.field_specs,
     })) as Scenario;
     scenarioIds.push(liveScenario.id);

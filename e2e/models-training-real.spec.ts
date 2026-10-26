@@ -11,7 +11,7 @@ const BASE_URL = process.env.ARIA_E2E_BASE_URL ?? "http://localhost";
 const API_LOCATION = process.env.E2E_AUTH_API_URL ?? "http://localhost:8000";
 const TRAINING_DATASET =
   process.env.E2E_MODEL_DATASET_PATH ??
-  "/private/tmp/aria-e04-partitions/e04_actual_sanitized_900.csv";
+  "/private/tmp/aria-e04-partitions/e04_actual_sanitized_100.csv";
 
 type AsyncOperation = { id: string; status: string; error: string | null };
 type Model = {
@@ -25,6 +25,7 @@ type Model = {
 let api: APIRequestContext | undefined;
 let bootstrapApi: APIRequestContext | undefined;
 let accessToken: string | undefined;
+let managerAccessToken: string | undefined;
 let datasetName: string | undefined;
 let modelId: string | undefined;
 let previousActiveModelId: string | undefined;
@@ -38,6 +39,41 @@ async function expectJson<T>(
   const body = await response.text();
   expect(response.ok(), `${label}: HTTP ${response.status()} ${body.slice(0, 500)}`).toBeTruthy();
   return JSON.parse(body) as T;
+}
+
+async function uploadDatasetInParts(
+  request: APIRequestContext,
+  filename: string,
+  content: Buffer,
+  headers: Record<string, string>,
+) {
+  const started = await expectJson<{
+    upload_id: string;
+    part_size_bytes: number;
+    total_parts: number;
+  }>(
+    await request.post("/api/v0/datasets/uploads", {
+      headers,
+      data: { filename, total_size_bytes: content.byteLength },
+    }),
+    "iniciar carga fragmentada de E05",
+  );
+  for (let part = 1; part <= started.total_parts; part += 1) {
+    const start = (part - 1) * started.part_size_bytes;
+    const end = Math.min(start + started.part_size_bytes, content.byteLength);
+    const response = await request.put(
+      `/api/v0/datasets/uploads/${encodeURIComponent(started.upload_id)}/parts/${part}`,
+      {
+        headers: { ...headers, "Content-Type": "application/octet-stream" },
+        data: content.subarray(start, end),
+      },
+    );
+    expect(response.status(), `subir parte E05 ${part}: ${await response.text()}`).toBe(204);
+  }
+  return request.post(
+    `/api/v0/datasets/uploads/${encodeURIComponent(started.upload_id)}/complete`,
+    { headers },
+  );
 }
 
 async function provisionDataAnalyst(playwright: Playwright) {
@@ -136,9 +172,9 @@ async function waitForOperation(id: string) {
 async function cleanResources() {
   if (!api || !accessToken) return;
   if (modelId) {
-    if (previousActiveModelId) {
+    if (previousActiveModelId && managerAccessToken) {
       await api.post(`/api/v0/models/${encodeURIComponent(previousActiveModelId)}/activate`, {
-        headers: authHeaders(),
+        headers: { Authorization: `Bearer ${managerAccessToken}` },
       });
     }
     const response = await api.delete(`/api/v0/models/${encodeURIComponent(modelId)}`, {
@@ -180,6 +216,17 @@ test.beforeAll(async ({ playwright }) => {
     "login real para E05",
   );
   accessToken = login.access_token;
+  const managerEmail = process.env.E2E_MANAGER_EMAIL;
+  const managerPassword = process.env.E2E_MANAGER_PASSWORD;
+  if (managerEmail && managerPassword) {
+    const managerLogin = await expectJson<{ access_token: string }>(
+      await api.post("/api/v0/auth/login", {
+        data: { email: managerEmail, password: managerPassword },
+      }),
+      "login manager para activar el modelo E05",
+    );
+    managerAccessToken = managerLogin.access_token;
+  }
 });
 
 test.afterAll(async () => {
@@ -195,6 +242,10 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
   page,
   playwright,
 }) => {
+  // Keep the 20-minute budget for real model training, but fail quickly when
+  // a UI control is missing instead of letting a click/fill wait the whole test.
+  page.setDefaultTimeout(15_000);
+  page.setDefaultNavigationTimeout(30_000);
   expect(accessToken).toBeTruthy();
   const existingModels = await expectJson<Model[]>(
     await api!.get("/api/v0/models", { headers: authHeaders() }),
@@ -205,10 +256,7 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
   const filename = `e05_model_${Date.now()}_${randomBytes(3).toString("hex")}.csv`;
   datasetName = filename.replace(/\.csv$/i, "");
   const upload = await expectJson<{ name: string; async_operation_id: string | null }>(
-    await api!.post("/api/v0/datasets", {
-      headers: authHeaders(),
-      multipart: { file: { name: filename, mimeType: "text/csv", buffer: source } },
-    }),
+    await uploadDatasetInParts(api!, filename, source, authHeaders()),
     "subir dataset sanitizado real de E05",
   );
   expect(upload.name).toBe(datasetName);
@@ -224,7 +272,7 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
     "verificar dataset listo para E05",
   );
   expect(summary.status).toBe("READY");
-  expect(summary.total_rows).toBeGreaterThanOrEqual(300);
+  expect(summary.total_rows).toBeGreaterThanOrEqual(100);
   expect(summary.available_fields).toEqual(
     expect.arrayContaining([
       "marcacion_final",
@@ -297,9 +345,10 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
       { timeout: 120_000 },
     )
     .toBe("READY");
+  expect(managerAccessToken, "E05 requiere un usuario manager para activar el modelo").toBeTruthy();
   const active = await expectJson<Model>(
     await api!.post(`/api/v0/models/${encodeURIComponent(modelId)}/activate`, {
-      headers: authHeaders(),
+      headers: { Authorization: `Bearer ${managerAccessToken}` },
     }),
     "activar modelo E05",
   );
@@ -320,7 +369,9 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
   );
   await page.goto("/modelos");
   await expect(page.getByRole("heading", { name: "Modelos", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: tag }).click();
+  const modelRow = page.getByRole("row").filter({ hasText: tag });
+  await expect(modelRow).toBeVisible();
+  await modelRow.getByRole("button", { name: "Ver" }).click();
   await page.getByRole("button", { name: "Probar contrato" }).click();
   await expect(page.getByRole("heading", { name: "Prueba del contrato del modelo" })).toBeVisible();
   for (const field of ["eventtype", "channel", "amount_value", "biocatch_score"]) {

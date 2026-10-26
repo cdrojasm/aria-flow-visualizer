@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
 // Dense assistant chat on the real stack (no API mocking): insights live in the
 // message feed (no fixed block under it), the composer stays small, and the
@@ -12,13 +12,73 @@ test.skip(!email || !password, "E2E_CHANNEL_MANAGER_EMAIL/PASSWORD are required"
 
 const managerEmail = process.env.E2E_MANAGER_EMAIL;
 const managerPassword = process.env.E2E_MANAGER_PASSWORD;
+type Credentials = { email?: string; password?: string };
+let channelManagerCredentials: Credentials = { email, password };
+let managerCredentials: Credentials = { email: managerEmail, password: managerPassword };
 
-async function open(page: Page, path: string, credentials = { email, password }) {
+test.describe.configure({ mode: "parallel" });
+
+function credentialsForWorker(prefix: string, workerIndex: number, fallback: Credentials) {
+  return {
+    email: process.env[`E2E_${prefix}_W${workerIndex}_EMAIL`] ?? fallback.email,
+    password: process.env[`E2E_${prefix}_W${workerIndex}_PASSWORD`] ?? fallback.password,
+  };
+}
+
+async function clearOpenSessions(
+  request: APIRequestContext,
+  credentials: { email?: string; password?: string },
+) {
+  if (!credentials.email || !credentials.password) return;
+  const login = await request.post(`${baseURL}/api/v0/auth/login`, { data: credentials });
+  const loginBody = await login.text();
+  expect(login.ok(), `login para limpiar sesiones E2E: ${loginBody}`).toBeTruthy();
+  const { access_token: token } = JSON.parse(loginBody) as { access_token: string };
+  const headers = { Authorization: `Bearer ${token}` };
+  const listed = await request.get(`${baseURL}/api/v0/agent/sessions?limit=1000`, { headers });
+  const listedBody = await listed.text();
+  expect(listed.ok(), `listar sesiones E2E: ${listedBody}`).toBeTruthy();
+  const sessions = JSON.parse(listedBody) as {
+    session_id: string;
+    status: string;
+    mode: string;
+  }[];
+  const openStatuses = new Set(["DRAFT", "ACTIVE", "PAUSED", "WAITING_USER", "WAITING_APPROVAL"]);
+  for (const session of sessions.filter(
+    (item) => item.mode === "assistant" && openStatuses.has(item.status),
+  )) {
+    const cancelled = await request.post(
+      `${baseURL}/api/v0/agent/sessions/${encodeURIComponent(session.session_id)}/cancel`,
+      { headers },
+    );
+    expect(cancelled.ok(), `cerrar sesión E2E: ${await cancelled.text()}`).toBeTruthy();
+  }
+}
+
+test.beforeEach(async ({ request }, testInfo) => {
+  channelManagerCredentials = credentialsForWorker("CHANNEL_MANAGER", testInfo.parallelIndex, {
+    email,
+    password,
+  });
+  managerCredentials = credentialsForWorker("MANAGER", testInfo.parallelIndex, {
+    email: managerEmail,
+    password: managerPassword,
+  });
+  await clearOpenSessions(request, channelManagerCredentials);
+  await clearOpenSessions(request, managerCredentials);
+});
+
+async function open(
+  page: Page,
+  path: string,
+  credentials: Credentials = channelManagerCredentials,
+) {
   const response = await page.request.post(`${baseURL}/api/v0/auth/login`, {
     data: credentials,
   });
-  expect(response.ok()).toBeTruthy();
-  const { access_token: token } = (await response.json()) as { access_token: string };
+  const body = await response.text();
+  expect(response.ok(), `login API: ${body}`).toBeTruthy();
+  const { access_token: token } = JSON.parse(body) as { access_token: string };
   await page.addInitScript((value) => localStorage.setItem("aria.auth.accessToken", value), token);
   await page.goto(path);
 }
@@ -34,7 +94,10 @@ test("assistant chat is dense, keeps insights in the feed and sends the page", a
       response.url().includes("/api/v0/agent/sessions") && response.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Nueva" }).click();
-  const { session_id: sessionId } = (await (await created).json()) as { session_id: string };
+  const response = await created;
+  expect(response.ok(), `crear sesión ARIA: ${await response.text()}`).toBeTruthy();
+  const { session_id: sessionId } = (await response.json()) as { session_id: string };
+  expect(sessionId, "la API debe devolver session_id al crear una conversación").toBeTruthy();
   await expect(page.getByLabel("Conversación")).toHaveValue(sessionId);
 
   const composer = page.getByLabel("Mensaje para ARIA");
@@ -87,7 +150,10 @@ async function ask(page: Page, question: string) {
       response.url().includes("/api/v0/agent/sessions") && response.request().method() === "POST",
   );
   await page.getByRole("button", { name: "Nueva" }).click();
-  const { session_id: sessionId } = (await (await created).json()) as { session_id: string };
+  const response = await created;
+  expect(response.ok(), `crear sesión ARIA: ${await response.text()}`).toBeTruthy();
+  const { session_id: sessionId } = (await response.json()) as { session_id: string };
+  expect(sessionId, "la API debe devolver session_id al crear una conversación").toBeTruthy();
   await expect(page.getByLabel("Conversación")).toHaveValue(sessionId);
   const composer = page.getByLabel("Mensaje para ARIA");
   await composer.fill(question);
@@ -123,7 +189,7 @@ test("answers about another view carry a chip that navigates there, with the con
 test("a role without access to a view never gets a chip or a how-to for it", async ({ page }) => {
   test.skip(!managerEmail || !managerPassword, "E2E_MANAGER_EMAIL/PASSWORD are required");
   test.setTimeout(120_000);
-  await open(page, "/biblioteca", { email: managerEmail, password: managerPassword });
+  await open(page, "/biblioteca", managerCredentials);
   const answer = await ask(page, "¿Cómo entreno un modelo?");
 
   expect(answer.references.map((ref) => ref.path)).not.toContain("/modelos");

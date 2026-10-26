@@ -164,6 +164,15 @@ test("cola real: tomar, liberar, resolver y ver la resolución en la alerta cerr
   // The closed alert shows who resolved it, with what decision and notes.
   await page.goto(`/alerta/${alertId}`);
   await expect(page.getByText("Cerrada", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Razonamiento del agente" }).click();
+  const diagrams = page.getByRole("list", { name: "Etapas agrupadas de la revisión de alerta" });
+  await page.getByText("Ver diagramas del flujo y la resolución").click();
+  await expect(diagrams).toBeVisible();
+  await expect(diagrams).toContainText("Analizar");
+  await expect(diagrams).toContainText("Resuelto por analista");
+  await expect(page.getByText("Ruta de resolución")).toBeVisible();
+  await expect(page.getByText("Registrada: Analista")).toBeVisible();
+  await page.getByRole("button", { name: "Resumen" }).click();
   const resolution = page.getByTestId("analyst-resolution");
   await expect(resolution).toContainText("Falso positivo (dejada pasar)");
   await expect(resolution).toContainText(notes);

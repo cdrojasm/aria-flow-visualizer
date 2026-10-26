@@ -7,6 +7,8 @@ const E2E_EMAIL = "e03-vector-store@example.com";
 let bootstrapApi: APIRequestContext | undefined;
 let credentials: { email: string; password: string } | undefined;
 let fixtureTaxonomyId: string | undefined;
+let rollbackTaxonomyId: string | undefined;
+let rollbackTaxonomyCode: string | undefined;
 
 type Auth = { access_token: string };
 type User = { id: string; email: string; name: string };
@@ -87,17 +89,45 @@ test.beforeAll(async ({ playwright }) => {
 });
 
 test.afterAll(async () => {
-  if (bootstrapApi && credentials && fixtureTaxonomyId) {
+  if (
+    bootstrapApi &&
+    credentials &&
+    (fixtureTaxonomyId || rollbackTaxonomyId || rollbackTaxonomyCode)
+  ) {
     const { access_token: token } = await login(
       bootstrapApi,
       credentials.email,
       credentials.password,
     );
-    const removed = await bootstrapApi.delete(
-      `/api/v0/library/taxonomies/${encodeURIComponent(fixtureTaxonomyId)}`,
-      auth(token),
-    );
-    expect(removed.status(), `limpiar fixture E03: ${await removed.text()}`).toBe(204);
+    if (fixtureTaxonomyId) {
+      const removed = await bootstrapApi.delete(
+        `/api/v0/library/taxonomies/${encodeURIComponent(fixtureTaxonomyId)}`,
+        auth(token),
+      );
+      expect(removed.status(), `limpiar fixture E03: ${await removed.text()}`).toBe(204);
+    }
+    if (rollbackTaxonomyId) {
+      const removed = await bootstrapApi.delete(
+        `/api/v0/library/taxonomies/${encodeURIComponent(rollbackTaxonomyId)}`,
+        auth(token),
+      );
+      expect(removed.status(), `limpiar taxonomía rollback E03: ${await removed.text()}`).toBe(204);
+    } else if (rollbackTaxonomyCode) {
+      const taxonomies = await json<Taxonomy[]>(
+        await bootstrapApi.get("/api/v0/library/taxonomies?active_only=false", auth(token)),
+        "buscar taxonomía parcial E03",
+      );
+      const partial = taxonomies.find((taxonomy) => taxonomy.code === rollbackTaxonomyCode);
+      if (partial) {
+        const removed = await bootstrapApi.delete(
+          `/api/v0/library/taxonomies/${encodeURIComponent(partial.id)}`,
+          auth(token),
+        );
+        expect(removed.status(), `limpiar taxonomía parcial E03: ${await removed.text()}`).toBe(
+          204,
+        );
+      }
+    }
   }
   await bootstrapApi?.dispose();
 });
@@ -179,8 +209,13 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
     "crear taxonomía fixture E03",
   );
   fixtureTaxonomyId = fixtureTaxonomy.id;
-  const fixtureModus = await json<ModusOperandi>(
-    await request.post("/api/v0/library/modus-operandi", {
+  const rollbackSuffix = randomBytes(8).toString("hex");
+  const rollbackCode = `E03-${rollbackSuffix}`;
+  rollbackTaxonomyCode = rollbackCode;
+  const rollbackName = `Taxonomía E03 ${rollbackSuffix}`;
+  let createdTaxonomy: Taxonomy | undefined;
+  const [modusResponse, rollbackCreation] = await Promise.all([
+    request.post("/api/v0/library/modus-operandi", {
       ...auth(token),
       data: {
         title: `MO E03 ${fixtureSuffix}`,
@@ -189,8 +224,26 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
         evolved_variables: ["frecuencia"],
       },
     }),
-    "crear modus operandi fixture E03",
-  );
+    request.post("/api/v0/library/taxonomies", {
+      ...auth(token),
+      data: {
+        code: rollbackCode,
+        name: rollbackName,
+        description: "Fixture E03 temporal",
+        variables: [],
+        examples: [],
+      },
+    }),
+  ]);
+  const fixtureModus = await json<ModusOperandi>(modusResponse, "crear modus operandi fixture E03");
+  if (rollbackCreation.status() === 201) {
+    createdTaxonomy = (await rollbackCreation.json()) as Taxonomy;
+    rollbackTaxonomyId = createdTaxonomy.id;
+  } else {
+    expect(rollbackCreation.status(), `crear taxonomía E03: ${await rollbackCreation.text()}`).toBe(
+      500,
+    );
+  }
   const relationSnapshots = await Promise.all(
     instances.map(async (candidate) => ({
       candidate,
@@ -219,17 +272,17 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
   expect(await listInstances(request, token)).toEqual(beforeDuplicates);
 
   // Invalid asset types are rejected before any relation write.
-  const invalid = await request.post(
-    `/api/v0/vector-store-instances/${encodeURIComponent(instance.id)}/documents`,
-    { ...auth(token), data: { asset_type: "not-a-knowledge-type", asset_id: "e03-missing" } },
-  );
+  const [invalid, invalidPreflight] = await Promise.all([
+    request.post(`/api/v0/vector-store-instances/${encodeURIComponent(instance.id)}/documents`, {
+      ...auth(token),
+      data: { asset_type: "not-a-knowledge-type", asset_id: "e03-missing" },
+    }),
+    request.post(
+      `/api/v0/vector-store-instances/${encodeURIComponent(instance.id)}/documents/preflight`,
+      { ...auth(token), data: { asset_type: "not-a-knowledge-type", asset_id: "e03-missing" } },
+    ),
+  ]);
   expect(invalid.status()).toBe(422);
-  expect(await listRelations(request, token, instance.id)).toEqual(relations);
-
-  const invalidPreflight = await request.post(
-    `/api/v0/vector-store-instances/${encodeURIComponent(instance.id)}/documents/preflight`,
-    { ...auth(token), data: { asset_type: "not-a-knowledge-type", asset_id: "e03-missing" } },
-  );
   expect(invalidPreflight.status()).toBe(422);
   expect(await listRelations(request, token, instance.id)).toEqual(relations);
 
@@ -333,28 +386,19 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
 
   // Exercise taxonomy create/edit rollback. A healthy embedding provider creates
   // and then removes the fixture; a provider error must leave no partial row.
-  const suffix = randomBytes(8).toString("hex");
-  const code = `E03-${suffix}`;
-  const name = `Taxonomía E03 ${suffix}`;
-  let createdTaxonomy: Taxonomy | undefined;
   try {
-    const creation = await request.post("/api/v0/library/taxonomies", {
-      ...auth(token),
-      data: { code, name, description: "Fixture E03 temporal", variables: [], examples: [] },
-    });
-    if (creation.status() === 201) {
-      createdTaxonomy = (await creation.json()) as Taxonomy;
+    if (createdTaxonomy) {
       const edited = await json<Taxonomy>(
         await request.patch(
           `/api/v0/library/taxonomies/${encodeURIComponent(createdTaxonomy.id)}`,
           {
             ...auth(token),
-            data: { name: `${name} editada`, active: false },
+            data: { name: `${rollbackName} editada`, active: false },
           },
         ),
         "editar taxonomía E03",
       );
-      expect(edited.name).toBe(`${name} editada`);
+      expect(edited.name).toBe(`${rollbackName} editada`);
       expect(edited.active).toBe(false);
 
       const mockControlUrl = process.env.E2E_EMBEDDING_MOCK_CONTROL_URL;
@@ -365,7 +409,7 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
           `/api/v0/library/taxonomies/${encodeURIComponent(createdTaxonomy.id)}`,
           {
             ...auth(token),
-            data: { name: `${name} edición fallida` },
+            data: { name: `${rollbackName} edición fallida` },
           },
         );
         expect(failedUpdate.status()).toBe(500);
@@ -374,17 +418,17 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
           "verificar rollback de edición de taxonomía",
         );
         expect(afterFailedUpdate.find((entry) => entry.id === createdTaxonomy!.id)?.name).toBe(
-          `${name} editada`,
+          `${rollbackName} editada`,
         );
 
-        const failedCode = `E03-FAIL-EMBED-${suffix}`;
+        const failedCode = `E03-FAIL-EMBED-${rollbackSuffix}`;
         const failNextCreate = await request.post(`${mockControlUrl}/admin/fail-next`);
         expect(failNextCreate.status()).toBe(204);
         const failedCreate = await request.post("/api/v0/library/taxonomies", {
           ...auth(token),
           data: {
             code: failedCode,
-            name: `Taxonomía rollback ${suffix}`,
+            name: `Taxonomía rollback ${rollbackSuffix}`,
             description: "Forzar fallo de embedding para comprobar rollback",
           },
         });
@@ -401,15 +445,13 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
             "Los rollbacks por fallo de embedding requieren E2E_EMBEDDING_MOCK_CONTROL_URL.",
         });
       }
-    } else {
-      expect(creation.status(), `crear taxonomía E03: ${await creation.text()}`).toBe(500);
     }
   } finally {
     const afterCreate = await json<Taxonomy[]>(
       await request.get("/api/v0/library/taxonomies?active_only=false", auth(token)),
       "comprobar rollback de creación de taxonomía",
     );
-    const partial = afterCreate.find((entry) => entry.code === code);
+    const partial = afterCreate.find((entry) => entry.code === rollbackCode);
     const partialWriteOccurred = !!partial;
     if (partial) {
       const removed = await request.delete(
@@ -418,6 +460,8 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
       );
       expect(removed.status()).toBe(204);
     }
+    rollbackTaxonomyId = undefined;
+    rollbackTaxonomyCode = undefined;
     if (createdTaxonomy) {
       const afterCleanup = await json<Taxonomy[]>(
         await request.get("/api/v0/library/taxonomies?active_only=false", auth(token)),

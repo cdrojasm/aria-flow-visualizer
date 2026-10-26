@@ -155,6 +155,10 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
     if (endpoint === "overview") expect(result.distributions).toBeTruthy();
   }
 
+  const auditQuery = await request.get(`${baseURL}/api/v0/audit-logs?from_date=${encodeURIComponent(from.slice(0, 10))}&to_date=${encodeURIComponent(to.slice(0, 10))}&limit=10000`, { headers: { Authorization: `Bearer ${token}` } });
+  expect(auditQuery.status(), await auditQuery.text()).toBe(200);
+  const auditRows = (await auditQuery.json()) as Array<{ correlation_id?: string; entidad_tipo?: string }>;
+  for (const correlationId of auditIds) expect(auditRows.some((row) => row.correlation_id === correlationId && row.entidad_tipo === "http_endpoint")).toBe(true);
   await page.addInitScript((value) => localStorage.setItem("aria.auth.accessToken", value), token);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));

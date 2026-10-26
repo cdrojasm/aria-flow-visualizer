@@ -17,9 +17,10 @@
     "test:e2e:real": "ARIA_E2E_REAL=1 playwright test e2e/alert-schema-real-api.spec.ts",
     "test:e2e:observability:real": "ARIA_E2E_REAL=1 playwright test e2e/observability-real.spec.ts",
     "test:e2e:auth:real": "ARIA_E2E_REAL=1 playwright test e2e/auth-real.spec.ts",
-    "test:e2e:agent:real": "ARIA_E2E_REAL=1 playwright test e2e/agent-assistant-real.spec.ts",
+    "test:e2e:agent:real": "ARIA_E2E_REAL=1 playwright test e2e/agent-assistant-base-real.spec.ts",
     "test:e2e:agent:optimizer:real": "ARIA_E2E_REAL=1 playwright test e2e/agent-optimizer-real.spec.ts",
     "test:e2e:configuration:real": "ARIA_E2E_REAL=1 playwright test e2e/configuration-deploy-real.spec.ts",
+    "test:e2e:configuration:graph:real": "ARIA_E2E_REAL=1 playwright test e2e/configuration-graph-real.spec.ts",
     "test:e2e:datasets:real": "python3 scripts/prepare_e04_dataset_partitions.py --source \"${E2E_DATASET_SOURCE:-/Users/davidrojas/Downloads/training_dataset_xgboost.csv}\" --schema-sample \"${E2E_DATASET_SCHEMA_SAMPLE:-/Users/davidrojas/Downloads/dataset_ejemplo.csv}\" --output \"${E2E_DATASET_PARTITIONS_DIR:-/private/tmp/aria-e04-partitions}\" && ARIA_E2E_REAL=1 playwright test e2e/datasets-real.spec.ts",
     "test:e2e:models:real": "docker compose up -d --build web && python3 scripts/prepare_e04_dataset_partitions.py --source \"${E2E_DATASET_SOURCE:-/Users/davidrojas/Downloads/training_dataset_xgboost.csv}\" --schema-sample \"${E2E_DATASET_SCHEMA_SAMPLE:-/Users/davidrojas/Downloads/dataset_ejemplo.csv}\" --output \"${E2E_DATASET_PARTITIONS_DIR:-/private/tmp/aria-e04-partitions}\" && ARIA_E2E_REAL=1 playwright test e2e/models-training-real.spec.ts",
     "test:e2e:reports:real": "docker compose up -d --build web && ARIA_E2E_REAL=1 playwright test e2e/reports-real.spec.ts",
@@ -29,6 +30,7 @@
     "test:e2e:simulation": "ARIA_E2E_REAL=1 playwright test e2e/event-simulation-real.spec.ts"
   },
   "dependencies": {
+    "@gitgraph/react": "1.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
