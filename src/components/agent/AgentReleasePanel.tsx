@@ -220,6 +220,17 @@ export function AgentReleasePanel({ role }: { role: Role }) {
                 <p>
                   Snapshot {release.snapshot_id} · {release.snapshot_sha256}
                 </p>
+                {Object.keys(release.handoffs ?? {}).length > 0 && (
+                  <ul className="mt-1 space-y-0.5" aria-label="Componentes entregados">
+                    {Object.entries(release.handoffs ?? {}).map(([component, handoff]) => (
+                      <li key={component} data-testid="release-handoff">
+                        {HANDOFF_COMPONENT[component] ?? component}:{" "}
+                        {HANDOFF_FLOW[handoff.flow] ?? handoff.flow} ·{" "}
+                        {HANDOFF_STATUS[handoff.status] ?? handoff.status}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {release.status === "PENDING_APPROVAL" && (
                   <button
                     type="button"
@@ -266,3 +277,21 @@ export function AgentReleasePanel({ role }: { role: Role }) {
     </section>
   );
 }
+
+const HANDOFF_COMPONENT: Record<string, string> = {
+  configuration: "Configuración",
+  library: "Biblioteca",
+  vector_store: "Vector store",
+};
+
+const HANDOFF_FLOW: Record<string, string> = {
+  configuration_deploy_request: "solicitud de despliegue",
+  vector_store_promotion: "promoción del Vector Store",
+  library_review: "revisión en Biblioteca",
+};
+
+const HANDOFF_STATUS: Record<string, string> = {
+  pending: "pendiente de aprobación",
+  promoted: "promovido",
+  manual: "aplícalo en Biblioteca",
+};

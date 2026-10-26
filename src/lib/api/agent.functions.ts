@@ -100,6 +100,7 @@ export type AgentRelease = {
   updated_at: string | null;
   observations: { count?: number; disagreements?: number };
   rollback_reason: string | null;
+  handoffs?: Record<string, { flow: string; reference: string; status: string }>;
 };
 
 export type AgentAuditEvent = {
