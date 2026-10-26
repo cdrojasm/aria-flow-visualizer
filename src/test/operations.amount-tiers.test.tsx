@@ -51,6 +51,9 @@ const settings = {
     { code: "alto", label: "Alto", min_inclusive: 1000, max_exclusive: null },
   ],
   reasoning_evaluation_sample_rate: 0.05,
+  maturing_days: 4,
+  expected_coverage_pct: 98,
+  stable_months: 6,
 };
 
 let putBody: { settings: typeof settings } | undefined;
