@@ -151,6 +151,7 @@ export type AgentIteration = {
   started_at: string | null;
   finished_at: string | null;
   hypothesis: string | null;
+  hypothesis_id?: string | null;
   decision: string | null;
   reason: string | null;
   specialists: string[];
@@ -699,4 +700,69 @@ export type AgentFailureInfo = {
 
 export function listAgentFailureCatalog() {
   return apiFetch<AgentFailureInfo[]>(`${path}/failure-catalog`);
+}
+
+/* ─── OptimizationRun: the whole run in one structure (#29) ───────────────── */
+
+export type ComponentPin = AgentExperiment["components"][number];
+
+export type RunWinner = {
+  candidate_id: string;
+  experiment_id: string;
+  component: string;
+  recall: number;
+  precision: number;
+  recall_delta: number;
+};
+
+export type CandidateConclusion = {
+  verdict?: "VALIDATED" | "REFUTED" | "NONCONCLUSIVE";
+  summary?: string;
+  evidence?: Record<string, number>;
+  experiment_id?: string | null;
+  verification_id?: string;
+  decision?: "keep" | "discard" | "retry";
+  recommendation?: string;
+  decided_at?: string;
+};
+
+export type RunCandidate = {
+  hypothesis: AgentHypothesis & {
+    depends_on: string[];
+    insight_ids: string[];
+    conclusion: CandidateConclusion;
+    created_at: string;
+  };
+  experiments: (AgentExperiment & { events_stream: string; candidate_id: string | null })[];
+};
+
+export type OptimizationRun = {
+  run_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  objective_id: string | null;
+  objective_version: number | null;
+  baseline_components: ComponentPin[];
+  budget_limits: Record<string, number>;
+  optimizer_settings: Record<string, number>;
+  scope_areas: string[];
+  insight_ids: string[];
+  memory_insight_ids: string[];
+  winners: RunWinner[];
+  winning_components: ComponentPin[];
+  strategy: { action?: "explore" | "combine" | "promote"; rationale?: string; winner?: string };
+  events_stream: string;
+  candidates: RunCandidate[];
+  findings: AgentFinding[];
+};
+
+export function getOptimizationRun(sessionId: string) {
+  return apiFetch<OptimizationRun>(`${path}/optimization-runs/${encodeURIComponent(sessionId)}`);
+}
+
+export function listExperimentEvents(sessionId: string, experimentId: string) {
+  return apiFetch<AgentEventsPage>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/experiments/${encodeURIComponent(experimentId)}/events?limit=200`,
+  );
 }

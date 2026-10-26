@@ -7,12 +7,11 @@ import {
   controlOptimizerSession,
   getAgentSessionBudget,
   getAgentSessionOverview,
+  getOptimizationRun,
   listAgentClaims,
   listAgentEvents,
-  listAgentExperiments,
   listAgentFailureCatalog,
   listAgentFindings,
-  listAgentHypotheses,
   listAgentInsights,
   listAgentIterations,
   listAgentSessions,
@@ -21,11 +20,10 @@ import {
   type AgentSessionOverview,
 } from "@/lib/api/agent.functions";
 import { BlockApprovalDrawer } from "./BlockApprovalDrawer";
-import { ExperimentsPanel } from "./ExperimentsPanel";
-import { HypothesisBoard } from "./HypothesisBoard";
 import { LearningsPanel } from "./LearningsPanel";
 import { OptimizerCycleDiagram } from "./OptimizerCycleDiagram";
 import { OptimizerLaunchDrawer } from "./OptimizerLaunchDrawer";
+import { RunTree } from "./RunTree";
 import { SessionConversation } from "./SessionConversation";
 import { SessionTimeline } from "./SessionTimeline";
 import { SessionVerdictCard } from "./SessionVerdictCard";
@@ -39,14 +37,12 @@ import {
   budgetLabel,
 } from "./labels";
 
-type CenterTab =
-  "summary" | "timeline" | "hypotheses" | "experiments" | "learnings" | "conversation" | "releases";
+type CenterTab = "summary" | "run" | "timeline" | "learnings" | "conversation" | "releases";
 
 const TABS: { key: CenterTab; label: string }[] = [
   { key: "summary", label: "Resumen" },
+  { key: "run", label: "Corrida" },
   { key: "timeline", label: "Línea de tiempo" },
-  { key: "hypotheses", label: "Hipótesis" },
-  { key: "experiments", label: "Experimentos" },
   { key: "learnings", label: "Aprendizajes" },
   { key: "conversation", label: "Conversación" },
   { key: "releases", label: "Releases" },
@@ -130,23 +126,11 @@ export function OptimizerCenter({ role }: { role: string | undefined }) {
     enabled,
     refetchInterval: 5_000,
   });
-  const hypothesesQuery = useQuery({
-    queryKey: ["agentHypotheses", sessionId],
-    queryFn: () => listAgentHypotheses(sessionId),
-    enabled,
-    refetchInterval: 5_000,
-  });
   const insightsQuery = useQuery({
     queryKey: ["agentInsights", sessionId],
     queryFn: () => listAgentInsights(sessionId),
     enabled,
     refetchInterval: 10_000,
-  });
-  const experimentsQuery = useQuery({
-    queryKey: ["agentExperiments", sessionId],
-    queryFn: () => listAgentExperiments(sessionId),
-    enabled,
-    refetchInterval: 5_000,
   });
   const findingsQuery = useQuery({
     queryKey: ["agentFindings", sessionId],
@@ -159,6 +143,13 @@ export function OptimizerCenter({ role }: { role: string | undefined }) {
     queryFn: () => getAgentSessionBudget(sessionId),
     enabled,
     refetchInterval: 5_000,
+  });
+  const runQuery = useQuery({
+    queryKey: ["optimizationRun", sessionId],
+    queryFn: () => getOptimizationRun(sessionId),
+    enabled,
+    refetchInterval: 5_000,
+    retry: false,
   });
   const catalogQuery = useQuery({
     queryKey: ["agentFailureCatalog"],
@@ -276,7 +267,9 @@ export function OptimizerCenter({ role }: { role: string | undefined }) {
                     {SESSION_DATE.format(new Date(item.created_at))}
                   </span>
                   <span className="block text-[11px]">
-                    {item.session_id === sessionId && overview ? state.label : (item.status ?? "")}
+                    {item.session_id === sessionId && overview
+                      ? state.label
+                      : (SESSION_STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </button>
               );
@@ -335,21 +328,33 @@ export function OptimizerCenter({ role }: { role: string | undefined }) {
               <RecentIterations iterations={iterationsQuery.data ?? []} />
             </div>
           )}
+          {tab === "run" &&
+            (runQuery.data && runQuery.data.status !== "PENDING" ? (
+              <RunTree
+                run={runQuery.data}
+                runningCandidateIds={
+                  new Set(
+                    (iterationsQuery.data ?? [])
+                      .filter((item) => item.status === "RUNNING")
+                      .map((item) => item.hypothesis_id ?? "")
+                      .filter(Boolean),
+                  )
+                }
+                insights={insightsQuery.data ?? []}
+                catalog={catalogQuery.data ?? []}
+              />
+            ) : runQuery.isLoading ? (
+              <p className="text-[13px] text-text-secondary">Cargando la corrida…</p>
+            ) : (
+              <p
+                data-testid="run-missing"
+                className="rounded-lg border border-dashed border-border p-4 text-[13px] text-text-secondary"
+              >
+                Esta sesión todavía no tiene una corrida: se crea en su primer tick.
+              </p>
+            ))}
           {tab === "timeline" && (
             <SessionTimeline events={events} loading={eventsQuery.isLoading} />
-          )}
-          {tab === "hypotheses" && (
-            <HypothesisBoard
-              hypotheses={hypothesesQuery.data ?? []}
-              events={events}
-              insights={insightsQuery.data ?? []}
-            />
-          )}
-          {tab === "experiments" && (
-            <ExperimentsPanel
-              experiments={experimentsQuery.data ?? []}
-              catalog={catalogQuery.data ?? []}
-            />
           )}
           {tab === "learnings" && <LearningsPanel findings={findingsQuery.data ?? []} />}
           {tab === "conversation" && <SessionConversation sessionId={sessionId} />}

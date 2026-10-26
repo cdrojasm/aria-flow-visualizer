@@ -189,7 +189,7 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     );
   });
   page.on("response", (response) => {
-    if (response.url().startsWith("http://localhost/api/v0/agent/sessions/")) {
+    if (response.url().startsWith("http://localhost/api/v0/agent/")) {
       optimizerReadPaths.push(new URL(response.url()).pathname);
     }
     if (response.status() >= 500) {
@@ -299,16 +299,15 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   expect(eventsResponse.ok(), `eventos: ${await eventsResponse.text()}`).toBeTruthy();
   const timeline = await eventsResponse.json();
   expect(Array.isArray(timeline.items)).toBeTruthy();
-  await page.getByRole("button", { name: "Experimentos", exact: true }).click();
-  await expect(
-    page.getByTestId("experiments-empty").or(page.getByTestId("experiments-list")),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Corrida", exact: true }).click();
+  await expect(page.getByTestId("run-tree").or(page.getByTestId("run-missing"))).toBeVisible();
   await page.getByRole("button", { name: "Línea de tiempo", exact: true }).click();
   await expect(
     page.getByTestId("timeline-empty").or(page.getByTestId("timeline-list")),
   ).toBeVisible();
+  // The run (candidates, experiments, conclusions) is read as one structure.
   await expect
-    .poll(() => optimizerReadPaths.some((url) => url.endsWith("/experiments")))
+    .poll(() => optimizerReadPaths.some((url) => url.includes("/agent/optimization-runs/")))
     .toBeTruthy();
   await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/events"))).toBeTruthy();
   await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/overview"))).toBeTruthy();

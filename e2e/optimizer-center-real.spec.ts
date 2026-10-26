@@ -33,7 +33,8 @@ type State =
   | "blocked_context"
   | "failing"
   | "inconclusive"
-  | "completed";
+  | "completed"
+  | "parallel";
 
 function seedScript(args: string[]) {
   return execFileSync(python, ["scripts/e2e_optimizer_seed.py", ...args], {
@@ -210,8 +211,8 @@ test("sesión sin contexto: rechaza datos personales y convierte la pista en hip
   await drawer.getByRole("button", { name: "Aprobar y continuar" }).click();
   await expect(drawer).toBeHidden();
 
-  await section(page, "Hipótesis");
-  await expect(page.getByTestId("hypothesis-board")).toContainText(clue);
+  await section(page, "Corrida");
+  await expect(page.getByTestId("candidates-list")).toContainText(clue);
   const hypotheses = await api.get(`${baseURL}/api/v0/agent/sessions/${sessionId}/hypotheses`, {
     headers: auth(),
   });
@@ -228,7 +229,7 @@ test("iteración fallida: muestra la razón del catálogo y cómo seguir, sin te
   await expect(verdict).toContainText("Falló el entrenamiento");
   await expect(verdict).toContainText("Reintenta la iteración.");
 
-  await section(page, "Experimentos");
+  await section(page, "Corrida");
   await expect(page.getByTestId("experiments-list")).toContainText(
     "Falló la reproducción del pipeline",
   );
@@ -256,22 +257,39 @@ test("sesión terminada: hipótesis, comparación, cambio en producción y apren
   const sessionId = seed("completed");
   await openOptimizer(page, sessionId);
   await expect(page.getByTestId("optimizer-verdict")).toContainText(
-    "Terminó con 1 hipótesis validada",
+    "Terminó con 3 hipótesis validadas",
   );
   await expect(page.getByTestId("optimizer-cycle")).toBeVisible();
 
-  await section(page, "Hipótesis");
-  const board = page.getByTestId("hypothesis-board");
-  await expect(board.getByRole("region", { name: "Validadas" })).toContainText(
-    "Nace de tu contexto",
+  await section(page, "Corrida");
+  const tree = page.getByTestId("run-tree");
+  // One structure: strategy, base configuration, winners and every candidate.
+  await expect(tree.getByRole("region", { name: "Estrategia de la corrida" })).toContainText(
+    "Promover el ganador",
   );
-  await board.getByRole("button", { name: /Trazabilidad/ }).click();
-  await expect(board.getByRole("list", { name: "Trazabilidad" })).toContainText("Hipótesis");
-
-  await section(page, "Experimentos");
-  const table = page.getByRole("table", { name: "Baseline contra candidato" });
-  await expect(table).toContainText("+11.0 pts");
-  await expect(page.getByTestId("experiments-list")).toContainText("120 casos elegibles");
+  await expect(
+    tree.getByRole("region", { name: "Configuración base del optimizador" }),
+  ).toContainText("hasta 3 por sesión");
+  const winners = page.getByTestId("winners-table");
+  await expect(winners.locator("tbody tr")).toHaveCount(3);
+  await expect(winners.locator("tbody tr").first()).toContainText("Combinar los ganadores");
+  await expect(winners.locator("tbody tr").first()).toContainText("+16.0 pts");
+  await expect(page.getByTestId("winning-configuration")).toContainText("Modelo v2");
+  await expect(page.getByTestId("winning-configuration")).toContainText("Configuración v2");
+  const cards = page.getByTestId("candidate-card");
+  await expect(cards).toHaveCount(3);
+  const combination = page.locator("[data-testid='candidate-card'][data-area='combination']");
+  await expect(combination).toContainText("Combina:");
+  await expect(combination.getByRole("region", { name: "Conclusión" })).toContainText("Conservar");
+  await expect(page.locator("[data-testid='candidate-card'][data-area='model']")).toContainText(
+    "«Priorizar los falsos positivos de Digital en la noche»",
+  );
+  const table = combination.getByRole("table", { name: "Baseline contra candidato" });
+  await expect(table).toContainText("+16.0 pts");
+  await combination.getByRole("button", { name: "Eventos del experimento" }).click();
+  await expect(combination.getByRole("list", { name: "Eventos del experimento" })).toContainText(
+    "Experimento cumplió el objetivo global",
+  );
 
   await section(page, "Línea de tiempo");
   await expect(page.getByTestId("timeline-list")).toContainText(
@@ -283,6 +301,39 @@ test("sesión terminada: hipótesis, comparación, cambio en producción y apren
     "94.0%",
   );
   await expect(page.getByTestId("learnings-list")).toContainText("120 casos");
+});
+
+test("candidatos en paralelo: la corrida muestra los tres en ejecución, uno por componente", async ({
+  page,
+}) => {
+  const sessionId = seed("parallel");
+  const response = await api.get(`${baseURL}/api/v0/agent/optimization-runs/${sessionId}`, {
+    headers: auth(),
+  });
+  expect(response.ok(), `corrida: ${await response.text()}`).toBeTruthy();
+  const run = (await response.json()) as {
+    candidates: { hypothesis: { scope: { area: string } } }[];
+    optimizer_settings: { max_parallel_experiments: number };
+  };
+  expect(run.candidates.map((item) => item.hypothesis.scope.area).sort()).toEqual([
+    "configuration",
+    "library",
+    "model",
+  ]);
+  expect(run.optimizer_settings.max_parallel_experiments).toBe(3);
+
+  await openOptimizer(page, sessionId);
+  await expect(page.getByTestId("optimizer-verdict")).toContainText(
+    "Trabajando en 3 candidatos en paralelo",
+  );
+  await section(page, "Corrida");
+  await expect(page.getByTestId("parallel-running")).toContainText("3 en paralelo");
+  const cards = page.getByTestId("candidate-card");
+  await expect(cards).toHaveCount(3);
+  for (const card of await cards.all()) {
+    await expect(card).toContainText("En ejecución");
+  }
+  await expect(page.getByTestId("winners-empty")).toBeVisible();
 });
 
 test("lo que muestra la línea de tiempo coincide con los eventos de la API", async ({ page }) => {
