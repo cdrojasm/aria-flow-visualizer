@@ -414,3 +414,43 @@ test("lanzar optimizador abre el drawer lateral con alcance y revisión", async 
   await drawer.getByLabel("Biblioteca", { exact: true }).check();
   await expect(review).toBeEnabled();
 });
+
+test("Monitor → Optimizador: carga agregada, esperas por motivo y sin identificadores", async ({
+  browser,
+}) => {
+  test.skip(!managerEmail || !managerPassword, "E2E_MANAGER_EMAIL/PASSWORD are required");
+  const parallel = seed("parallel");
+  const blocked = seed("blocked_budget");
+  const managerToken = await login(api, managerEmail!, managerPassword!);
+
+  const response = await api.get(`${baseURL}/api/v0/agent/optimizer-status`, {
+    headers: { Authorization: `Bearer ${managerToken}` },
+  });
+  expect(response.ok(), `optimizer-status: ${await response.text()}`).toBeTruthy();
+  const raw = await response.text();
+  // Aggregates only: the Monitor never receives session or run identifiers.
+  expect(raw).not.toContain(parallel);
+  expect(raw).not.toContain(blocked);
+  const status = JSON.parse(raw) as {
+    running_candidates: number;
+    blocked_by_reason: Record<string, number>;
+    max_parallel_experiments: number;
+  };
+  expect(status.running_candidates).toBeGreaterThanOrEqual(3);
+  expect(status.blocked_by_reason.BUDGET_EXHAUSTED).toBeGreaterThanOrEqual(1);
+
+  const context = await browser.newContext({ baseURL });
+  await context.addInitScript((value) => {
+    localStorage.setItem("aria.auth.accessToken", value);
+    localStorage.setItem("aria.monitor.tab", "optimizador");
+  }, managerToken);
+  const page = await context.newPage();
+  await page.goto("/monitor");
+  const panel = page.getByTestId("optimizer-monitor");
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole("region", { name: "Carga del optimizador" })).toContainText(
+    "Candidatos en paralelo",
+  );
+  await expect(page.getByTestId("optimizer-block-reasons")).toContainText("Presupuesto agotado");
+  await context.close();
+});

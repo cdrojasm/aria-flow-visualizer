@@ -766,3 +766,29 @@ export function listExperimentEvents(sessionId: string, experimentId: string) {
     `${path}/sessions/${encodeURIComponent(sessionId)}/experiments/${encodeURIComponent(experimentId)}/events?limit=200`,
   );
 }
+
+export type OptimizerStatus = {
+  sessions: Record<string, number>;
+  blocked_by_reason: Record<string, number>;
+  reason_titles: Record<string, string>;
+  running_candidates: number;
+  active_runs: number;
+  max_concurrent_runs: number;
+  max_parallel_experiments: number;
+  max_concurrent_sessions: number;
+  budget: Record<string, { spent: number; limit: number }>;
+  experiments: Record<string, number>;
+  samples: {
+    snapshot_id: string;
+    period_start: string;
+    period_end: string;
+    maturing_days: number;
+    partition_counts: Record<string, number>;
+    schema_versions: number[];
+    experiments: number;
+  }[];
+};
+
+export function getOptimizerStatus() {
+  return apiFetch<OptimizerStatus>(`${path}/optimizer-status`);
+}

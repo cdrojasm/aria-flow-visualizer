@@ -31,6 +31,7 @@ import {
 } from "@/components/metrics/MetricsShared";
 import { initialRange, type RangeState } from "@/lib/api/metricsMapping";
 import { useRole } from "@/hooks/useRole";
+import { OptimizerMonitorPanel } from "@/components/optimizer/OptimizerMonitorPanel";
 import {
   getAgentMetrics,
   getTechnicalMetrics,
@@ -73,6 +74,7 @@ const MONITOR_TABS = [
   { value: "explicabilidad", label: "Explicabilidad" },
   { value: "tecnicos", label: "Indicadores técnicos" },
   { value: "recomendaciones", label: "% Recomendaciones" },
+  { value: "optimizador", label: "Optimizador" },
 ] as const;
 type MonitorTab = (typeof MONITOR_TABS)[number]["value"];
 const MONITOR_TAB_KEY = "aria.monitor.tab";
@@ -480,6 +482,10 @@ function MonitorPage() {
                   />
                 )}
               </section>
+            </TabsContent>
+
+            <TabsContent value="optimizador">
+              <OptimizerMonitorPanel />
             </TabsContent>
           </Tabs>
         </div>
