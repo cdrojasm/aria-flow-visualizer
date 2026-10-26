@@ -15,9 +15,18 @@ const COMPONENT_LABEL: Record<string, string> = {
   vector_store: "Vector store",
 };
 
+// The evaluator publishes metrics under `metrics`; older records kept them at the top.
 function side(experiment: AgentExperiment, key: "candidate" | "baseline") {
-  const value = experiment.global_evaluation[key];
+  const nested = experiment.global_evaluation.metrics as Record<string, unknown> | undefined;
+  const value =
+    nested && typeof nested[key] === "object" ? nested[key] : experiment.global_evaluation[key];
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function eligibleCount(experiment: AgentExperiment) {
+  const sample = experiment.global_evaluation.sample as Record<string, unknown> | undefined;
+  const value = sample?.eligible_count ?? experiment.global_evaluation.eligible_count;
+  return typeof value === "number" ? value : undefined;
 }
 
 function metric(source: Record<string, unknown>, key: string) {
@@ -59,7 +68,7 @@ export function ExperimentsPanel({
         const status = STATUS[experiment.status];
         const candidate = side(experiment, "candidate");
         const baseline = side(experiment, "baseline");
-        const support = experiment.global_evaluation.eligible_count;
+        const support = eligibleCount(experiment);
         const failure = experiment.error_code
           ? catalog.find((item) => item.code === experiment.error_code)
           : undefined;
