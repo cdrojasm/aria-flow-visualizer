@@ -15,7 +15,7 @@ let originalSettings: Record<string, unknown> | undefined;
 let createdSessionId = "";
 
 function readBootstrapToken() {
-  const backendDirectory = resolve(process.cwd(), "../aria-wt-A-fp4-fp5");
+  const backendDirectory = resolve(process.cwd(), "../backend");
   const project = process.env.LOCAL_DOCKER_PROJECT ?? "aria-local";
   const containerId = execFileSync(
     "docker",
@@ -70,7 +70,7 @@ test.beforeAll(async ({ playwright }) => {
   if (!bootstrapToken) {
     bootstrapToken = randomUUID();
     temporaryBootstrapToken = true;
-    const backendDirectory = resolve(process.cwd(), "../aria-wt-A-fp4-fp5");
+    const backendDirectory = resolve(process.cwd(), "../backend");
     const project = process.env.LOCAL_DOCKER_PROJECT ?? "aria-local";
     execFileSync(
       "docker",
@@ -142,7 +142,7 @@ test.afterAll(async () => {
   }
   if (temporaryBootstrapToken && api) {
     try {
-      const backendDirectory = resolve(process.cwd(), "../aria-wt-A-fp4-fp5");
+      const backendDirectory = resolve(process.cwd(), "../backend");
       const project = process.env.LOCAL_DOCKER_PROJECT ?? "aria-local";
       execFileSync(
         "docker",
@@ -197,19 +197,20 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     }
   });
   await signIn(page);
-  await page.getByRole("button", { name: "Abrir asistente ARIA" }).click();
+  await page.getByRole("button", { name: "Optimizador", exact: true }).click();
   const objectiveResponse = page.waitForResponse((response) =>
     response.url().includes("/agent/objectives/active"),
   );
-  await page.getByRole("button", { name: "Optimizador", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Lanzar optimizador" })).toBeVisible();
-  await page.getByLabel("Biblioteca", { exact: true }).check();
-  await page
+  await page.getByRole("button", { name: "Lanzar optimizador" }).click();
+  const drawer = page.getByTestId("side-drawer");
+  await expect(drawer).toContainText("Alcance de la investigación");
+  await drawer.getByLabel("Biblioteca", { exact: true }).check();
+  await drawer
     .getByLabel("Notas iniciales")
     .fill("Analiza oportunidades de mejora y explica cada hipótesis.");
-  await page.getByRole("button", { name: "Revisar objetivo y presupuesto" }).click();
+  await drawer.getByRole("button", { name: "Revisar objetivo y presupuesto" }).click();
   expect((await objectiveResponse).ok()).toBeTruthy();
-  await expect(page.getByText("Presupuesto asignado por el servidor.")).toBeVisible();
+  await expect(drawer.getByText("El servidor asigna el presupuesto")).toBeVisible();
   const overlapResponse = await api!.post("/api/v0/agent/sessions", {
     headers: { Authorization: `Bearer ${channelManagerToken}` },
     data: { mode: "optimization", scope: ["library"] },
@@ -223,7 +224,7 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     (response) =>
       response.url().includes("/api/v0/agent/sessions/") && response.url().endsWith("/start"),
   );
-  await page.getByRole("button", { name: "Confirmar e iniciar" }).click();
+  await drawer.getByRole("button", { name: "Confirmar e iniciar" }).click();
   const started = await startResponse;
   expect(
     started.ok(),
@@ -231,8 +232,6 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   ).toBeTruthy();
   const startedSession = (await started.json()) as {
     session_id: string;
-    created_at: string;
-    updated_at: string;
     lease: {
       status: "NONE" | "ACTIVE" | "EXPIRED";
       expires_at: string | null;
@@ -243,17 +242,12 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   await expect(
     page.getByRole("tablist", { name: "Historial de sesiones del optimizador" }),
   ).toBeVisible();
-  await expect(page.getByRole("tab").first()).toHaveAttribute("aria-selected", "true");
-  const sessionHistory = page.getByText(/Historial · creada/);
-  await expect(sessionHistory).toContainText(
-    `creada ${new Date(startedSession.created_at).toLocaleString("es-CO")}`,
-  );
-  await expect(sessionHistory).toContainText(
-    `actualización ${new Date(startedSession.updated_at).toLocaleString("es-CO")}`,
-  );
-  const lease = page.getByLabel("Estado del lease");
-  await expect(lease).toBeVisible();
-  await expect(lease).toContainText(startedSession.lease.status);
+  await expect(
+    page.getByRole("tab", { name: new RegExp(`Optimizador ${startedSession.session_id} `) }),
+  ).toHaveAttribute("aria-selected", "true");
+  // The verdict is read from the server, not inferred: it answers "is it working?".
+  await expect(page.getByTestId("optimizer-verdict")).toBeVisible();
+  await expect(page.getByTestId("optimizer-health")).toContainText("Reserva de ejecución");
   const claimResponse = await checked(
     await api!.get("/api/v0/agent/claims/scope%23library", {
       headers: { Authorization: `Bearer ${channelManagerToken}` },
@@ -277,7 +271,11 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     .filter({ hasText: "Hay otra sesión activa investigando" });
   await expect(interference).toContainText(startedSession.session_id, { timeout: 15_000 });
   await expect(interference).toContainText(
-    new Date(activeClaim.claimed_at).toLocaleString("es-CO"),
+    new Intl.DateTimeFormat("es-CO", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "America/Bogota",
+    }).format(new Date(activeClaim.claimed_at)),
   );
   await optimizerTabs
     .getByRole("tab", {
@@ -285,11 +283,11 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     })
     .click();
   const sessionIdEncoded = encodeURIComponent(startedSession.session_id);
-  const [experimentsResponse, auditResponse] = await Promise.all([
+  const [experimentsResponse, eventsResponse] = await Promise.all([
     api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/experiments?limit=50`, {
       headers: { Authorization: `Bearer ${channelManagerToken}` },
     }),
-    api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/audit?limit=50`, {
+    api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/events`, {
       headers: { Authorization: `Bearer ${channelManagerToken}` },
     }),
   ]);
@@ -297,26 +295,31 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     experimentsResponse.ok(),
     `experimentos: ${await experimentsResponse.text()}`,
   ).toBeTruthy();
-  const experiments = await experimentsResponse.json();
-  expect(Array.isArray(experiments)).toBeTruthy();
-  expect(auditResponse.ok(), `auditoría: ${await auditResponse.text()}`).toBeTruthy();
-  const audit = await auditResponse.json();
-  expect(Array.isArray(audit.items)).toBeTruthy();
-  expect(audit).toHaveProperty("next_cursor");
+  expect(Array.isArray(await experimentsResponse.json())).toBeTruthy();
+  expect(eventsResponse.ok(), `eventos: ${await eventsResponse.text()}`).toBeTruthy();
+  const timeline = await eventsResponse.json();
+  expect(Array.isArray(timeline.items)).toBeTruthy();
+  await page.getByRole("button", { name: "Experimentos", exact: true }).click();
   await expect(
-    page.getByRole("region", { name: "Comparación baseline y experimentos" }),
+    page.getByTestId("experiments-empty").or(page.getByTestId("experiments-list")),
   ).toBeVisible();
-  await expect(page.getByRole("region", { name: "Auditoría de sesión" })).toBeVisible();
-  await expect(page.getByText("Baseline y experimentos", { exact: true })).toBeVisible();
-  await expect(page.getByText("Auditoría", { exact: true }).last()).toBeVisible();
+  await page.getByRole("button", { name: "Línea de tiempo", exact: true }).click();
+  await expect(
+    page.getByTestId("timeline-empty").or(page.getByTestId("timeline-list")),
+  ).toBeVisible();
   await expect
     .poll(() => optimizerReadPaths.some((url) => url.endsWith("/experiments")))
     .toBeTruthy();
-  await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/audit"))).toBeTruthy();
-  await expect(page.getByText("Gastado", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Restante", { exact: true }).first()).toBeVisible();
+  await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/events"))).toBeTruthy();
+  await expect.poll(() => optimizerReadPaths.some((url) => url.endsWith("/overview"))).toBeTruthy();
+  await page.getByRole("button", { name: "Resumen", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Presupuesto" })).toBeVisible();
+  await expect(page.getByRole("progressbar").first()).toBeVisible();
   await page.getByRole("button", { name: "Pausar optimizador" }).click();
-  await expect(page.getByText("En pausa", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("optimizer-verdict")).toHaveAttribute("data-state", "paused", {
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Conversación", exact: true }).click();
   await page
     .getByLabel("Mensaje para el optimizador")
     .fill("Prioriza los hallazgos con evidencia global.");
@@ -326,7 +329,7 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
       response.url().includes("/messages") &&
       response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Enviar", exact: true }).last().click();
+  await page.getByRole("button", { name: "Enviar", exact: true }).click();
   const messageResult = await messageResponse;
   expect(
     messageResult.ok(),
@@ -343,8 +346,10 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
     cancelResult.ok(),
     `cancelar optimizador: ${cancelResult.status()} ${await cancelResult.text()}`,
   ).toBeTruthy();
-  await expect(page.getByText("Cancelado", { exact: true })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole("button", { name: "Asistente", exact: true }).click();
+  await expect(page.getByTestId("optimizer-verdict")).toHaveAttribute("data-state", "cancelled", {
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Abrir asistente ARIA" }).click();
   await expect(page.getByRole("button", { name: "Nueva", exact: true })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });

@@ -400,13 +400,15 @@ function BudgetMeters({
             <p className="mt-0.5 font-medium text-text-primary tabular-nums">
               {budgetLabel(resource, used)} de {budgetLabel(resource, limit)}
             </p>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface">
+            <div
+              role="progressbar"
+              aria-label={`Uso de ${BUDGET_RESOURCE_LABEL[resource] ?? resource}`}
+              aria-valuenow={Math.round(ratio * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface"
+            >
               <div
-                role="progressbar"
-                aria-label={`Uso de ${BUDGET_RESOURCE_LABEL[resource] ?? resource}`}
-                aria-valuenow={Math.round(ratio * 100)}
-                aria-valuemin={0}
-                aria-valuemax={100}
                 className={`h-full ${ratio >= 0.9 ? "bg-danger" : "bg-primary"}`}
                 style={{ width: `${ratio * 100}%` }}
               />
