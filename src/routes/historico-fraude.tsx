@@ -210,7 +210,7 @@ function FraudCell({ item }: { item: ApiAlertHistoryItem }) {
   if (item.fraud_label !== item.mark) {
     return (
       <div
-        className="relative inline-flex items-start"
+        className="inline-flex items-center gap-1.5 whitespace-nowrap"
         title={`Marca: ${MARK_LABELS[item.mark]} · Resultado revisado: ${MARK_LABELS[item.fraud_label]}`}
       >
         <span
@@ -219,7 +219,7 @@ function FraudCell({ item }: { item: ApiAlertHistoryItem }) {
           {MARK_LABELS[item.mark]}
         </span>
         <span
-          className={`-ml-3 mt-2.5 inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ring-2 ring-card ${MARK_BADGES[item.fraud_label]}`}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${MARK_BADGES[item.fraud_label]}`}
         >
           {MARK_LABELS[item.fraud_label]}
         </span>
