@@ -546,6 +546,12 @@ export function validateAgentExperiment(sessionId: string, experimentId: string)
   });
 }
 
+export function getRetrospectiveValidation(validationId: string) {
+  return apiFetch<RetrospectiveValidation>(
+    `/api/v0/agent/releases/retrospective-validations/${encodeURIComponent(validationId)}`,
+  );
+}
+
 export function requestAgentRelease(data: {
   validation_id: string;
   title: string;

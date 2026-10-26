@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  getRetrospectiveValidation,
   listAgentReleases,
   requestAgentRelease,
   transitionAgentRelease,
@@ -33,9 +34,31 @@ export function AgentReleasePanel({ role }: { role: Role }) {
     mutationFn: () => validateAgentExperiment(sessionId.trim(), experimentId.trim()),
     onSuccess: (result) => {
       setValidation(result);
-      setNotice(`Validación retrospectiva: ${result.status}`);
+      setNotice(
+        result.status === "RUNNING"
+          ? "Validación en curso: el worker reproduce el pipeline real con la muestra final."
+          : `Validación retrospectiva: ${result.status}`,
+      );
     },
     onError: (error) => setNotice(error instanceof Error ? error.message : "No se pudo validar."),
+  });
+  // The replay runs in the worker; poll until it leaves RUNNING.
+  useQuery({
+    queryKey: ["retrospectiveValidation", validation?.validation_id],
+    queryFn: async () => {
+      const latest = await getRetrospectiveValidation(validation!.validation_id);
+      if (latest.status !== "RUNNING") {
+        setValidation(latest);
+        setNotice(
+          latest.status === "PASSED"
+            ? "Validación retrospectiva: PASSED"
+            : `Validación retrospectiva: ${latest.status}${latest.error_code ? ` · ${latest.error_code}` : ""}`,
+        );
+      }
+      return latest;
+    },
+    enabled: validation?.status === "RUNNING",
+    refetchInterval: 3_000,
   });
   const requestMutation = useMutation({
     mutationFn: () => {
