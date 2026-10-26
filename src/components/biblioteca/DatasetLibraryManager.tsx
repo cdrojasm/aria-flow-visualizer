@@ -16,6 +16,7 @@ import { ExtractDatasetModal } from "@/components/datasets/ExtractDatasetModal";
 import { UploadDatasetModal } from "@/components/datasets/UploadDatasetModal";
 import { DatasetDetailDrawer } from "@/components/datasets/DatasetDetailDrawer";
 import { AsyncOperationProgressCard } from "@/components/async/AsyncOperationProgressCard";
+import { DatasetSplitDrawer } from "@/components/datasets/DatasetSplitDrawer";
 
 /* ─── Biblioteca → Datasets, the canonical dataset management surface ───
    Same "global catalog" footing as WatchlistManager.tsx: metadata-only
@@ -37,6 +38,7 @@ export function DatasetLibraryManager() {
   const [showCreateEmpty, setShowCreateEmpty] = useState(false);
   const [showExtract, setShowExtract] = useState(false);
   const [detailDataset, setDetailDataset] = useState<string | null>(null);
+  const [splitDataset, setSplitDataset] = useState<string | null>(null);
   const [deletingDataset, setDeletingDataset] = useState<DatasetRecord | null>(null);
   const [analyzingName, setAnalyzingName] = useState<string | null>(null);
   const [downloadingName, setDownloadingName] = useState<string | null>(null);
@@ -176,6 +178,12 @@ export function DatasetLibraryManager() {
               Ver
             </ActionButton>
             <ActionButton
+              title="Configurar particiones reproducibles"
+              onClick={() => setSplitDataset(d.name)}
+            >
+              Particionar
+            </ActionButton>
+            <ActionButton
               icon={
                 downloadingName === d.name ? (
                   <Loader2 className="h-3 w-3 animate-spin" />
@@ -251,6 +259,11 @@ export function DatasetLibraryManager() {
         datasetName={detailDataset}
         open={!!detailDataset}
         onClose={() => setDetailDataset(null)}
+      />
+      <DatasetSplitDrawer
+        datasetName={splitDataset}
+        open={!!splitDataset}
+        onClose={() => setSplitDataset(null)}
       />
 
       <ConfirmDeleteDialog

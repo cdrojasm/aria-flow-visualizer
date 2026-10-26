@@ -56,6 +56,7 @@ const ORIGIN_LABELS: Record<DatasetOrigin, string> = {
   EMPTY: "Creado vacío",
   EXTRACTED: "Extraído de otro(s) dataset(s)",
   ALERT_CURATED: "Curado desde alertas",
+  PARTITIONED: "Particionado (snapshot reproducible)",
 };
 
 // razon_marcacion and triggered_rules (ARIA-shaped datasets) are
@@ -255,6 +256,45 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
                 .join(", ")}
             </p>
           )}
+        </div>
+      )}
+
+      {s.origin === "PARTITIONED" && s.split_metadata && (
+        <div className="border border-border rounded-lg p-3 text-[12px] space-y-2">
+          <p className="text-[10px] text-text-secondary uppercase tracking-wider">
+            Configuración reproducible de particiones
+          </p>
+          <p className="text-text-secondary">
+            Fuente: <span className="text-text-primary">{s.split_metadata.source_name}</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {Object.entries(s.split_metadata.partition_counts).map(([name, count]) => (
+              <p key={name} className="rounded bg-surface px-2 py-1 capitalize">
+                {name} (
+                {(
+                  s.split_metadata!.proportions[name as keyof typeof s.split_metadata.proportions] *
+                  100
+                ).toLocaleString("es-CO")}
+                %)
+                <strong className="float-right font-mono">{count.toLocaleString("es-CO")}</strong>
+              </p>
+            ))}
+          </div>
+          <p className="text-text-secondary">
+            Semilla: <span className="font-mono text-text-primary">{s.split_metadata.seed}</span>
+          </p>
+          <p className="text-text-secondary">
+            Estratos:{" "}
+            <span className="text-text-primary">
+              {s.split_metadata.stratify_fields.join(", ") || "Sin estratificación"}
+            </span>
+          </p>
+          <p className="break-all text-[11px] text-text-secondary">
+            Snapshot: {s.split_metadata.snapshot_id}
+          </p>
+          <p className="break-all text-[11px] text-text-secondary">
+            SHA-256 fuente: {s.split_metadata.source_content_sha256}
+          </p>
         </div>
       )}
 

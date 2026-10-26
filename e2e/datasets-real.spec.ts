@@ -317,6 +317,121 @@ test("E04 API/UI real: carga particiones ARIA de 25, 100, 300 y 900 filas", asyn
       const downloaded = await readFile((await templateDownload.path())!, "utf8");
       expect(downloaded.split(/\r?\n/, 1)[0]).toBe(uploaded.split(/\r?\n/, 1)[0]);
       await page.getByRole("button", { name: "Cerrar panel" }).click();
+
+      const splitName = `${name}_split`;
+      datasetsCreated.push(splitName);
+      const sourceRow = page.getByRole("row").filter({ hasText: name });
+      const previewResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname.endsWith("/splits/preview"),
+      );
+      await sourceRow.getByRole("button", { name: "Particionar" }).click();
+      const previewResponse = await previewResponsePromise;
+      let splitPreview = await responseJson<{
+        source_dataset_name: string;
+        source_content_sha256: string;
+        source_row_count: number;
+        partition_counts: Record<string, number>;
+        stratify_fields: string[];
+        available_fields: string[];
+      }>(previewResponse, "vista previa de las particiones");
+      expect(splitPreview.source_dataset_name).toBe(name);
+      expect(splitPreview.source_row_count).toBe(25);
+      expect(splitPreview.source_content_sha256).toMatch(/^[a-f0-9]{64}$/);
+      expect(splitPreview.available_fields).toContain("channel");
+      expect(
+        Object.values(splitPreview.partition_counts).reduce((sum, count) => sum + count, 0),
+      ).toBe(25);
+      await expect(page.getByRole("region", { name: "Vista previa de particiones" })).toContainText(
+        "Conteos antes de confirmar",
+      );
+      const stratifiedPreviewResponsePromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname.endsWith("/splits/preview"),
+      );
+      await page.getByRole("checkbox", { name: "channel" }).check();
+      const stratifiedPreviewResponse = await stratifiedPreviewResponsePromise;
+      splitPreview = await responseJson(stratifiedPreviewResponse, "vista previa estratificada");
+      expect(splitPreview.stratify_fields).toEqual(["channel"]);
+      expect(splitPreview.available_fields).toContain("channel");
+      expect(
+        Object.values(splitPreview.partition_counts).reduce((sum, count) => sum + count, 0),
+      ).toBe(25);
+
+      const createSplitPromise = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          new URL(response.url()).pathname ===
+            `/api/v0/datasets/${encodeURIComponent(name)}/splits`,
+      );
+      await page.getByRole("button", { name: "Confirmar y crear copia" }).click();
+      const createSplitResponse = await createSplitPromise;
+      const createdSplit = await responseJson<{
+        dataset_name: string;
+        snapshot_id: string;
+        source_content_sha256: string;
+        partition_counts: Record<string, number>;
+        partition_field: string;
+        seed: number;
+        proportions: Record<string, number>;
+      }>(createSplitResponse, "confirmar creación de particiones");
+      expect(createSplitResponse.status()).toBe(201);
+      expect(createdSplit).toMatchObject({
+        dataset_name: splitName,
+        source_content_sha256: splitPreview.source_content_sha256,
+        partition_field: "__aria_split_partition",
+        seed: 42,
+        proportions: { training: 0.6, validation: 0.2, calibration: 0.1, test: 0.1 },
+      });
+      expect(createdSplit.snapshot_id).toMatch(/^[a-f0-9]{64}$/);
+      expect(createdSplit.partition_counts).toEqual(splitPreview.partition_counts);
+
+      const splitRowsResponse = await api!.get(
+        `/api/v0/datasets/${encodeURIComponent(splitName)}/rows?offset=0&limit=100`,
+        { headers: authHeaders() },
+      );
+      const splitRows = await responseJson<{ rows: Record<string, unknown>[]; total: number }>(
+        splitRowsResponse,
+        "verificar filas particionadas",
+      );
+      expect(splitRows.total).toBe(25);
+      expect(splitRows.rows).toHaveLength(25);
+      expect(new Set(splitRows.rows.map((row) => row.__aria_split_partition))).toEqual(
+        new Set(["training", "validation", "calibration", "test"]),
+      );
+      const persistedSplitSummaryResponse = await api!.get(
+        `/api/v0/datasets/${encodeURIComponent(splitName)}/summary`,
+        { headers: authHeaders() },
+      );
+      const persistedSplitSummary = await responseJson<{
+        origin: string;
+        split_metadata: {
+          snapshot_id: string;
+          source_name: string;
+          source_content_sha256: string;
+          seed: number;
+          proportions: Record<string, number>;
+          stratify_fields: string[];
+        };
+      }>(persistedSplitSummaryResponse, "metadatos persistidos del split");
+      expect(persistedSplitSummary.origin).toBe("PARTITIONED");
+      expect(persistedSplitSummary.split_metadata).toMatchObject({
+        snapshot_id: createdSplit.snapshot_id,
+        source_name: name,
+        source_content_sha256: splitPreview.source_content_sha256,
+        seed: 42,
+        proportions: createdSplit.proportions,
+      });
+      expect(persistedSplitSummary.split_metadata.stratify_fields).toEqual(["channel"]);
+
+      const partitionedRow = page.getByRole("row").filter({ hasText: splitName });
+      await expect(partitionedRow).toBeVisible();
+      await partitionedRow.getByRole("button", { name: "Visualizar" }).click();
+      await expect(page.getByText("Configuración reproducible de particiones")).toBeVisible();
+      await expect(page.getByText(`Snapshot: ${createdSplit.snapshot_id}`)).toBeVisible();
+      await page.getByRole("button", { name: "Cerrar panel" }).click();
     }
   }
 

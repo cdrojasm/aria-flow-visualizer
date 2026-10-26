@@ -9,7 +9,7 @@ import { accessToken, apiFetch, API_BASE } from "./client";
 // consumed by the dedicated /datasets section.
 
 export type DatasetStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED";
-export type DatasetOrigin = "UPLOADED" | "EMPTY" | "EXTRACTED" | "ALERT_CURATED";
+export type DatasetOrigin = "UPLOADED" | "EMPTY" | "EXTRACTED" | "ALERT_CURATED" | "PARTITIONED";
 
 export type DatasetRecord = { name: string; row_count: number };
 
@@ -40,6 +40,17 @@ export type FraudMarkingAnalysisResponse = {
   maturation: FraudMaturationProfile;
 };
 
+export type DatasetSplitMetadata = {
+  source_name: string;
+  source_content_sha256: string;
+  proportions: Record<"training" | "validation" | "calibration" | "test", number>;
+  seed: number;
+  stratify_fields: string[];
+  partition_field: string;
+  snapshot_id: string;
+  partition_counts: Record<"training" | "validation" | "calibration" | "test", number>;
+};
+
 export type DatasetSummaryResponse = {
   dataset_name: string;
   status: DatasetStatus;
@@ -53,6 +64,7 @@ export type DatasetSummaryResponse = {
   source_dataset_names: string[];
   extraction_filter: Record<string, string> | null;
   fraud_marking_analysis: FraudMarkingAnalysisResponse | null;
+  split_metadata: DatasetSplitMetadata | null;
 };
 
 export type FraudMarkingAnalysisQueuedResponse = {
@@ -66,6 +78,30 @@ export type DatasetOperationResponse = {
   name: string;
   status: DatasetStatus;
   async_operation_id: string | null;
+};
+export type DatasetSplitPreview = {
+  source_dataset_name: string;
+  source_content_sha256: string;
+  source_row_count: number;
+  partition_counts: Record<"training" | "validation" | "calibration" | "test", number>;
+  proportions: Record<"training" | "validation" | "calibration" | "test", number>;
+  seed: number;
+  stratify_fields: string[];
+  available_fields: string[];
+};
+export type DatasetSplitRequest = {
+  target_name: string;
+  proportions: Record<"training" | "validation" | "calibration" | "test", number>;
+  seed: number;
+  stratify_fields: string[];
+};
+export type DatasetSplitResponse = Omit<
+  DatasetSplitPreview,
+  "source_dataset_name" | "source_row_count" | "available_fields"
+> & {
+  dataset_name: string;
+  snapshot_id: string;
+  partition_field: string;
 };
 type DatasetUploadSession = {
   upload_id: string;
@@ -239,6 +275,42 @@ export function getDatasetRows({
   if (data.limit !== undefined) params.set("limit", String(data.limit));
   const qs = params.toString();
   return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/rows${qs ? `?${qs}` : ""}`);
+}
+
+export function previewDatasetSplit({
+  data,
+}: {
+  data: {
+    source_name: string;
+    proportions: DatasetSplitRequest["proportions"];
+    seed: number;
+    stratify_fields: string[];
+  };
+}): Promise<DatasetSplitPreview> {
+  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.source_name)}/splits/preview`, {
+    method: "POST",
+    body: JSON.stringify({
+      proportions: data.proportions,
+      seed: data.seed,
+      stratify_fields: data.stratify_fields,
+    }),
+  });
+}
+
+export function prepareDatasetSplit({
+  data,
+}: {
+  data: DatasetSplitRequest & { source_name: string };
+}): Promise<DatasetSplitResponse> {
+  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.source_name)}/splits`, {
+    method: "POST",
+    body: JSON.stringify({
+      target_name: data.target_name,
+      proportions: data.proportions,
+      seed: data.seed,
+      stratify_fields: data.stratify_fields,
+    }),
+  });
 }
 
 export function analyzeDatasetOnDemand({
