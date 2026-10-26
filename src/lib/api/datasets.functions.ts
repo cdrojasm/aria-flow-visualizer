@@ -67,6 +67,13 @@ export type DatasetOperationResponse = {
   status: DatasetStatus;
   async_operation_id: string | null;
 };
+type DatasetUploadSession = {
+  upload_id: string;
+  name: string;
+  part_size_bytes: number;
+  total_parts: number;
+  expires_at: string;
+};
 
 export type DeleteDatasetOperationResponse = {
   name: string;
@@ -91,27 +98,43 @@ export async function uploadDataset({
   data: FormData;
   onProgress?: (uploadedBytes: number, totalBytes: number) => void;
 }): Promise<DatasetOperationResponse> {
-  // XMLHttpRequest exposes upload.onprogress; fetch deliberately does not
-  // expose multipart upload progress in browsers. Do not set Content-Type -
-  // the browser supplies the required multipart boundary.
-  return new Promise((resolve, reject) => {
-    const request = new XMLHttpRequest();
-    request.open("POST", `${API_BASE}/api/v0/datasets`);
-    const token = accessToken();
-    if (token) request.setRequestHeader("Authorization", `Bearer ${token}`);
-    request.upload.onprogress = (event) => {
-      if (event.lengthComputable) onProgress?.(event.loaded, event.total);
-    };
-    request.onerror = () => reject(new Error("No se pudo conectar al subir el dataset"));
-    request.onload = () => {
-      if (request.status >= 200 && request.status < 300) {
-        resolve(JSON.parse(request.responseText) as DatasetOperationResponse);
-      } else {
-        reject(new Error(`/api/v0/datasets -> ${request.status}: ${request.responseText}`));
-      }
-    };
-    request.send(data);
+  const file = data.get("file");
+  if (!(file instanceof File)) throw new Error("Selecciona un archivo CSV válido");
+
+  const session = await apiFetch<DatasetUploadSession>("/api/v0/datasets/uploads", {
+    method: "POST",
+    body: JSON.stringify({ filename: file.name, total_size_bytes: file.size }),
   });
+  let completionRequested = false;
+  onProgress?.(0, file.size);
+  try {
+    for (let partNumber = 1; partNumber <= session.total_parts; partNumber += 1) {
+      const start = (partNumber - 1) * session.part_size_bytes;
+      const end = Math.min(start + session.part_size_bytes, file.size);
+      const part = file.slice(start, end, "application/octet-stream");
+      await apiFetch<void>(
+        `/api/v0/datasets/uploads/${encodeURIComponent(session.upload_id)}/parts/${partNumber}`,
+        { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: part },
+      );
+      onProgress?.(end, file.size);
+    }
+    completionRequested = true;
+    return await apiFetch<DatasetOperationResponse>(
+      `/api/v0/datasets/uploads/${encodeURIComponent(session.upload_id)}/complete`,
+      { method: "POST" },
+    );
+  } catch (error) {
+    if (!completionRequested) {
+      try {
+        await apiFetch<void>(`/api/v0/datasets/uploads/${encodeURIComponent(session.upload_id)}`, {
+          method: "DELETE",
+        });
+      } catch {
+        // Keep the original part-transfer failure; the session also expires server-side.
+      }
+    }
+    throw error;
+  }
 }
 
 type DatasetSummaryRequest = { name: string };

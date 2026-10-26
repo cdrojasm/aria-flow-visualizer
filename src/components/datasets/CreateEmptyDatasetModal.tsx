@@ -12,8 +12,8 @@ export function CreateEmptyDatasetModal({ open, onClose }: { open: boolean; onCl
 
   const createMutation = useMutation({
     mutationFn: () => createEmptyDataset({ data: { name, fields } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["datasets"] });
       reset();
       onClose();
     },

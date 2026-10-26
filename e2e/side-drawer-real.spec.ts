@@ -51,18 +51,39 @@ async function closeWithButton(page: Page) {
   await expect(drawer).toBeHidden();
 }
 
+async function waitForAlertDialogAnimation(page: Page) {
+  const dialog = page.getByRole("alertdialog");
+  await expect
+    .poll(
+      async () => {
+        if ((await dialog.count()) === 0) return true;
+        return dialog.evaluate((element) =>
+          element.getAnimations().every((animation) => animation.playState === "finished"),
+        );
+      },
+      { timeout: 5_000 },
+    )
+    .toBe(true);
+}
+
 async function openDatasetsTab(page: Page) {
   await page.goto("/biblioteca");
   await page.getByRole("button", { name: "Datasets", exact: true }).click();
   await expect(page.getByRole("button", { name: "Dataset vacío" })).toBeVisible();
 }
 
+test.describe.configure({ mode: "parallel" });
+
 test.describe("drawer lateral único", () => {
   let token: string;
 
-  test.beforeEach(async ({ page, request }) => {
-    const email = process.env.E2E_CHANNEL_MANAGER_EMAIL;
-    const password = process.env.E2E_CHANNEL_MANAGER_PASSWORD;
+  test.beforeEach(async ({ page, request }, testInfo) => {
+    const email =
+      process.env[`E2E_CHANNEL_MANAGER_W${testInfo.parallelIndex}_EMAIL`] ??
+      process.env.E2E_CHANNEL_MANAGER_EMAIL;
+    const password =
+      process.env[`E2E_CHANNEL_MANAGER_W${testInfo.parallelIndex}_PASSWORD`] ??
+      process.env.E2E_CHANNEL_MANAGER_PASSWORD;
     test.skip(
       !email || !password,
       "Define E2E_CHANNEL_MANAGER_EMAIL y E2E_CHANNEL_MANAGER_PASSWORD.",
@@ -145,6 +166,19 @@ test.describe("drawer lateral único", () => {
       await expect(page.getByTestId("side-drawer")).toBeHidden();
 
       // The detail view is the same drawer, wider.
+      await expect
+        .poll(
+          async () => {
+            const listed = await request.get("/api/v0/datasets", { headers: auth });
+            if (!listed.ok()) return false;
+            const datasets = (await listed.json()) as { name: string }[];
+            return datasets.some((dataset) => dataset.name === name);
+          },
+          { timeout: 15_000 },
+        )
+        .toBe(true);
+      await page.reload();
+      await page.getByPlaceholder("Buscar por nombre…").fill(name);
       const row = page.getByRole("row").filter({ hasText: name });
       await expect(row).toBeVisible();
       await row.getByRole("button", { name: "Visualizar" }).click();
@@ -165,13 +199,17 @@ test.describe("drawer lateral único", () => {
     const prompt = page.getByRole("alertdialog");
     await expect(prompt.getByText("¿Descartar los cambios?")).toBeVisible();
     await prompt.getByRole("button", { name: "Seguir editando" }).click();
-    await expect(page.getByRole("alertdialog")).toBeHidden();
+    await expect(page.getByRole("alertdialog")).toHaveAttribute("data-state", "closed");
+    await waitForAlertDialogAnimation(page);
     await expect(page.getByPlaceholder("Ej: casos_revision_manual")).toHaveValue(
       "borrador_e2e_drawer",
     );
 
     await page.keyboard.press("Escape");
-    await page.getByRole("alertdialog").getByRole("button", { name: "Descartar" }).click();
+    const discardPrompt = page.getByRole("alertdialog");
+    await expect(discardPrompt).toHaveAttribute("data-state", "open");
+    await waitForAlertDialogAnimation(page);
+    await discardPrompt.getByRole("button", { name: "Descartar" }).click();
     await expect(page.getByTestId("side-drawer")).toBeHidden();
   });
 
@@ -214,7 +252,7 @@ test.describe("drawer lateral único", () => {
       );
       await drawer.getByRole("button", { name: "Crear", exact: true }).click();
       const created = await createdResponse;
-      expect(created.ok(), await created.text()).toBeTruthy();
+      await expectApiSuccess(created, "Crear watchlist para E2E");
       createdId = ((await created.json()) as { id: string }).id;
       await expect(page.getByTestId("side-drawer")).toBeHidden();
 
@@ -285,7 +323,7 @@ test.describe("drawer lateral único", () => {
       await expectRightDrawer(page, "Nueva taxonomía");
       await closeWithButton(page);
 
-      await page.getByRole("button", { name: "Modus operandi", exact: true }).click();
+      await page.getByRole("button", { name: "Modus operandi", exact: true }).first().click();
       await page.getByRole("button", { name: "Nuevo modus operandi" }).click();
       await expectRightDrawer(page, "Nuevo modus operandi");
       await closeWithButton(page);
@@ -300,7 +338,7 @@ test.describe("drawer lateral único", () => {
       await expectRightDrawer(page, "Nuevo caso similar");
       await closeWithButton(page);
 
-      await page.getByRole("button", { name: "Modus operandi", exact: true }).click();
+      await page.getByRole("button", { name: "Modus operandi", exact: true }).first().click();
       await page
         .getByRole("row")
         .filter({ hasText: modusOperandi.title })
@@ -367,9 +405,13 @@ test.describe("drawer lateral único", () => {
 test.describe("drawer lateral único: Configuración", () => {
   let token: string;
 
-  test.beforeEach(async ({ page, request }) => {
-    const email = process.env.E2E_CHANNEL_MANAGER_EMAIL;
-    const password = process.env.E2E_CHANNEL_MANAGER_PASSWORD;
+  test.beforeEach(async ({ page, request }, testInfo) => {
+    const email =
+      process.env[`E2E_CHANNEL_MANAGER_W${testInfo.parallelIndex}_EMAIL`] ??
+      process.env.E2E_CHANNEL_MANAGER_EMAIL;
+    const password =
+      process.env[`E2E_CHANNEL_MANAGER_W${testInfo.parallelIndex}_PASSWORD`] ??
+      process.env.E2E_CHANNEL_MANAGER_PASSWORD;
     test.skip(
       !email || !password,
       "Define E2E_CHANNEL_MANAGER_EMAIL y E2E_CHANNEL_MANAGER_PASSWORD.",

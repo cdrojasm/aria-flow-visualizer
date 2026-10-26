@@ -238,7 +238,8 @@ test("E04 API/UI real: carga particiones ARIA de 25, 100, 300 y 900 filas", asyn
     const uploadResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/api/v0/datasets",
+        new URL(response.url()).pathname.endsWith("/complete") &&
+        new URL(response.url()).pathname.includes("/api/v0/datasets/uploads/"),
     );
     await page.getByRole("button", { name: "Subir dataset" }).click();
     const uploadResponse = await uploadResponsePromise;
@@ -315,7 +316,7 @@ test("E04 API/UI real: carga particiones ARIA de 25, 100, 300 y 900 filas", asyn
       const uploaded = await readFile(filePath, "utf8");
       const downloaded = await readFile((await templateDownload.path())!, "utf8");
       expect(downloaded.split(/\r?\n/, 1)[0]).toBe(uploaded.split(/\r?\n/, 1)[0]);
-      await page.getByRole("button", { name: "Close" }).click();
+      await page.getByRole("button", { name: "Cerrar panel" }).click();
     }
   }
 
