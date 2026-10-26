@@ -15,6 +15,8 @@ export type AgentSession = {
     heartbeat_at: string | null;
   };
   scope?: { areas?: string[] };
+  block?: Record<string, unknown>;
+  candidate_allowance?: number;
 };
 
 export type AgentExperiment = {
@@ -566,4 +568,135 @@ export function transitionAgentRelease(
     `/api/v0/agent/releases/${encodeURIComponent(releaseId)}/${action}`,
     { method: "POST", body: JSON.stringify(data) },
   );
+}
+
+/* ─── Optimizer center: verdict, timeline, learnings and block approval ───── */
+
+export type AgentVerdictState =
+  | "draft"
+  | "running"
+  | "stalled"
+  | "failing"
+  | "blocked"
+  | "paused"
+  | "completed"
+  | "inconclusive"
+  | "stopped"
+  | "failed"
+  | "cancelled";
+
+export type AgentApprovalKind = "budget" | "candidates" | "context";
+
+export type AgentSessionOverview = {
+  session_id: string;
+  status: string;
+  verdict: {
+    state: AgentVerdictState;
+    title: string;
+    detail: string;
+    action: string | null;
+    code: string | null;
+    approval: AgentApprovalKind | null;
+    retryable: boolean;
+  };
+  health: {
+    lease: "NONE" | "ACTIVE" | "EXPIRED";
+    stalled: boolean;
+    last_event_at: string | null;
+    seconds_since_last_event: number | null;
+  };
+  iterations: Record<string, number>;
+  hypotheses: Record<string, number>;
+  experiments: Record<string, number>;
+  events_total: number;
+  block: Record<string, unknown>;
+};
+
+export type AgentEvent = {
+  seq: number;
+  event_id: string;
+  occurred_at: string;
+  kind: string;
+  outcome: "STARTED" | "SUCCEEDED" | "FAILED" | "BLOCKED" | "INFO";
+  summary: string;
+  reason_code: string | null;
+  refs: Record<string, string>;
+  duration_ms: number | null;
+  cost_micros: number | null;
+  actor_id: string | null;
+};
+
+export type AgentEventsPage = { items: AgentEvent[]; last_seq: number };
+
+export type AgentFinding = {
+  finding_id: string;
+  kind: string;
+  dimension: string;
+  dimension_value: string;
+  sample_count: number;
+  metrics: Record<string, number>;
+  source: string;
+  created_at: string;
+  opaque_refs: Record<string, string>;
+};
+
+export type OptimizerLearning = {
+  insight_id: string;
+  statement: string;
+  kind: string;
+  scope_key: string;
+  status: string;
+  sample_count: number;
+  evidence_summary: Record<string, number>;
+  last_evaluated_at: string;
+  review_after: string;
+  origin_session_id: string | null;
+};
+
+export type OptimizerArea = "configuration" | "library" | "vector_store" | "model";
+
+export type ResolveBlockRequest =
+  | { kind: "budget"; additions: Record<string, number> }
+  | { kind: "candidates"; allowance: number }
+  | { kind: "context"; note: string };
+
+export function getAgentSessionOverview(sessionId: string) {
+  return apiFetch<AgentSessionOverview>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/overview`,
+  );
+}
+
+export function listAgentEvents(sessionId: string, afterSeq = 0, limit = 200) {
+  const query = new URLSearchParams({ after_seq: String(afterSeq), limit: String(limit) });
+  return apiFetch<AgentEventsPage>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/events?${query}`,
+  );
+}
+
+export function listAgentFindings(sessionId: string) {
+  return apiFetch<AgentFinding[]>(`${path}/sessions/${encodeURIComponent(sessionId)}/findings`);
+}
+
+export function listOptimizerMemory(area: OptimizerArea) {
+  return apiFetch<OptimizerLearning[]>(`${path}/memory?area=${area}`);
+}
+
+export function resolveAgentBlock(sessionId: string, request: ResolveBlockRequest) {
+  return apiFetch<AgentSession>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/block/resolve`,
+    { method: "POST", body: JSON.stringify(request) },
+  );
+}
+
+export type AgentFailureInfo = {
+  code: string;
+  title: string;
+  detail: string;
+  action: string;
+  retryable: boolean;
+  approval: AgentApprovalKind | null;
+};
+
+export function listAgentFailureCatalog() {
+  return apiFetch<AgentFailureInfo[]>(`${path}/failure-catalog`);
 }

@@ -58,7 +58,8 @@ export type TabKey =
   | "segmento"
   | "schema"
   | "segmentoAgente"
-  | "segmentoEvaluacion";
+  | "segmentoEvaluacion"
+  | "optimizador";
 
 /* ─── Segment configuration (Phase 1) ───────────────────
    Two fixed segments (not user-creatable). Each has an on/off toggle and

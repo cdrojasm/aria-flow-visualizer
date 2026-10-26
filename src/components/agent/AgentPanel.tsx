@@ -48,7 +48,6 @@ import {
   listTaxonomyLibraryEntries,
 } from "@/lib/api/knowledgeLibrary.functions";
 import { listWatchlists } from "@/lib/api/watchlist.functions";
-import { AgentOptimizerPanel } from "./AgentOptimizerPanel";
 import type { Role } from "@/lib/api/auth.functions";
 import { SideDrawer } from "@/components/ui/side-drawer";
 
@@ -145,7 +144,6 @@ export function AgentPanel({
     permitted &&
     ALLOWED_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
   const [open, setOpen] = useState(false);
-  const [panelTab, setPanelTab] = useState<"assistant" | "optimizer">("assistant");
   const [sessionId, setSessionId] = useState("");
   const [composer, setComposer] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
@@ -514,29 +512,21 @@ export function AgentPanel({
               <X className="h-4 w-4" />
             </button>
           </header>
-          <nav className="flex border-b border-border" aria-label="Pestañas del asistente">
-            <button
-              type="button"
-              aria-pressed={panelTab === "assistant"}
-              onClick={() => setPanelTab("assistant")}
-              className={`flex-1 px-3 py-1.5 text-xs font-semibold ${panelTab === "assistant" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
+          {optimizerAttention > 0 && (
+            <Link
+              to="/configuracion"
+              onClick={() => setOpen(false)}
+              data-testid="optimizer-attention-link"
+              className="flex items-center justify-between gap-2 border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
             >
-              Asistente
-            </button>
-            <button
-              type="button"
-              aria-pressed={panelTab === "optimizer"}
-              onClick={() => setPanelTab("optimizer")}
-              className={`flex-1 px-3 py-1.5 text-xs font-semibold ${panelTab === "optimizer" ? "border-b-2 border-primary text-primary" : "text-text-secondary"}`}
-            >
-              Optimizador
-              {optimizerAttention > 0 && (
-                <span className="ml-1 rounded-full bg-danger px-1.5 py-0.5 text-[10px] text-white">
-                  {optimizerAttention}
-                </span>
-              )}
-            </button>
-          </nav>
+              <span>
+                {optimizerAttention === 1
+                  ? "Una sesión del optimizador necesita tu atención."
+                  : `${optimizerAttention} sesiones del optimizador necesitan tu atención.`}
+              </span>
+              <span className="font-semibold underline">Abrir Optimizador</span>
+            </Link>
+          )}
           <div className="flex items-center gap-1.5 border-b border-border px-3 py-1.5">
             <label className="sr-only" htmlFor="agent-session">
               Conversación
@@ -849,28 +839,6 @@ export function AgentPanel({
           </form>
         </aside>
       )}
-      {open && panelTab === "optimizer" && (
-        <aside
-          className="fixed inset-y-0 right-0 z-[55] flex w-full max-w-[460px] flex-col border-l border-border bg-background shadow-2xl lg:right-[460px]"
-          aria-label="Panel del optimizador"
-        >
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <span className="text-sm font-semibold">ARIA · Optimizador</span>
-            <button
-              type="button"
-              onClick={() => setPanelTab("assistant")}
-              className="rounded border border-border px-2 py-1 text-xs"
-            >
-              Volver al asistente
-            </button>
-          </div>
-          <AgentOptimizerPanel
-            canLaunch={role === "channel_manager"}
-            role={role}
-            sessions={sessions}
-          />
-        </aside>
-      )}
       <SideDrawer
         open={draftDrawerOpen && Boolean(draft && draftItem)}
         onOpenChange={setDraftDrawerOpen}
@@ -1050,6 +1018,8 @@ function DraftCard({
   kind: DraftKind;
 }) {
   const title = draftTitle(kind, item.draft);
+  const canConfirm =
+    draft.verifications.length > 0 && draft.verifications.every((check) => check.status === "PASS");
   return (
     <article className="rounded-lg border border-primary/30 bg-card p-3">
       <div className="flex items-center justify-between">

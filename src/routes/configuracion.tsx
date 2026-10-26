@@ -42,6 +42,7 @@ import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluati
 import { AlertSchemaEditor } from "@/components/configuracion/schema/AlertSchemaEditor";
 import { rubricValidationErrors } from "@/components/configuracion/SegmentRubricsSection";
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
+import { OptimizerCenter } from "@/components/optimizer/OptimizerCenter";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
 import { OperationsPanel } from "@/components/configuracion/OperationsPanel";
 import { AgentSettingsPanel } from "@/components/configuracion/AgentSettingsPanel";
@@ -112,6 +113,7 @@ const SEGMENT_CONFIGURATION_TAB_META: { key: TabKey; label: string }[] = [
   { key: "segmento", label: "Segmento" },
   { key: "segmentoAgente", label: "Agente" },
   { key: "segmentoEvaluacion", label: "Evaluación" },
+  { key: "optimizador", label: "Optimizador" },
 ];
 
 const RELEASE_TAB_META: { key: TabKey; label: string }[] = [
@@ -383,7 +385,12 @@ function ConfiguracionPage() {
   // A persisted segment-specific tab must not be visible to a role that only
   // has access to general configuration.
   useEffect(() => {
-    if (!isChannelManager && (activeTab === "segmentoAgente" || activeTab === "segmentoEvaluacion"))
+    if (
+      !isChannelManager &&
+      (activeTab === "segmentoAgente" ||
+        activeTab === "segmentoEvaluacion" ||
+        activeTab === "optimizador")
+    )
       setActiveTab("general");
     if (isChannelManager && (activeTab === "general" || activeTab === "infra" || activeTab === "ops" || activeTab === "test" || activeTab === "schema"))
       setActiveTab("segmento");
@@ -2285,6 +2292,8 @@ function ConfiguracionPage() {
             disabled={locked}
           />
         )}
+
+        {isChannelManager && activeTab === "optimizador" && <OptimizerCenter role={role} />}
 
         {(isChannelManager || isReleaseManager) && activeTab === "segmentoEvaluacion" && (
           <SegmentEvaluationTab
