@@ -120,9 +120,15 @@ test("assistant chat is dense, keeps insights in the feed and sends the page", a
 
   // No fixed insights block under the feed any more.
   await expect(panel.getByText("Propuestas de insight")).toHaveCount(0);
-  // The proposal (LLM or rule-based fallback) is inside the scrolling feed.
-  const insight = feed.getByText("Insight propuesto").first();
-  await expect(insight).toBeVisible({ timeout: 30_000 });
+  // Insights remain available but stay folded until requested.
+  const insightSummary = feed.getByText(/^Insights \(\d+\)$/).last();
+  await expect(insightSummary).toBeVisible({ timeout: 30_000 });
+  const insightDetails = insightSummary.locator("..");
+  await expect(insightDetails).not.toHaveAttribute("open", "");
+  await expect(feed.getByRole("button", { name: "Confirmar insight" })).toHaveCount(0);
+  await expect(feed.getByText(/^Contexto usado/)).toHaveCount(0);
+  await insightSummary.click();
+  await expect(feed.getByText("Insight propuesto").first()).toBeVisible();
   await expect(feed.getByRole("button", { name: "Confirmar insight" }).first()).toBeVisible();
   await expect(feed.getByRole("button", { name: "Editar en chat" }).first()).toBeVisible();
   await expect(feed.getByRole("button", { name: "Rechazar insight" }).first()).toBeVisible();
@@ -168,9 +174,7 @@ async function ask(page: Page, question: string) {
   };
 }
 
-test("answers about another view carry a chip that navigates there, with the context used", async ({
-  page,
-}) => {
+test("answers about another view carry a chip that navigates there", async ({ page }) => {
   test.setTimeout(120_000);
   await open(page, "/biblioteca");
   const answer = await ask(page, "¿Cómo entreno un modelo?");
@@ -181,7 +185,7 @@ test("answers about another view carry a chip that navigates there, with the con
   const panel = page.getByRole("complementary", { name: "Panel del asistente" });
   const chip = panel.getByRole("link", { name: /Entrenar un modelo|Modelos/ }).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  await expect(panel.getByText(/Contexto usado \(\d+\)/)).toBeVisible();
+  await expect(panel.getByText(/Contexto usado/)).toHaveCount(0);
   await chip.click();
   await expect(page).toHaveURL(/\/modelos$/);
 });

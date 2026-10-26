@@ -675,7 +675,47 @@ export function AgentPanel({
                       )}
                   </article>
                   <MessageReferences message={message} />
-                  {inlineInsights.map((insight) => (
+                  {inlineInsights.length > 0 && (
+                    <details className="mr-auto w-[94%] text-[11px] text-text-secondary">
+                      <summary className="cursor-pointer select-none">
+                        Insights ({inlineInsights.length})
+                      </summary>
+                      <div className="mt-1 space-y-1">
+                        {inlineInsights.map((insight) => (
+                          <InsightRow
+                            key={insight.insight_id}
+                            insight={insight}
+                            busy={insightMutation.isPending}
+                            onConfirm={() =>
+                              insightMutation.mutate({
+                                insightId: insight.insight_id,
+                                action: "confirm",
+                              })
+                            }
+                            onReject={() =>
+                              insightMutation.mutate({
+                                insightId: insight.insight_id,
+                                action: "reject",
+                              })
+                            }
+                            onEdit={() =>
+                              setComposer(`Quiero ajustar esta propuesta: ${insight.statement}`)
+                            }
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              );
+            })}
+            {orphanInsights.length > 0 && (
+              <details className="mr-auto w-[94%] text-[11px] text-text-secondary">
+                <summary className="cursor-pointer select-none">
+                  Otros insights propuestos ({orphanInsights.length})
+                </summary>
+                <div className="mt-1 space-y-1">
+                  {orphanInsights.map((insight) => (
                     <InsightRow
                       key={insight.insight_id}
                       insight={insight}
@@ -692,22 +732,8 @@ export function AgentPanel({
                     />
                   ))}
                 </div>
-              );
-            })}
-            {orphanInsights.map((insight) => (
-              <InsightRow
-                key={insight.insight_id}
-                insight={insight}
-                busy={insightMutation.isPending}
-                onConfirm={() =>
-                  insightMutation.mutate({ insightId: insight.insight_id, action: "confirm" })
-                }
-                onReject={() =>
-                  insightMutation.mutate({ insightId: insight.insight_id, action: "reject" })
-                }
-                onEdit={() => setComposer(`Quiero ajustar esta propuesta: ${insight.statement}`)}
-              />
-            ))}
+              </details>
+            )}
             {draft && draftItem && (
               <button
                 type="button"
@@ -925,29 +951,10 @@ export function AgentPanel({
   );
 }
 
-const KIND_LABELS: Record<string, string> = {
-  view: "Vista",
-  task: "Tarea",
-  concept: "Concepto",
-  component: "Componente",
-  action: "Acción",
-  api_call: "Llamada",
-  endpoint: "Endpoint",
-  use_case: "Caso de uso",
-  port: "Puerto",
-  adapter: "Adaptador",
-  resource: "Recurso",
-  asset: "Activo",
-  role: "Rol",
-  permission: "Permiso",
-};
-
-// Chips that open what the answer recommends, plus a collapsed list of the
-// project-map nodes it was grounded on (so the user can see why).
+// Chips open the pages recommended by the answer.
 function MessageReferences({ message }: { message: AgentMessage }) {
   const references = (message.references ?? []).filter((ref) => ref.path);
-  const used = message.context_used ?? [];
-  if (references.length === 0 && used.length === 0) return null;
+  if (references.length === 0) return null;
   return (
     <div className="mr-auto w-[94%] space-y-0.5 text-[11px]">
       {references.length > 0 && (
@@ -964,19 +971,6 @@ function MessageReferences({ message }: { message: AgentMessage }) {
             </Link>
           ))}
         </div>
-      )}
-      {used.length > 0 && (
-        <details className="text-text-secondary">
-          <summary className="cursor-pointer select-none">Contexto usado ({used.length})</summary>
-          <ul className="mt-0.5 space-y-0.5 pl-3">
-            {used.map((ref) => (
-              <li key={ref.id} className="truncate" title={ref.id}>
-                <span className="font-semibold">{KIND_LABELS[ref.kind] ?? ref.kind}:</span>{" "}
-                {ref.label}
-              </li>
-            ))}
-          </ul>
-        </details>
       )}
     </div>
   );
