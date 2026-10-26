@@ -93,6 +93,9 @@ const section = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true }).click();
 
 test.beforeAll(async ({ playwright }) => {
+  // A previous run that was interrupted may have left seeded ACTIVE sessions,
+  // which would hold the optimizer's concurrency slot for real runs.
+  seedScript(["cleanup", "--prefix", "e2e"]);
   api = await playwright.request.newContext();
   token = await login(api, email!, password!);
   const me = await api.get(`${baseURL}/api/v0/auth/me`, { headers: auth() });
