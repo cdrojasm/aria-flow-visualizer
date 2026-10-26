@@ -18,6 +18,7 @@ import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import { FilterBar, PageHeader } from "@/components/PageHeader";
 import {
@@ -795,46 +796,34 @@ function TechTable({
   head: string[];
   rows: string[][];
 }) {
+  const columns: DataTableColumn<string[]>[] = head.map((label, index) => ({
+    key: `column-${index}`,
+    label,
+    align: index === 0 ? undefined : "right",
+    render: (row) => (
+      <span className={index === 0 ? "text-text-primary" : "tabular-nums"}>
+        {row[index] ?? "—"}
+      </span>
+    ),
+    sortValue: (row) => row[index] ?? "",
+    searchValue: (row) => row[index] ?? "",
+  }));
   return (
     <div className={`${CARD} p-5`}>
       <div className="flex items-center gap-2 mb-3">
         {icon}
         <h3 className="text-[13px] font-semibold text-text-primary">{title}</h3>
       </div>
-      {rows.length === 0 ? (
-        <p className="text-[12px] text-text-secondary">{NO_DATA} en el rango.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-text-secondary">
-                {head.map((h, i) => (
-                  <th
-                    key={h}
-                    className={`font-normal py-2 pr-3 ${i === 0 ? "text-left" : "text-right"}`}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row[0]} className="border-t border-border">
-                  {row.map((cell, i) => (
-                    <td
-                      key={i}
-                      className={`py-2 pr-3 tabular-nums ${i === 0 ? "text-left text-text-primary" : "text-right"}`}
-                    >
-                      {cell}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        storageKey={`monitor.${title}`}
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row[0] ?? ""}
+        pageSize={10}
+        itemLabel="indicador"
+        emptyLabel={`${NO_DATA} en el rango.`}
+        defaultSort={{ key: "column-0", dir: "asc" }}
+      />
     </div>
   );
 }

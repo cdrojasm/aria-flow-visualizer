@@ -17,6 +17,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { SectionTabs } from "@/components/ui/section-tabs";
+import { DataTable } from "@/components/ui/DataTable";
 import { getModel } from "@/lib/api/models.functions";
 import { ModelContractTester } from "./ModelContractTester";
 const panel = "rounded-xl border border-border bg-card p-5 space-y-3";
@@ -169,27 +170,47 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
                   </section>
                   <section className={panel}>
                     <h3 className="font-semibold">Matriz de confusión · umbral explorado</h3>
-                    <table className="w-full text-sm text-left">
-                      <thead>
-                        <tr>
-                          <th className="p-3">Clase real</th>
-                          <th>Alerta</th>
-                          <th>Sin alerta</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="bg-primary/5">
-                          <th className="p-3">Fraude</th>
-                          <td>{selected.tp} detectados</td>
-                          <td>{selected.fn} no detectados</td>
-                        </tr>
-                        <tr>
-                          <th className="p-3">Legítimo</th>
-                          <td>{selected.fp} falsos positivos</td>
-                          <td>{selected.tn} correctos</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                    <DataTable
+                      storageKey="models.training.confusion-matrix"
+                      columns={[
+                        {
+                          key: "class",
+                          label: "Clase real",
+                          render: (row) => row.className,
+                          sortValue: (row) => row.className,
+                          searchValue: (row) => row.className,
+                        },
+                        {
+                          key: "alert",
+                          label: "Alerta",
+                          render: (row) => row.alert,
+                          sortValue: (row) => row.alert,
+                          searchValue: (row) => row.alert,
+                        },
+                        {
+                          key: "noAlert",
+                          label: "Sin alerta",
+                          render: (row) => row.noAlert,
+                          sortValue: (row) => row.noAlert,
+                          searchValue: (row) => row.noAlert,
+                        },
+                      ]}
+                      rows={[
+                        {
+                          className: "Fraude",
+                          alert: `${selected.tp} detectados`,
+                          noAlert: `${selected.fn} no detectados`,
+                        },
+                        {
+                          className: "Legítimo",
+                          alert: `${selected.fp} falsos positivos`,
+                          noAlert: `${selected.tn} correctos`,
+                        },
+                      ]}
+                      rowKey={(row) => row.className}
+                      pageSize={10}
+                      itemLabel="clase"
+                    />
                   </section>
                 </>
               )}

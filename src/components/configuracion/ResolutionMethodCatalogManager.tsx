@@ -5,14 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { SideDrawer } from "@/components/ui/side-drawer";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import { RESOLUTION_TAG_LABELS, type ResolutionTag } from "@/data/configs";
 import {
@@ -155,73 +148,78 @@ export function ResolutionMethodCatalogManager({
           </Button>
         </div>
 
-        {error && <p className="text-[12px] text-danger">{error}</p>}
-
-        <div className="max-h-80 overflow-y-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Método</TableHead>
-                <TableHead className="w-40">Vía</TableHead>
-                <TableHead className="w-24">Estado</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {methods.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell
-                    className={`text-[13px] ${m.active ? "" : "text-text-secondary line-through"}`}
-                  >
+        <DataTable<ResolutionMethodResponse>
+          storageKey="configuration.resolution-methods"
+          columns={
+            [
+              {
+                key: "value",
+                label: "Método",
+                render: (m) => (
+                  <span className={m.active ? "" : "text-text-secondary line-through"}>
                     {m.value}
-                  </TableCell>
-                  <TableCell>
-                    <select
-                      value={m.resolution_tag}
-                      onChange={(e) => handleTagChange(m, e.target.value as ResolutionTag)}
-                      className="h-8 w-full rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
-                    >
-                      {RESOLUTION_TAG_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(m)}
-                      className="text-[11px] font-medium text-primary hover:underline"
-                    >
-                      {m.active ? "Desactivar" : "Activar"}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setDeleting(m)}
-                      aria-label={`Eliminar método ${m.value}`}
-                      className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loading && methods.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-[12px] text-text-secondary py-6"
+                  </span>
+                ),
+                sortValue: (m) => m.value,
+                searchValue: (m) => m.value,
+              },
+              {
+                key: "tag",
+                label: "Vía",
+                minWidth: 180,
+                render: (m) => (
+                  <select
+                    value={m.resolution_tag}
+                    onChange={(e) => handleTagChange(m, e.target.value as ResolutionTag)}
+                    className="h-8 w-full rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
                   >
-                    Sin métodos de resolución.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                    {RESOLUTION_TAG_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ),
+                sortValue: (m) => m.resolution_tag,
+                searchValue: (m) =>
+                  RESOLUTION_TAG_OPTIONS.find((o) => o.value === m.resolution_tag)?.label ??
+                  m.resolution_tag,
+              },
+              {
+                key: "active",
+                label: "Estado",
+                render: (m) => (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(m)}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    {m.active ? "Desactivar" : "Activar"}
+                  </button>
+                ),
+                sortValue: (m) => Number(m.active),
+                searchValue: (m) => (m.active ? "Activo" : "Inactivo"),
+              },
+            ] as DataTableColumn<ResolutionMethodResponse>[]
+          }
+          rows={methods}
+          rowKey={(m) => m.id}
+          isLoading={loading}
+          error={error ?? undefined}
+          actions={(m) => (
+            <button
+              type="button"
+              onClick={() => setDeleting(m)}
+              aria-label={`Eliminar método ${m.value}`}
+              className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          emptyLabel="Sin métodos de resolución."
+          pageSize={10}
+          itemLabel="método"
+        />
       </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deleting}

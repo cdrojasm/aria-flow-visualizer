@@ -3,8 +3,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
-import { useHiddenColumns } from "@/components/ColumnVisibilityMenu";
-import { DatasetColumnVisibilityMenu } from "./DatasetColumnVisibilityMenu";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import {
   appendDatasetRows,
   downloadDatasetTemplate,
@@ -25,9 +24,6 @@ export function DatasetRowsTab({ datasetName }: { datasetName: string }) {
   // Persists per dataset (localStorage, see useHiddenColumns) - same hook
   // Histórico de fraude/Cola use, keyed by dataset name since each dataset
   // has a different column set.
-  const { hidden: hiddenColumns, toggle: toggleColumn } = useHiddenColumns<string>(
-    `datasetRows.${datasetName}`,
-  );
   const [rowsJson, setRowsJson] = useState('[\n  {\n    "campo": "valor"\n  }\n]');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -62,9 +58,20 @@ export function DatasetRowsTab({ datasetName }: { datasetName: string }) {
     return Array.from(keys);
   }, [rowsQuery.data]);
 
-  const visibleColumns = useMemo(
-    () => columns.filter((c) => !hiddenColumns.has(c)),
-    [columns, hiddenColumns],
+  const tableColumns = useMemo<DataTableColumn<Record<string, unknown>>[]>(
+    () =>
+      columns.map((column) => ({
+        key: column,
+        label: column,
+        minWidth: 140,
+        render: (row) => {
+          const cell = truncateCellValue(row[column]);
+          return <span title={cell.truncated ? cell.full : undefined}>{cell.display}</span>;
+        },
+        sortValue: (row) => String(row[column] ?? ""),
+        searchValue: (row) => String(row[column] ?? ""),
+      })),
+    [columns],
   );
 
   const total = rowsQuery.data?.total ?? 0;
@@ -107,13 +114,6 @@ export function DatasetRowsTab({ datasetName }: { datasetName: string }) {
       <div className="flex items-center justify-between gap-2">
         <p className="text-[12px] text-text-secondary">{total} filas totales.</p>
         <div className="flex items-center gap-2">
-          {columns.length > 0 && (
-            <DatasetColumnVisibilityMenu
-              columns={columns}
-              hidden={hiddenColumns}
-              onToggle={toggleColumn}
-            />
-          )}
           <button
             type="button"
             onClick={handleDownloadTemplate}
@@ -183,85 +183,33 @@ export function DatasetRowsTab({ datasetName }: { datasetName: string }) {
         </div>
       )}
 
-      {rowsQuery.isLoading && <p className="text-[13px] text-text-secondary">Cargando filas…</p>}
-      {rowsQuery.isError && (
-        <p className="text-[13px] text-danger">No se pudieron cargar las filas del dataset.</p>
-      )}
-
-      {rowsQuery.data && (
-        <div className="border border-border rounded-lg overflow-hidden">
-          {/* Bounded, independently-scrolling table body (sticky header)
-              instead of letting the table grow the whole tab - keeps the
-              toolbar above (Columnas/Plantilla/Elegir de otro dataset) and
-              the pagination footer below always in view without relying on
-              the outer modal's own scroll. */}
-          <div className="max-h-[420px] overflow-auto">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="text-left text-[10px] uppercase tracking-wide text-text-secondary">
-                  <th className="sticky top-0 z-10 px-3 py-2 font-medium bg-surface border-b border-border w-8" />
-                  {visibleColumns.map((c) => (
-                    <th
-                      key={c}
-                      className="sticky top-0 z-10 px-3 py-2 font-medium whitespace-nowrap bg-surface border-b border-border"
-                    >
-                      {c}
-                    </th>
-                  ))}
-                  {visibleColumns.length === 0 && (
-                    <th className="sticky top-0 z-10 px-3 py-2 font-medium bg-surface border-b border-border">
-                      —
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {rowsQuery.data.rows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={Math.max(1, visibleColumns.length) + 1}
-                      className="px-3 py-6 text-center text-text-secondary"
-                    >
-                      Sin filas todavía.
-                    </td>
-                  </tr>
-                )}
-                {rowsQuery.data.rows.length > 0 && visibleColumns.length === 0 && (
-                  <tr>
-                    <td className="px-3 py-6 text-center text-text-secondary">
-                      Todas las columnas están ocultas.
-                    </td>
-                  </tr>
-                )}
-                {rowsQuery.data.rows.map((row, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => setJsonRow(row)}
-                        title="Ver fila como JSON"
-                        className="text-text-secondary hover:text-primary"
-                      >
-                        <Braces className="h-3.5 w-3.5" />
-                      </button>
-                    </td>
-                    {visibleColumns.map((c) => {
-                      const cell = truncateCellValue(row[c]);
-                      return (
-                        <td
-                          key={c}
-                          className="px-3 py-2 whitespace-nowrap text-text-primary"
-                          title={cell.truncated ? cell.full : undefined}
-                        >
-                          {cell.display}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      <div className="border border-border rounded-lg overflow-hidden">
+        <DataTable
+          storageKey={`datasetRows.${datasetName}`}
+          columns={tableColumns}
+          rows={rowsQuery.data?.rows ?? []}
+          rowKey={(row) => JSON.stringify(row)}
+          actions={(row) => (
+            <button
+              type="button"
+              onClick={() => setJsonRow(row)}
+              title="Ver fila como JSON"
+              aria-label="Ver fila como JSON"
+              className="text-text-secondary hover:text-primary"
+            >
+              <Braces className="h-3.5 w-3.5" />
+            </button>
+          )}
+          isLoading={rowsQuery.isLoading}
+          error={rowsQuery.isError ? "No se pudieron cargar las filas del dataset." : undefined}
+          pageSize={PAGE_SIZE}
+          maxBodyHeight={420}
+          hidePagination
+          itemLabel="fila"
+          emptyLabel="Sin filas todavía."
+          searchPlaceholder="Buscar en las filas del dataset…"
+        />
+        {rowsQuery.data && (
           <PaginationFooter
             page={page}
             pageCount={pageCount}
@@ -270,8 +218,8 @@ export function DatasetRowsTab({ datasetName }: { datasetName: string }) {
             onPageChange={setPage}
             itemLabel="fila"
           />
-        </div>
-      )}
+        )}
+      </div>
 
       <PickDatasetRecordsModal
         targetName={datasetName}

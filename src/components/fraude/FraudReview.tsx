@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import {
   listFraudLabelReviews,
   reviewFraudLabel,
@@ -192,6 +193,56 @@ export function FraudReviewTrailDialog({
     enabled: Boolean(item),
   });
   if (!item) return null;
+  const reviews = query.data ?? [];
+  const columns: DataTableColumn<(typeof reviews)[number]>[] = [
+    {
+      key: "reviewedAt",
+      label: "Fecha",
+      minWidth: 160,
+      render: (r) => new Date(r.reviewed_at).toLocaleString("es-CO"),
+      sortValue: (r) => r.reviewed_at,
+      searchValue: (r) => r.reviewed_at,
+    },
+    {
+      key: "change",
+      label: "Cambio",
+      minWidth: 180,
+      render: (r) => (
+        <>
+          {MARK_LABELS[r.from_label]} →{" "}
+          <span className="font-medium">{MARK_LABELS[r.to_label]}</span>
+          {r.from_label === r.to_label && (
+            <span className="text-text-secondary"> (confirmación)</span>
+          )}
+        </>
+      ),
+      searchValue: (r) => `${MARK_LABELS[r.from_label]} ${MARK_LABELS[r.to_label]}`,
+    },
+    {
+      key: "reviewedBy",
+      label: "Revisó",
+      minWidth: 140,
+      render: (r) => r.reviewed_by,
+      sortValue: (r) => r.reviewed_by,
+      searchValue: (r) => r.reviewed_by,
+    },
+    {
+      key: "origin",
+      label: "Origen",
+      minWidth: 100,
+      render: (r) => (r.channel === "csv" ? "Carga CSV" : "UI"),
+      searchValue: (r) => r.channel,
+    },
+    {
+      key: "note",
+      label: "Nota",
+      minWidth: 220,
+      render: (r) => (
+        <span className="whitespace-pre-wrap text-text-secondary">{r.note || "—"}</span>
+      ),
+      searchValue: (r) => r.note ?? "",
+    },
+  ];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
@@ -202,52 +253,20 @@ export function FraudReviewTrailDialog({
             {item.fraud_review_count === 1 ? "" : "es"} · de la más antigua a la más reciente
           </DialogDescription>
         </DialogHeader>
-        {query.isLoading ? (
-          <div className="flex items-center gap-2 text-[13px] text-text-secondary">
-            <Loader2 className="h-4 w-4 animate-spin" /> Cargando…
-          </div>
-        ) : query.isError ? (
-          <p className="text-[12px] text-danger">
-            No se pudo cargar la auditoría: {String(query.error)}
-          </p>
-        ) : (query.data ?? []).length === 0 ? (
-          <p className="text-[12px] text-text-secondary">Esta alerta aún no tiene revisiones.</p>
-        ) : (
-          <div className="overflow-x-auto max-h-[60vh]">
-            <table className="w-full text-[12px]">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-wider text-text-secondary text-left">
-                  <th className="font-normal py-2 pr-3">Fecha</th>
-                  <th className="font-normal py-2 pr-3">Cambio</th>
-                  <th className="font-normal py-2 pr-3">Revisó</th>
-                  <th className="font-normal py-2 pr-3">Origen</th>
-                  <th className="font-normal py-2">Nota</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(query.data ?? []).map((r) => (
-                  <tr key={r.id} className="border-t border-border align-top">
-                    <td className="py-2 pr-3 whitespace-nowrap tabular-nums">
-                      {new Date(r.reviewed_at).toLocaleString("es-CO")}
-                    </td>
-                    <td className="py-2 pr-3 whitespace-nowrap">
-                      {MARK_LABELS[r.from_label]} →{" "}
-                      <span className="font-medium">{MARK_LABELS[r.to_label]}</span>
-                      {r.from_label === r.to_label && (
-                        <span className="text-text-secondary"> (confirmación)</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3">{r.reviewed_by}</td>
-                    <td className="py-2 pr-3">{r.channel === "csv" ? "Carga CSV" : "UI"}</td>
-                    <td className="py-2 text-text-secondary whitespace-pre-wrap">
-                      {r.note || "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <DataTable
+          storageKey={`fraud-review.audit.${item.alert_id}`}
+          columns={columns}
+          rows={reviews}
+          rowKey={(r) => r.id}
+          isLoading={query.isLoading}
+          error={
+            query.isError ? `No se pudo cargar la auditoría: ${String(query.error)}` : undefined
+          }
+          emptyLabel="Esta alerta aún no tiene revisiones."
+          itemLabel="revisión"
+          defaultSort={{ key: "reviewedAt", dir: "asc" }}
+          pageSize={10}
+        />
       </DialogContent>
     </Dialog>
   );

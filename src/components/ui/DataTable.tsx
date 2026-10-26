@@ -62,6 +62,7 @@ type DataTableProps<T> = {
   defaultSort?: { key: string; dir: "asc" | "desc" };
   searchPlaceholder?: string;
   pageSize?: number;
+  maxBodyHeight?: number;
   itemLabel?: string;
   isLoading?: boolean;
   loadingLabel?: string;
@@ -73,6 +74,7 @@ type DataTableProps<T> = {
   // Narrow master/detail lists: tight paddings, no column palette, compact pager.
   compact?: boolean;
   hideColumnMenu?: boolean;
+  hidePagination?: boolean;
   searchLabel?: string;
   onRowClick?: (row: T) => void;
   isRowActive?: (row: T) => boolean;
@@ -198,6 +200,7 @@ export function DataTable<T>({
   defaultSort,
   searchPlaceholder,
   pageSize = 20,
+  maxBodyHeight,
   itemLabel = "resultado",
   isLoading = false,
   loadingLabel = "Cargando…",
@@ -208,6 +211,7 @@ export function DataTable<T>({
   footerExtra,
   compact = false,
   hideColumnMenu = false,
+  hidePagination = false,
   searchLabel = "Buscar en la tabla",
   onRowClick,
   isRowActive,
@@ -391,7 +395,10 @@ export function DataTable<T>({
       )}
 
       {/* Roughly one viewport tall at most; scrolls on both axes inside the card. */}
-      <div className="overflow-auto max-h-[100vh]">
+      <div
+        className="overflow-auto max-h-[100vh]"
+        style={maxBodyHeight ? { maxHeight: maxBodyHeight } : undefined}
+      >
         <table className="w-full min-w-max border-separate border-spacing-0 text-[12px]">
           <thead>
             <tr>
@@ -540,17 +547,19 @@ export function DataTable<T>({
         </table>
       </div>
 
-      <PaginationFooter
-        page={paging.page}
-        pageCount={paging.pageCount}
-        total={paging.total}
-        pageSize={paging.pageSize}
-        onPageChange={paging.setPage}
-        onPageSizeChange={paging.setPageSize}
-        itemLabel={itemLabel}
-        extra={footerExtra}
-        compact={compact}
-      />
+      {!hidePagination && (
+        <PaginationFooter
+          page={paging.page}
+          pageCount={paging.pageCount}
+          total={paging.total}
+          pageSize={paging.pageSize}
+          onPageChange={paging.setPage}
+          onPageSizeChange={paging.setPageSize}
+          itemLabel={itemLabel}
+          extra={footerExtra}
+          compact={compact}
+        />
+      )}
     </section>
   );
 }

@@ -45,6 +45,15 @@ async function expectMonitorTabs(page: Page) {
     for (const other of tabs.filter((t) => t.name !== tab.name))
       for (const text of other.content.filter((t) => !tab.content.includes(t)))
         await expect(page.getByRole("tabpanel").getByText(text, { exact: true })).toHaveCount(0);
+    if (tab.name === "Indicadores técnicos") {
+      await expect(page.getByRole("tabpanel").getByRole("table").first()).toBeVisible();
+      await expect(
+        page.getByRole("tabpanel").getByRole("textbox", { name: "Buscar en la tabla" }).first(),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("tabpanel").getByRole("button", { name: "Columnas" }).first(),
+      ).toBeVisible();
+    }
     // Voicebot and Bidi are disabled for now: no section for them in any tab.
     await expect(page.getByRole("heading", { name: /^(Voicebot|Bidi)$/ })).toHaveCount(0);
     // The scope note and range warnings stay above the tabs whichever one is open.
@@ -155,10 +164,21 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
     if (endpoint === "overview") expect(result.distributions).toBeTruthy();
   }
 
-  const auditQuery = await request.get(`${baseURL}/api/v0/audit-logs?from_date=${encodeURIComponent(from.slice(0, 10))}&to_date=${encodeURIComponent(to.slice(0, 10))}&limit=10000`, { headers: { Authorization: `Bearer ${token}` } });
+  const auditQuery = await request.get(
+    `${baseURL}/api/v0/audit-logs?from_date=${encodeURIComponent(from.slice(0, 10))}&to_date=${encodeURIComponent(to.slice(0, 10))}&limit=10000`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
   expect(auditQuery.status(), await auditQuery.text()).toBe(200);
-  const auditRows = (await auditQuery.json()) as Array<{ correlation_id?: string; entidad_tipo?: string }>;
-  for (const correlationId of auditIds) expect(auditRows.some((row) => row.correlation_id === correlationId && row.entidad_tipo === "http_endpoint")).toBe(true);
+  const auditRows = (await auditQuery.json()) as Array<{
+    correlation_id?: string;
+    entidad_tipo?: string;
+  }>;
+  for (const correlationId of auditIds)
+    expect(
+      auditRows.some(
+        (row) => row.correlation_id === correlationId && row.entidad_tipo === "http_endpoint",
+      ),
+    ).toBe(true);
   await page.addInitScript((value) => localStorage.setItem("aria.auth.accessToken", value), token);
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -173,6 +193,12 @@ test("observability pages, metrics reads, audit trail, and expired rollup cleanu
     await scopeNote.locator("xpath=..").getByRole("button", { name: "Ver más" }).click();
     await expect(detail).toBeVisible();
     if (route === "/monitor") await expectMonitorTabs(page);
+    if (route === "/dashboard") {
+      await page.getByRole("tab", { name: "Por dimensión" }).click();
+      await expect(page.getByRole("table").first()).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Buscar en la tabla" }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: "Columnas" }).first()).toBeVisible();
+    }
     await expect(page.locator("body")).not.toBeEmpty();
   }
   expect(pageErrors).toEqual([]);

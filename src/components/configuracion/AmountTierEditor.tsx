@@ -1,4 +1,5 @@
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { formatTierBounds, validateAmountTiers, type AmountTier } from "@/lib/amountTiers";
 
 /* Amount-tier editor (Operación → Rangos de monto). Each alert is
@@ -30,6 +31,87 @@ export function AmountTierEditor({
     const start = last ? (last.maxExclusive ?? last.minInclusive) : 0;
     onChange([...value, { code: "", label: "", minInclusive: start, maxExclusive: null }]);
   };
+  const rows = value.map((tier, index) => ({ ...tier, rowIndex: index }));
+  const columns: DataTableColumn<(typeof rows)[number]>[] = [
+    {
+      key: "code",
+      label: "Código",
+      minWidth: 150,
+      render: (row) => (
+        <input
+          aria-label={`Código del rango ${row.rowIndex + 1}`}
+          value={row.code}
+          maxLength={60}
+          onChange={(e) => update(row.rowIndex, { code: e.target.value })}
+          className={inputClass}
+        />
+      ),
+      searchValue: (row) => row.code,
+    },
+    {
+      key: "label",
+      label: "Etiqueta",
+      minWidth: 170,
+      render: (row) => (
+        <input
+          aria-label={`Etiqueta del rango ${row.rowIndex + 1}`}
+          value={row.label}
+          maxLength={120}
+          onChange={(e) => update(row.rowIndex, { label: e.target.value })}
+          className={inputClass}
+        />
+      ),
+      searchValue: (row) => row.label,
+    },
+    {
+      key: "min",
+      label: "Desde (incl.)",
+      minWidth: 130,
+      render: (row) => (
+        <input
+          aria-label={`Desde del rango ${row.rowIndex + 1}`}
+          type="number"
+          min={0}
+          value={Number.isFinite(row.minInclusive) ? row.minInclusive : ""}
+          onChange={(e) => update(row.rowIndex, { minInclusive: parseBound(e.target.value) })}
+          className={inputClass}
+        />
+      ),
+      searchValue: (row) => String(row.minInclusive),
+    },
+    {
+      key: "max",
+      label: "Hasta (excl.)",
+      minWidth: 150,
+      render: (row) => (
+        <input
+          aria-label={`Hasta del rango ${row.rowIndex + 1}`}
+          type="number"
+          min={0}
+          placeholder="∞ (sin tope)"
+          value={row.maxExclusive ?? ""}
+          onChange={(e) =>
+            update(row.rowIndex, {
+              maxExclusive: e.target.value.trim() === "" ? null : Number(e.target.value),
+            })
+          }
+          className={inputClass}
+        />
+      ),
+      searchValue: (row) => String(row.maxExclusive ?? "∞"),
+    },
+    {
+      key: "range",
+      label: "Rango",
+      minWidth: 140,
+      render: (row) => (
+        <span className="whitespace-nowrap text-text-secondary tabular-nums">
+          {Number.isFinite(row.minInclusive) ? formatTierBounds(row) : "—"}
+        </span>
+      ),
+      searchValue: (row) => formatTierBounds(row),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -42,89 +124,31 @@ export function AmountTierEditor({
         </p>
       </div>
 
-      {value.length === 0 ? (
+      {value.length === 0 && (
         <p className="text-[12px] text-text-secondary">
           Sin rangos configurados: todas las alertas nuevas quedan como <code>unknown</code>.
         </p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="text-[11px] uppercase tracking-wider text-text-secondary text-left">
-                <th className="font-normal py-2 pr-2">Código</th>
-                <th className="font-normal py-2 pr-2">Etiqueta</th>
-                <th className="font-normal py-2 pr-2">Desde (incl.)</th>
-                <th className="font-normal py-2 pr-2">Hasta (excl.)</th>
-                <th className="font-normal py-2 pr-2">Rango</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {value.map((tier, index) => (
-                <tr key={index} className="border-t border-border">
-                  <td className="py-2 pr-2 min-w-[110px]">
-                    <input
-                      aria-label={`Código del rango ${index + 1}`}
-                      value={tier.code}
-                      maxLength={60}
-                      onChange={(e) => update(index, { code: e.target.value })}
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className="py-2 pr-2 min-w-[140px]">
-                    <input
-                      aria-label={`Etiqueta del rango ${index + 1}`}
-                      value={tier.label}
-                      maxLength={120}
-                      onChange={(e) => update(index, { label: e.target.value })}
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className="py-2 pr-2 min-w-[110px]">
-                    <input
-                      aria-label={`Desde del rango ${index + 1}`}
-                      type="number"
-                      min={0}
-                      value={Number.isFinite(tier.minInclusive) ? tier.minInclusive : ""}
-                      onChange={(e) => update(index, { minInclusive: parseBound(e.target.value) })}
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className="py-2 pr-2 min-w-[110px]">
-                    <input
-                      aria-label={`Hasta del rango ${index + 1}`}
-                      type="number"
-                      min={0}
-                      placeholder="∞ (sin tope)"
-                      value={tier.maxExclusive ?? ""}
-                      onChange={(e) =>
-                        update(index, {
-                          maxExclusive:
-                            e.target.value.trim() === "" ? null : Number(e.target.value),
-                        })
-                      }
-                      className={inputClass}
-                    />
-                  </td>
-                  <td className="py-2 pr-2 whitespace-nowrap text-text-secondary tabular-nums">
-                    {Number.isFinite(tier.minInclusive) ? formatTierBounds(tier) : "—"}
-                  </td>
-                  <td className="py-2">
-                    <button
-                      type="button"
-                      aria-label={`Eliminar rango ${index + 1}`}
-                      onClick={() => remove(index)}
-                      className="p-1 rounded-md text-text-secondary hover:text-danger hover:bg-danger/10"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
+      <DataTable
+        storageKey="configuration.amount-tiers"
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => String(row.rowIndex)}
+        pageSize={100}
+        hidePagination={rows.length <= 100}
+        itemLabel="rango"
+        emptyLabel="Sin rangos configurados."
+        actions={(row) => (
+          <button
+            type="button"
+            aria-label={`Eliminar rango ${row.rowIndex + 1}`}
+            onClick={() => remove(row.rowIndex)}
+            className="p-1 rounded-md text-text-secondary hover:text-danger hover:bg-danger/10"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      />
 
       <div className="flex items-center justify-between gap-3">
         <button

@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { format } from "date-fns";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import { FilterBar, PageHeader } from "@/components/PageHeader";
 import { CapabilityInfo, LifecycleDiagram } from "@/components/aria/CapabilityInfo";
@@ -283,51 +284,69 @@ function DistributionTable({
   total: number;
   formatValue?: (v: string) => string;
 }) {
-  if (buckets.length === 0)
-    return <p className="text-[12px] text-text-secondary py-4">Sin datos en el rango.</p>;
+  const columns: DataTableColumn<ApiDimensionBucket>[] = [
+    {
+      key: "value",
+      label: "Valor",
+      minWidth: 140,
+      render: (b) =>
+        b.value === "unknown" ? "Sin dato" : formatValue ? formatValue(b.value) : b.value,
+      sortValue: (b) => b.value,
+      searchValue: (b) =>
+        b.value === "unknown" ? "Sin dato" : formatValue ? formatValue(b.value) : b.value,
+    },
+    {
+      key: "alerts",
+      label: "Alertas",
+      align: "right",
+      render: (b) => formatCount(b.alerts),
+      sortValue: (b) => b.alerts,
+      searchValue: (b) => String(b.alerts),
+    },
+    {
+      key: "share",
+      label: "% del total",
+      align: "right",
+      render: (b) => formatPct(ratio(b.alerts, total)),
+      sortValue: (b) => ratio(b.alerts, total),
+      searchValue: (b) => formatPct(ratio(b.alerts, total)),
+    },
+    {
+      key: "amount",
+      label: "Monto",
+      align: "right",
+      render: (b) => (b.amount_count > 0 ? formatAmount(b.amount_sum) : "—"),
+      sortValue: (b) => b.amount_sum,
+      searchValue: (b) => String(b.amount_sum),
+    },
+    {
+      key: "falsePositives",
+      label: "Falsos positivos",
+      align: "right",
+      render: (b) => formatPct(ratio(b.false_positives, b.decided)),
+      sortValue: (b) => ratio(b.false_positives, b.decided),
+      searchValue: (b) => formatPct(ratio(b.false_positives, b.decided)),
+    },
+    {
+      key: "missedFraud",
+      label: "Fraude no detectado",
+      align: "right",
+      render: (b) => formatPct(ratio(b.undetected_fraud, b.decided)),
+      sortValue: (b) => ratio(b.undetected_fraud, b.decided),
+      searchValue: (b) => formatPct(ratio(b.undetected_fraud, b.decided)),
+    },
+  ];
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="text-[11px] uppercase tracking-wider text-text-secondary text-left">
-            <th className="font-normal py-2 pr-3">Valor</th>
-            <th className="font-normal py-2 pr-3 text-right">Alertas</th>
-            <th className="font-normal py-2 pr-3 text-right">% del total</th>
-            <th className="font-normal py-2 pr-3 text-right">Monto</th>
-            <th className="font-normal py-2 pr-3 text-right">Falsos positivos</th>
-            <th className="font-normal py-2 text-right">Fraude no detectado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...buckets]
-            .sort((a, b) => b.alerts - a.alerts)
-            .map((b) => (
-              <tr key={b.value} className="border-t border-border">
-                <td className="py-2 pr-3 text-text-primary">
-                  {b.value === "unknown"
-                    ? "Sin dato"
-                    : formatValue
-                      ? formatValue(b.value)
-                      : b.value}
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">{formatCount(b.alerts)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {formatPct(ratio(b.alerts, total))}
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {b.amount_count > 0 ? formatAmount(b.amount_sum) : "—"}
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">
-                  {formatPct(ratio(b.false_positives, b.decided))}
-                </td>
-                <td className="py-2 text-right tabular-nums">
-                  {formatPct(ratio(b.undetected_fraud, b.decided))}
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      storageKey="dashboard.distribution"
+      columns={columns}
+      rows={buckets}
+      rowKey={(b) => b.value}
+      pageSize={10}
+      itemLabel="dimensión"
+      emptyLabel="Sin datos en el rango."
+      defaultSort={{ key: "alerts", dir: "desc" }}
+    />
   );
 }
 
