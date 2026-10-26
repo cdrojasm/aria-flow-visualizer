@@ -14,7 +14,7 @@ async function open(page: Page, path: string) {
   const response = await page.request.post(`${baseURL}/api/v0/auth/login`, {
     data: { email, password },
   });
-  expect(response.ok()).toBeTruthy();
+  expect(response.ok(), `login API para ${path}: ${await response.text()}`).toBeTruthy();
   const { access_token: token } = (await response.json()) as { access_token: string };
   await page.addInitScript((value) => localStorage.setItem("aria.auth.accessToken", value), token);
   await page.goto(path);
@@ -97,7 +97,21 @@ async function expectTableBasics(page: Page, firstActionName: RegExp) {
   expect(await headerWidth(1)).toBeGreaterThan(secondBefore + 40);
   expect(Math.abs((await headerWidth(0)) - widthMin)).toBeLessThan(2);
 
-  // A hidden column and the dragged widths both survive a reload.
+  // Dragging a header's grip onto another header moves that column there.
+  const dataHeaders = table.locator("th[data-col-key]");
+  const columnKeys = () =>
+    dataHeaders.evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.colKey));
+  const orderBefore = await columnKeys();
+  const swapped = [orderBefore[1], orderBefore[0], ...orderBefore.slice(2)];
+  const grip = (await table.getByTestId(/^reorder-/).nth(1).boundingBox())!;
+  const target = (await dataHeaders.nth(0).boundingBox())!;
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(columnKeys).toEqual(swapped);
+
+  // A hidden column, the dragged widths and the dragged order all survive a reload.
   const headersBefore = await table.getByRole("columnheader").count();
   await page.getByRole("button", { name: "Columnas" }).click();
   await page.getByRole("menuitemcheckbox").last().click();
@@ -108,6 +122,7 @@ async function expectTableBasics(page: Page, firstActionName: RegExp) {
   await expect(handles.first()).toBeVisible({ timeout: 30_000 });
   await expect(table.getByRole("columnheader")).toHaveCount(headersBefore - 1);
   expect(Math.abs((await headerWidth(0)) - firstWidth)).toBeLessThan(4);
+  await expect.poll(columnKeys).toEqual(swapped.slice(0, -1));
 
   // Rows per page: 20 by default, 50 and 100 available; changing it returns to the
   // first page and shows as many rows as the new size allows.

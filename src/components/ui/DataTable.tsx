@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link, type LinkProps } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ArrowUpDown, Loader2, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, GripVertical, Loader2, Search } from "lucide-react";
 
 import { ColumnVisibilityMenu, useHiddenColumns } from "@/components/ColumnVisibilityMenu";
 import { PaginationFooter } from "@/components/ui/PaginationFooter";
@@ -136,6 +136,45 @@ function useColumnWidths(storageKey: string) {
   return { widths, commit };
 }
 
+const ORDER_PREFIX = "aria.columnOrder.";
+
+// Column keys in the order the user dragged them, persisted per table; empty = declared order.
+function useColumnOrder(storageKey: string) {
+  const [order, setOrder] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ORDER_PREFIX + storageKey);
+      if (raw) setOrder(JSON.parse(raw) as string[]);
+    } catch {
+      // localStorage unavailable: order only lasts for this session.
+    }
+  }, [storageKey]);
+
+  const commit = useCallback(
+    (next: string[]) => {
+      setOrder(next);
+      try {
+        localStorage.setItem(ORDER_PREFIX + storageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+    },
+    [storageKey],
+  );
+  return { order, commit };
+}
+
+// Stable: columns missing from the stored order (new ones) keep their declared place at the end.
+function applyColumnOrder<C extends { key: string }>(columns: C[], order: string[]): C[] {
+  if (order.length === 0) return columns;
+  const rank = (key: string) => {
+    const i = order.indexOf(key);
+    return i < 0 ? order.length : i;
+  };
+  return [...columns].sort((a, b) => rank(a.key) - rank(b.key));
+}
+
 function widthStyle(width: number | undefined, minWidth: number | undefined) {
   return width ? { minWidth: width, width, maxWidth: width } : { minWidth };
 }
@@ -194,12 +233,48 @@ export function DataTable<T>({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
+  const { order, commit: commitOrder } = useColumnOrder(storageKey);
+  const orderedColumns = useMemo(() => applyColumnOrder(columns, order), [columns, order]);
+  const [reorder, setReorder] = useState<{ from: string; over: string | null } | null>(null);
+
+  // Drag the grip of a header over another header to move the column there.
+  const startReorder = (key: string, e: React.PointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let over: string | null = null;
+    setReorder({ from: key, over });
+    document.body.style.userSelect = "none";
+    const onMove = (ev: PointerEvent) => {
+      const th = document
+        .elementFromPoint(ev.clientX, ev.clientY)
+        ?.closest<HTMLElement>("th[data-col-key]");
+      const next = th?.dataset.colKey ?? null;
+      if (next !== over) {
+        over = next;
+        setReorder({ from: key, over });
+      }
+    };
+    const onUp = () => {
+      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setReorder(null);
+      if (!over || over === key) return;
+      const keys = orderedColumns.map((c) => c.key);
+      const to = keys.indexOf(over);
+      keys.splice(keys.indexOf(key), 1);
+      keys.splice(to, 0, key);
+      commitOrder(keys);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   const [sort, setSort] = useState(defaultSort ?? null);
   const [search, setSearch] = useState("");
 
   const visibleColumns = useMemo(
-    () => columns.filter((c) => !hidden.has(c.key)),
-    [columns, hidden],
+    () => orderedColumns.filter((c) => !hidden.has(c.key)),
+    [orderedColumns, hidden],
   );
   const searchable = useMemo(() => columns.filter((c) => c.searchValue), [columns]);
 
@@ -345,12 +420,22 @@ export function DataTable<T>({
                 return (
                   <th
                     key={col.key}
+                    data-col-key={col.key}
                     style={widthStyle(widths[col.key], col.minWidth)}
-                    className={`${HEAD_CELL} relative ${headPad} ${col.align === "right" ? "text-right" : "text-left"}`}
+                    className={`${HEAD_CELL} relative ${headPad} ${col.align === "right" ? "text-right" : "text-left"} ${reorder?.from === col.key ? "opacity-50" : ""} ${reorder?.over === col.key && reorder.from !== col.key ? "shadow-[inset_2px_0_0_var(--color-primary)]" : ""}`}
                     aria-sort={
                       active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined
                     }
                   >
+                    <span
+                      aria-hidden="true"
+                      title={`Arrastrar para mover la columna ${col.label}`}
+                      data-testid={`reorder-${col.key}`}
+                      onPointerDown={(e) => startReorder(col.key, e)}
+                      className="mr-1 inline-flex cursor-grab touch-none select-none align-middle text-text-secondary opacity-40 hover:opacity-100 active:cursor-grabbing"
+                    >
+                      <GripVertical className="h-3 w-3" />
+                    </span>
                     {col.sortValue ? (
                       <button
                         type="button"
