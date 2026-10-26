@@ -115,3 +115,21 @@ export const BLOCK_ERROR_COPY: Record<string, string> = {
   SESSION_NOT_BLOCKED: "La sesión ya no está esperando una aprobación.",
   ROLE_NOT_ALLOWED: "Solo el Channel Manager puede aprobar.",
 };
+
+export const SESSION_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Borrador",
+  ACTIVE: "Ejecutando",
+  PAUSED: "En pausa",
+  WAITING_USER: "Esperando tu respuesta",
+  WAITING_APPROVAL: "Requiere aprobación",
+  COMPLETED: "Terminada",
+  STOPPED: "Detenida",
+  CANCELLED: "Cancelada",
+  FAILED: "Fallida",
+};
+
+export const ITERATION_STATUS_LABEL: Record<string, string> = {
+  RUNNING: "en curso",
+  SUCCEEDED: "terminó bien",
+  FAILED: "falló",
+};

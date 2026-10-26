@@ -31,6 +31,8 @@ import { SessionTimeline } from "./SessionTimeline";
 import { SessionVerdictCard } from "./SessionVerdictCard";
 import {
   BUDGET_RESOURCE_LABEL,
+  ITERATION_STATUS_LABEL,
+  SESSION_STATUS_LABEL,
   SPECIALIST_LABEL,
   TONE_CLASS,
   VERDICT_META,
@@ -262,7 +264,7 @@ export function OptimizerCenter({ role }: { role: string | undefined }) {
                   type="button"
                   role="tab"
                   aria-selected={item.session_id === sessionId}
-                  aria-label={`Optimizador ${item.session_id} · ${item.status}`}
+                  aria-label={`Optimizador ${item.session_id} · ${SESSION_STATUS_LABEL[item.status] ?? item.status}`}
                   onClick={() => setSelectedId(item.session_id)}
                   className={`shrink-0 rounded-lg border px-3 py-2 text-left text-[12px] ${
                     item.session_id === sessionId
@@ -464,7 +466,8 @@ function RecentIterations({
               className="rounded-lg border border-border bg-card px-3 py-2 text-[12px]"
             >
               <span className="font-semibold text-text-primary">
-                Iteración {iteration.number} · {iteration.status}
+                Iteración {iteration.number} ·{" "}
+                {ITERATION_STATUS_LABEL[iteration.status] ?? iteration.status}
               </span>
               {iteration.hypothesis && (
                 <span className="ml-2 text-text-secondary">{iteration.hypothesis}</span>

@@ -1397,7 +1397,9 @@ function ConfiguracionPage() {
   return (
     <DashboardLayout
       bottomBar={
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
+        <div
+          className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8 ${activeTab === "optimizador" ? "hidden" : ""}`}
+        >
           <div className="min-w-0 text-[12px] text-text-secondary" role="status">
             <p className="font-medium text-text-primary">{editorStatus}</p>
             <p>
@@ -1789,7 +1791,7 @@ function ConfiguracionPage() {
         </section>
         )}
 
-        {(isChannelManager || isReleaseManager || isManager) && (
+        {(isChannelManager || isReleaseManager || isManager) && activeTab !== "optimizador" && (
           <section className="bg-card rounded-xl border border-border p-5">
             <div className="mb-3">
               <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
