@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import { FilterBar, PageHeader } from "@/components/PageHeader";
+import { CapabilityInfo, LifecycleDiagram } from "@/components/aria/CapabilityInfo";
 import {
   CARD,
   ErrorBox,
@@ -533,7 +534,14 @@ function DashboardPage() {
     <DashboardLayout>
       <div className="px-8 py-6">
         <PageHeader
-          title="Dashboard"
+          title={
+            <span className="inline-flex items-center gap-1.5">
+              Dashboard
+              <CapabilityInfo label="ciclo de una alerta" title="Del evento al aprendizaje">
+                <LifecycleDiagram />
+              </CapabilityInfo>
+            </span>
+          }
           actions={
             <Button
               variant="outline"

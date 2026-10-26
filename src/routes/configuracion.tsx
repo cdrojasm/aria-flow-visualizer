@@ -44,6 +44,7 @@ import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
 import { OperationsPanel } from "@/components/configuracion/OperationsPanel";
 import { AgentSettingsPanel } from "@/components/configuracion/AgentSettingsPanel";
+import { CapabilityInfo, PipelineDiagram } from "@/components/aria/CapabilityInfo";
 import {
   defaultSettings,
   defaultSegmentAgent,
@@ -1469,7 +1470,12 @@ function ConfiguracionPage() {
     >
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
         <header className="mb-2">
-          <h1 className="text-[20px] font-semibold text-text-primary">Configuración del Agente</h1>
+          <h1 className="flex items-center gap-1.5 text-[20px] font-semibold text-text-primary">
+            Configuración del Agente
+            <CapabilityInfo label="flujo de revisión" title="Las diez etapas de revisión">
+              <PipelineDiagram />
+            </CapabilityInfo>
+          </h1>
           <p className="text-[13px] text-text-secondary mt-1">
             Configura a ARIA aquí. Es posible realizar configuraciones a nivel de infraestructura,
             operación, test, agente.

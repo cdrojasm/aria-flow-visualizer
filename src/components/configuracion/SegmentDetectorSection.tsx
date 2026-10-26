@@ -6,6 +6,7 @@ import { AgentToolsSection } from "./shared/AgentToolsSection";
 import { Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
+import { CapabilityInfo, XgboostDiagram } from "@/components/aria/CapabilityInfo";
 
 /* ─── Detector agent (Wave 6) ────────────────────────────
    Runs before Clasificación (see SegmentAgentSection.tsx's subtab order),
@@ -30,6 +31,12 @@ export function SegmentDetectorSection({
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-1.5">
+        <h2 className="text-[14px] font-semibold text-text-primary">Detector de alertas</h2>
+        <CapabilityInfo label="puntuación XGBoost" title="Cómo puntúa el modelo">
+          <XgboostDiagram />
+        </CapabilityInfo>
+      </div>
       <AgentToolsSection
         value={value}
         onChange={onChange}

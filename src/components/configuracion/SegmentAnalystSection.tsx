@@ -7,6 +7,7 @@ import { ResolutionMethodCatalogManager } from "./ResolutionMethodCatalogManager
 import { Field, VariablePicker } from "./shared/FormControls";
 import { PromptEditor, type PromptEditorHandle } from "./shared/PromptEditor";
 import { spliceToken, variablesInPrompt } from "./shared/promptTokens";
+import { CapabilityInfo, ResolutionDiagram } from "@/components/aria/CapabilityInfo";
 
 /* ─── Analista ───────────────────────────────────────────
    Mirrors backend's AnalystConfig: one prompt with instructions for handling
@@ -38,7 +39,12 @@ export function SegmentAnalystSection({
     <div className="space-y-6">
       <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
         <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-[14px] font-semibold text-text-primary">Prompt del analista</h2>
+          <h2 className="flex items-center gap-1.5 text-[14px] font-semibold text-text-primary">
+            Prompt del analista
+            <CapabilityInfo label="rutas de resolución" title="Cómo se resuelve una alerta">
+              <ResolutionDiagram />
+            </CapabilityInfo>
+          </h2>
           <p className="text-[12px] text-text-secondary mt-0.5">
             Instrucciones para resolver la alerta: el agente elige el{" "}
             <button
