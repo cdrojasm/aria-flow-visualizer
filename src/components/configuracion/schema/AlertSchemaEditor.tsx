@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, Plus, Save, X } from "lucide-react";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -122,73 +123,108 @@ function validate(fields: AlertSchemaField[], roles: Record<string, string>): st
   return [...new Set(errors)];
 }
 
-function FieldRow({
-  field,
-  onChange,
-  readOnly,
-}: {
-  field: AlertSchemaField;
-  onChange: (patch: Partial<AlertSchemaField>) => void;
-  readOnly: boolean;
-}) {
-  return (
-    <tr className="border-t border-border align-top">
-      <td className="p-2">
+function fieldColumns(
+  readOnly: boolean,
+  onChange: (id: string, patch: Partial<AlertSchemaField>) => void,
+): DataTableColumn<AlertSchemaField>[] {
+  return [
+    {
+      key: "field",
+      label: "Campo",
+      minWidth: 140,
+      sortValue: (f) => f.field,
+      searchValue: (f) => f.field,
+      render: (f) => (
         <input
-          aria-label={`Campo ${field.id}`}
-          value={field.field}
+          aria-label={`Campo ${f.id}`}
+          value={f.field}
           disabled={readOnly}
-          onChange={(e) => onChange({ field: e.target.value })}
+          onChange={(e) => onChange(f.id, { field: e.target.value })}
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "field_name",
+      label: "Nombre visible",
+      minWidth: 160,
+      sortValue: (f) => f.field_name,
+      searchValue: (f) => f.field_name,
+      render: (f) => (
         <input
-          aria-label={`Nombre ${field.id}`}
-          value={field.field_name}
+          aria-label={`Nombre ${f.id}`}
+          value={f.field_name}
           disabled={readOnly}
-          onChange={(e) => onChange({ field_name: e.target.value })}
+          onChange={(e) => onChange(f.id, { field_name: e.target.value })}
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "description",
+      label: "Descripción",
+      minWidth: 200,
+      sortValue: (f) => f.description,
+      searchValue: (f) => f.description,
+      render: (f) => (
         <textarea
-          aria-label={`Descripción ${field.id}`}
-          value={field.description}
+          aria-label={`Descripción ${f.id}`}
+          value={f.description}
           disabled={readOnly}
-          onChange={(e) => onChange({ description: e.target.value })}
+          onChange={(e) => onChange(f.id, { description: e.target.value })}
           className="min-h-8 w-40 rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "field_ds_loc",
+      label: "Ubicación",
+      minWidth: 160,
+      sortValue: (f) => f.field_ds_loc,
+      searchValue: (f) => f.field_ds_loc,
+      render: (f) => (
         <input
-          aria-label={`Ubicación ${field.id}`}
-          value={field.field_ds_loc}
+          aria-label={`Ubicación ${f.id}`}
+          value={f.field_ds_loc}
           disabled={readOnly}
-          onChange={(e) => onChange({ field_ds_loc: e.target.value })}
+          onChange={(e) => onChange(f.id, { field_ds_loc: e.target.value })}
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "type",
+      label: "Tipo",
+      minWidth: 100,
+      sortValue: (f) => f.type,
+      searchValue: (f) => f.type,
+      render: (f) => (
         <select
-          aria-label={`Tipo ${field.id}`}
-          value={field.type}
+          aria-label={`Tipo ${f.id}`}
+          value={f.type}
           disabled={readOnly}
-          onChange={(e) => onChange({ type: e.target.value as AlertSchemaFieldType })}
+          onChange={(e) => onChange(f.id, { type: e.target.value as AlertSchemaFieldType })}
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
           {TYPES.map((type) => (
             <option key={type}>{type}</option>
           ))}
         </select>
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "data_source",
+      label: "Origen",
+      minWidth: 90,
+      sortValue: (f) => f.data_source,
+      searchValue: (f) => f.data_source,
+      render: (f) => (
         <select
-          aria-label={`Origen ${field.id}`}
-          value={field.data_source}
+          aria-label={`Origen ${f.id}`}
+          value={f.data_source}
           disabled={readOnly}
           onChange={(e) =>
-            onChange({ data_source: e.target.value as AlertSchemaField["data_source"] })
+            onChange(f.id, { data_source: e.target.value as AlertSchemaField["data_source"] })
           }
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
@@ -196,103 +232,165 @@ function FieldRow({
           <option>host</option>
           <option>aria</option>
         </select>
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_core",
+      label: "Core",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_core),
+      render: (f) => (
         <input
-          aria-label={`Core ${field.id}`}
+          aria-label={`Core ${f.id}`}
           type="checkbox"
-          checked={field.is_core}
+          checked={f.is_core}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_core: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_core: e.target.checked })}
         />
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_alert",
+      label: "Alerta",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_alert),
+      render: (f) => (
         <input
-          aria-label={`Alerta ${field.id}`}
+          aria-label={`Alerta ${f.id}`}
           type="checkbox"
-          checked={field.is_alert}
+          checked={f.is_alert}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_alert: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_alert: e.target.checked })}
         />
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_mandatory",
+      label: "Obligatorio",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_mandatory),
+      render: (f) => (
         <input
-          aria-label={`Obligatorio ${field.id}`}
+          aria-label={`Obligatorio ${f.id}`}
           type="checkbox"
-          checked={field.is_mandatory}
+          checked={f.is_mandatory}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_mandatory: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_mandatory: e.target.checked })}
         />
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_history",
+      label: "Historial",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_history),
+      render: (f) => (
         <input
-          aria-label={`Historial ${field.id}`}
+          aria-label={`Historial ${f.id}`}
           type="checkbox"
-          checked={field.is_history}
+          checked={f.is_history}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_history: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_history: e.target.checked })}
         />
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_label",
+      label: "Etiqueta",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_label),
+      render: (f) => (
         <input
-          aria-label={`Etiqueta ${field.id}`}
+          aria-label={`Etiqueta ${f.id}`}
           type="checkbox"
-          checked={field.is_label}
+          checked={f.is_label}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_label: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_label: e.target.checked })}
         />
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "is_sensible",
+      label: "Sensible",
+      minWidth: 80,
+      sortValue: (f) => Number(f.is_sensible),
+      render: (f) => (
         <input
-          aria-label={`Sensible ${field.id}`}
+          aria-label={`Sensible ${f.id}`}
           type="checkbox"
-          checked={field.is_sensible}
+          checked={f.is_sensible}
           disabled={readOnly}
-          onChange={(e) => onChange({ is_sensible: e.target.checked })}
+          onChange={(e) => onChange(f.id, { is_sensible: e.target.checked })}
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "sensitivity_strategy",
+      label: "Estrategia",
+      minWidth: 120,
+      sortValue: (f) => f.sensitivity_strategy ?? "",
+      render: (f) => (
         <select
-          aria-label={`Estrategia sensible ${field.id}`}
-          value={field.sensitivity_strategy ?? ""}
-          disabled={readOnly || !field.is_sensible}
-          onChange={(e) => onChange({ sensitivity_strategy: e.target.value || null })}
+          aria-label={`Estrategia sensible ${f.id}`}
+          value={f.sensitivity_strategy ?? ""}
+          disabled={readOnly || !f.is_sensible}
+          onChange={(e) => onChange(f.id, { sensitivity_strategy: e.target.value || null })}
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         >
           <option value="">—</option>
           <option value="anonymize">anonymize</option>
           <option value="obfuscate">obfuscate</option>
         </select>
-      </td>
-      <td className="p-2 text-center">
+      ),
+    },
+    {
+      key: "use_locale",
+      label: "Locale",
+      minWidth: 80,
+      sortValue: (f) => Number(f.use_locale),
+      render: (f) => (
         <input
-          aria-label={`Locale ${field.id}`}
+          aria-label={`Locale ${f.id}`}
           type="checkbox"
-          checked={field.use_locale}
+          checked={f.use_locale}
           disabled={readOnly}
-          onChange={(e) => onChange({ use_locale: e.target.checked })}
+          onChange={(e) => onChange(f.id, { use_locale: e.target.checked })}
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "locale_type",
+      label: "Tipo locale",
+      minWidth: 120,
+      sortValue: (f) => f.locale_type ?? "",
+      searchValue: (f) => f.locale_type ?? "",
+      render: (f) => (
         <input
-          aria-label={`Tipo de locale ${field.id}`}
-          value={field.locale_type ?? ""}
-          disabled={readOnly || !field.use_locale}
-          onChange={(e) => onChange({ locale_type: e.target.value || null })}
+          aria-label={`Tipo de locale ${f.id}`}
+          value={f.locale_type ?? ""}
+          disabled={readOnly || !f.use_locale}
+          onChange={(e) => onChange(f.id, { locale_type: e.target.value || null })}
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-      <td className="p-2">
+      ),
+    },
+    {
+      key: "group",
+      label: "Grupo",
+      minWidth: 120,
+      sortValue: (f) => f.group,
+      searchValue: (f) => f.group,
+      render: (f) => (
         <input
-          aria-label={`Grupo ${field.id}`}
-          value={field.group}
+          aria-label={`Grupo ${f.id}`}
+          value={f.group}
           disabled={readOnly}
-          onChange={(e) => onChange({ group: e.target.value })}
+          onChange={(e) => onChange(f.id, { group: e.target.value })}
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
-      </td>
-    </tr>
-  );
+      ),
+    },
+  ];
 }
 
 export function AlertSchemaEditor() {
@@ -396,6 +494,7 @@ export function AlertSchemaEditor() {
             impact: [],
           },
     );
+  const columns = fieldColumns(!draft || !!readOnly, updateField);
   const grouped = fields
     .filter((field) => sourceFilter === "all" || field.data_source === sourceFilter)
     .reduce<Record<string, Record<string, AlertSchemaField[]>>>((result, field) => {
@@ -537,53 +636,24 @@ export function AlertSchemaEditor() {
               <div key={destination} className="space-y-2">
                 <h3 className="text-sm font-semibold text-text-primary">{destination}</h3>
                 {Object.entries(groups).map(([group, groupFields]) => (
-                  <div
+                  <DataTable
                     key={`${destination}-${group}`}
-                    className="overflow-x-auto rounded-lg border border-border"
-                  >
-                    <div className="border-b border-border bg-surface px-3 py-2 text-xs font-semibold">
-                      {group}
-                    </div>
-                    <table className="w-full min-w-[1300px] text-xs">
-                      <thead>
-                        <tr className="text-left text-text-secondary">
-                          <th className="p-2">Campo</th>
-                          <th className="p-2">Nombre visible</th>
-                          <th className="p-2">Descripción</th>
-                          <th className="p-2">Ubicación</th>
-                          <th className="p-2">Tipo</th>
-                          <th className="p-2">Origen</th>
-                          <th className="p-2">Core</th>
-                          <th className="p-2">Alerta</th>
-                          <th className="p-2">Obligatorio</th>
-                          <th className="p-2">Historial</th>
-                          <th className="p-2">Etiqueta</th>
-                          <th className="p-2">Sensible</th>
-                          <th className="p-2">Estrategia</th>
-                          <th className="p-2">Locale</th>
-                          <th className="p-2">Tipo locale</th>
-                          <th className="p-2">Grupo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {groupFields
-                          .slice()
-                          .sort(
-                            (left, right) =>
-                              left.field.localeCompare(right.field) ||
-                              left.field_ds_loc.localeCompare(right.field_ds_loc),
-                          )
-                          .map((field) => (
-                            <FieldRow
-                              key={field.id}
-                              field={field}
-                              readOnly={!draft || !!readOnly}
-                              onChange={(patch) => updateField(field.id, patch)}
-                            />
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
+                    storageKey="alert-schema-fields"
+                    title={group}
+                    columns={columns}
+                    rows={groupFields
+                      .slice()
+                      .sort(
+                        (left, right) =>
+                          left.field.localeCompare(right.field) ||
+                          left.field_ds_loc.localeCompare(right.field_ds_loc),
+                      )}
+                    rowKey={(field) => field.id}
+                    pageSize={50}
+                    itemLabel="campos"
+                    searchLabel={`Buscar campos en ${group}`}
+                    searchPlaceholder="Buscar campo, ubicación o tipo…"
+                  />
                 ))}
               </div>
             ))
