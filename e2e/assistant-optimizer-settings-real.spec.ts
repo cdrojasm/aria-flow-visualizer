@@ -91,7 +91,7 @@ test("H2 real: guarda los reintentos ante fallos reintentables del optimizador",
     await page.goto("/configuracion");
     await page.getByRole("button", { name: "Asistente y optimizador" }).click();
     const optimizerSection = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Optimizador", exact: true }),
+      has: page.getByRole("heading", { name: /^Optimizador\b/ }),
     });
     await expect(optimizerSection).toBeVisible();
     await optimizerSection
