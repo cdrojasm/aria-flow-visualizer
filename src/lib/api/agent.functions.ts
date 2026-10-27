@@ -794,6 +794,9 @@ export type OptimizerStatus = {
   max_parallel_experiments: number;
   max_concurrent_sessions: number;
   budget: Record<string, { spent: number; limit: number }>;
+  // Recorded per session from specialist executions; no limit applies.
+  embedding_usage: Record<string, number>;
+  sessions_with_embeddings: number;
   experiments: Record<string, number>;
   samples: {
     snapshot_id: string;

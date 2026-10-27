@@ -438,9 +438,28 @@ test("Monitor → Optimizador: carga agregada, esperas por motivo y sin identifi
     running_candidates: number;
     blocked_by_reason: Record<string, number>;
     max_parallel_experiments: number;
+    budget: Record<string, unknown>;
+    embedding_usage: Record<string, number>;
+    sessions_with_embeddings: number;
   };
   expect(status.running_candidates).toBeGreaterThanOrEqual(3);
   expect(status.blocked_by_reason.BUDGET_EXHAUSTED).toBeGreaterThanOrEqual(1);
+  // Embedding usage is reported per live session, apart from the enforced budget.
+  expect(status.embedding_usage.embedding_calls).toBeGreaterThanOrEqual(4);
+  expect(status.embedding_usage.embedding_texts).toBeGreaterThanOrEqual(12);
+  expect(status.embedding_usage.embedding_characters).toBeGreaterThanOrEqual(2400);
+  expect(status.sessions_with_embeddings).toBeGreaterThanOrEqual(1);
+  expect(Object.keys(status.budget)).not.toContain("embedding_calls");
+  const sessionBudget = await api.get(`${baseURL}/api/v0/agent/sessions/${parallel}/budget`, {
+    headers: auth(),
+  });
+  expect(sessionBudget.ok(), `session budget: ${await sessionBudget.text()}`).toBeTruthy();
+  const spent = ((await sessionBudget.json()) as { spent: Record<string, number> }).spent;
+  expect(spent).toMatchObject({
+    embedding_calls: 4,
+    embedding_texts: 12,
+    embedding_characters: 2400,
+  });
 
   const context = await browser.newContext({ baseURL });
   await context.addInitScript((value) => {
@@ -455,5 +474,9 @@ test("Monitor → Optimizador: carga agregada, esperas por motivo y sin identifi
     "Candidatos en paralelo",
   );
   await expect(page.getByTestId("optimizer-block-reasons")).toContainText("Presupuesto agotado");
+  const embeddings = panel.getByRole("region", { name: "Uso de embeddings" });
+  await expect(embeddings).toContainText("Llamadas");
+  await expect(embeddings).toContainText("Caracteres");
+  await expect(embeddings).toContainText(/sesi(ón|ones) registr/);
   await context.close();
 });

@@ -11,6 +11,12 @@ const EXPERIMENT_LABEL: Record<string, string> = {
   FAILED: "Fallaron",
 };
 
+const EMBEDDING_LABEL: Record<string, string> = {
+  embedding_calls: "Llamadas",
+  embedding_texts: "Textos",
+  embedding_characters: "Caracteres",
+};
+
 /** Optimizer load at a glance: aggregates and caps only, never session ids. */
 export function OptimizerMonitorPanel() {
   const status = useQuery({
@@ -141,6 +147,33 @@ export function OptimizerMonitorPanel() {
                 </li>
               ))}
             </ul>
+          )}
+        </section>
+
+        <section aria-label="Uso de embeddings" className={CARD}>
+          <h3 className="mb-2 text-[13px] font-semibold text-text-primary">Uso de embeddings</h3>
+          {total(data.embedding_usage ?? {}) === 0 ? (
+            <p className="text-[12px] text-text-secondary">
+              Las sesiones en curso aún no han generado embeddings.
+            </p>
+          ) : (
+            <>
+              <ul className="space-y-1 text-[12px]">
+                {Object.entries(data.embedding_usage).map(([key, value]) => (
+                  <li key={key} className="flex justify-between">
+                    <span>{EMBEDDING_LABEL[key] ?? key}</span>
+                    <span className="tabular-nums font-medium">
+                      {value.toLocaleString("es-CO")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-text-secondary">
+                {data.sessions_with_embeddings}{" "}
+                {data.sessions_with_embeddings === 1 ? "sesión registró" : "sesiones registraron"}{" "}
+                uso. Sin tope: se informa aparte del presupuesto.
+              </p>
+            </>
           )}
         </section>
       </div>
