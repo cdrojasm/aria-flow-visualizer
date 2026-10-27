@@ -22,6 +22,7 @@ async function expectMonitorTabs(page: Page) {
       ],
     },
     { name: "% Recomendaciones", content: ["% Recomendaciones"] },
+    { name: "Optimizador", content: ["Sesiones en curso", "Esperas por motivo", "Presupuesto agregado"] },
   ];
   await expect(page.getByRole("tab")).toHaveCount(tabs.length);
   // Opens on the first tab (nothing stored yet) and shows one tab's content at a time.

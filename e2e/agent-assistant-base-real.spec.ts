@@ -371,7 +371,7 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
   await expect(page.getByRole("heading", { name: "Borrador de modus operandi" })).toBeVisible({
     timeout: 60_000,
   });
-  await expect(page.getByText(title, { exact: true })).toBeVisible();
+  await expect(page.getByTestId("side-drawer").getByText(title, { exact: true })).toBeVisible();
   await expect(page.getByTestId("side-drawer-aria-proposal")).toBeVisible();
   const verifyButton = page.getByRole("button", { name: "Revisar y confirmar" });
   await expect(verifyButton).toBeEnabled({ timeout: 30_000 });
