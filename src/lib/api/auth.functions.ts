@@ -6,7 +6,8 @@ export type Role =
   | "release_manager"
   | "data_analyst"
   | "fraud_analyst"
-  | "ops_analyst";
+  | "ops_analyst"
+  | "fraud_reviewer";
 
 export type AuthUser = {
   id: string;

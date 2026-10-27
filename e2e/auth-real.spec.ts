@@ -52,6 +52,13 @@ const roleCases: RoleCase[] = [
     allowedLinks: ["Dashboard", "En proceso", "Monitor del Agente"],
     firstRoute: "/dashboard",
   },
+  {
+    key: "FRAUD_REVIEWER",
+    role: "fraud_reviewer",
+    label: "Fraud Reviewer",
+    allowedLinks: ["Histórico de Gestión de Fraude"],
+    firstRoute: "/historico-fraude",
+  },
 ];
 
 for (const roleCase of roleCases) {

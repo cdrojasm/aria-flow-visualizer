@@ -21,6 +21,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   data_analyst: "Data Analyst",
   fraud_analyst: "Fraud Analyst",
   ops_analyst: "Ops Analyst",
+  fraud_reviewer: "Fraud Reviewer",
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
@@ -55,6 +56,8 @@ export const ROLE_NAV: Record<Role, string[]> = {
   data_analyst: ["/monitor", "/testing", "/biblioteca", "/modelos"],
   fraud_analyst: ["/cola"],
   ops_analyst: ["/dashboard", "/cola", "/monitor"],
+  // Fraud team: corrects fraud_label (ground truth) from the history only.
+  fraud_reviewer: ["/historico-fraude"],
 };
 
 export function useRole() {

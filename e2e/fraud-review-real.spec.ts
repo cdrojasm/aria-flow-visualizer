@@ -21,22 +21,29 @@ async function openFraudHistory(page: Page, accessToken: string) {
   ).toBeVisible();
 }
 
-async function token(request: APIRequestContext) {
+async function token(request: APIRequestContext, userEmail = email) {
   const response = await request.post(`${baseURL}/api/v0/auth/login`, {
-    data: { email, password },
+    data: { email: userEmail, password },
   });
   expect(response.ok(), response.ok() ? "" : await response.text()).toBeTruthy();
   const body = (await response.json()) as { access_token: string };
   return body.access_token;
 }
 
-async function provisionUser(request: APIRequestContext) {
+// fraud_review belongs to the fraud team's fraud_reviewer (manager as backup);
+// channel_manager sees the history but must not correct the ground truth.
+async function provisionUser(
+  request: APIRequestContext,
+  userEmail = email,
+  role = "fraud_reviewer",
+) {
   const headers = { "X-Bootstrap-Token": bootstrapToken! };
   const listed = await request.get(`${baseURL}/api/v0/auth/users`, { headers });
   expect(listed.ok(), listed.ok() ? "" : await listed.text()).toBeTruthy();
-  const users = (await listed.json()) as Array<{ id: string; email: string }>;
-  const existing = users.find((user) => user.email === email);
+  const users = (await listed.json()) as Array<{ id: string; email: string; role: string }>;
+  const existing = users.find((user) => user.email === userEmail);
   if (existing) {
+    expect(existing.role, `${userEmail} must keep the ${role} role`).toBe(role);
     const reset = await request.put(`${baseURL}/api/v0/auth/users/${existing.id}/password`, {
       headers,
       data: { password },
@@ -47,7 +54,7 @@ async function provisionUser(request: APIRequestContext) {
 
   const created = await request.post(`${baseURL}/api/v0/auth/users`, {
     headers,
-    data: { email, password, name: userName, role: "manager" },
+    data: { email: userEmail, password, name: userName, role },
   });
   expect(created.status(), await created.text()).toBe(201);
 }
@@ -302,4 +309,39 @@ test.describe("E08 CSV de revisiones", () => {
       await panel.getByRole("button", { name: "Cerrar" }).click();
     }
   });
+});
+
+test("E08 real: channel_manager consulta el histórico pero no corrige fraud_label", async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !email || !password || !bootstrapToken,
+    "El runner local debe proporcionar credenciales efímeras y el token bootstrap temporal.",
+  );
+  const channelManagerEmail = "e2e-fraud-review-channel-manager@aria.local";
+  await provisionUser(request, channelManagerEmail, "channel_manager");
+  const accessToken = await token(request, channelManagerEmail);
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  const me = await request.get(`${baseURL}/api/v0/auth/me`, { headers });
+  expect(me.ok(), me.ok() ? "" : await me.text()).toBeTruthy();
+  const { permissions } = (await me.json()) as { permissions: string[] };
+  expect(permissions).toContain("fraud_history");
+  expect(permissions).not.toContain("fraud_review");
+
+  const history = await request.get(`${baseURL}/api/v0/alerts/history?limit=1`, { headers });
+  expect(history.ok(), history.ok() ? "" : await history.text()).toBeTruthy();
+  const { items } = (await history.json()) as { items: Array<{ alert_id: string }> };
+  test.skip(items.length === 0, "Sin alertas en el histórico para intentar la corrección.");
+  const denied = await request.post(
+    `${baseURL}/api/v0/alerts/${encodeURIComponent(items[0].alert_id)}/fraud-review`,
+    { headers, data: { fraud_label: "fraud", note: "E08 channel_manager" } },
+  );
+  expect(denied.status(), await denied.text()).toBe(403);
+
+  await openFraudHistory(page, accessToken);
+  await expect(page.getByRole("table").first().getByRole("row").nth(1)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Revisar fraude" })).toHaveCount(0);
+  await expect(page.getByTestId("fraud-review-csv-input")).toHaveCount(0);
 });
