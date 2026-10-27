@@ -14,6 +14,18 @@ export const AREA_LABEL: Record<string, string> = {
   model: "Modelos",
 };
 
+/** What each lever changes, in the words of the project graph's optimizer-lever concepts. */
+export const AREA_DESCRIPTION: Record<string, string> = {
+  library:
+    "Ajusta el conocimiento de fraude: taxonomías, modus operandi, señales y casos similares. Aporta evidencia, no decide la marca.",
+  configuration:
+    "Ajusta reglas, umbrales y parámetros del agente por segmento. Cada cambio se prueba antes de proponerse.",
+  vector_store:
+    "Construye y verifica un índice semántico nuevo para la biblioteca, sin alterar el modelo de clasificación.",
+  model:
+    "Entrena un modelo de fraude con datasets y variables, y lo evalúa antes de proponerlo para activación.",
+};
+
 export const EVENT_KIND_LABEL: Record<string, string> = {
   session: "Sesión",
   iteration: "Iteración",

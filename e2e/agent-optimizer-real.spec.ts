@@ -203,14 +203,18 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   );
   await page.getByRole("button", { name: "Lanzar optimizador" }).click();
   const drawer = page.getByTestId("side-drawer");
-  await expect(drawer).toContainText("Alcance de la investigación");
+  await expect(drawer).toContainText("¿Qué debe investigar?");
+  // The goal and the cost ceiling are visible before committing to anything.
+  await expect(drawer.getByTestId("launch-objective")).toContainText("Meta de esta investigación");
+  await expect(drawer.getByTestId("launch-budget")).toContainText("Costo máximo de la sesión");
+  await expect(drawer.getByRole("button", { name: "Revisar y confirmar" })).toBeDisabled();
   await drawer.getByLabel("Biblioteca", { exact: true }).check();
   await drawer
     .getByLabel("Notas iniciales")
     .fill("Analiza oportunidades de mejora y explica cada hipótesis.");
-  await drawer.getByRole("button", { name: "Revisar objetivo y presupuesto" }).click();
+  await drawer.getByRole("button", { name: "Revisar y confirmar" }).click();
   expect((await objectiveResponse).ok()).toBeTruthy();
-  await expect(drawer.getByText("El servidor asigna el presupuesto")).toBeVisible();
+  await expect(drawer.getByText("El servidor fija estos límites")).toBeVisible();
   const overlapResponse = await api!.post("/api/v0/agent/sessions", {
     headers: { Authorization: `Bearer ${channelManagerToken}` },
     data: { mode: "optimization", scope: ["library"] },
@@ -282,6 +286,14 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
       name: `Optimizador ${startedSession.session_id} · Corriendo`,
     })
     .click();
+  // A second launch warns, before creating anything, that the area is already being researched.
+  await page.getByRole("button", { name: "Lanzar optimizador" }).click();
+  const secondDrawer = page.getByTestId("side-drawer");
+  await secondDrawer.getByLabel("Biblioteca", { exact: true }).check();
+  await expect(secondDrawer.getByTestId("launch-overlap")).toContainText("Biblioteca");
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Descartar" }).click();
+  await expect(secondDrawer).toHaveCount(0);
   const sessionIdEncoded = encodeURIComponent(startedSession.session_id);
   const [experimentsResponse, eventsResponse] = await Promise.all([
     api!.get(`/api/v0/agent/sessions/${sessionIdEncoded}/experiments?limit=50`, {

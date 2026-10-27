@@ -411,8 +411,8 @@ test("lanzar optimizador abre el drawer lateral con alcance y revisión", async 
   await openOptimizer(page, sessionId);
   await page.getByRole("button", { name: "Lanzar optimizador" }).click();
   const drawer = page.getByTestId("side-drawer");
-  await expect(drawer).toContainText("Alcance de la investigación");
-  const review = drawer.getByRole("button", { name: "Revisar objetivo y presupuesto" });
+  await expect(drawer).toContainText("¿Qué debe investigar?");
+  const review = drawer.getByRole("button", { name: "Revisar y confirmar" });
   await expect(review).toBeDisabled();
   await drawer.getByLabel("Biblioteca", { exact: true }).check();
   await expect(review).toBeEnabled();

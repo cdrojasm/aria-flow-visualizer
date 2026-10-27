@@ -284,6 +284,16 @@ export function createAgentSession(mode: "assistant" | "optimization" = "assista
     method: "POST",
     body: JSON.stringify({ mode, scope: mode === "assistant" ? ["library"] : [] }),
   });
+export type OptimizerLaunchLimits = {
+  enabled: boolean;
+  max_concurrent_sessions: number;
+  budget_ceiling: Record<string, number>;
+};
+
+export function getOptimizerLaunchLimits() {
+  return apiFetch<OptimizerLaunchLimits>(`${path}/optimizer-launch-limits`);
+}
+
 }
 
 export function getActiveAgentObjective() {
