@@ -249,6 +249,7 @@ export type HistoryPlanner = "llm" | "heuristic";
 export type DelegatedResearchSettings = {
   vectorStore: ResearchAgentConfig & {
     vectorStoreInstanceId: string | null;
+    vectorStoreGeneration?: number | null;
     similarityThreshold: number;
     maxDocumentsPerQuery: number;
     allowedAssetTypes: string[];
@@ -269,6 +270,7 @@ export const defaultDelegatedResearchSettings = (): DelegatedResearchSettings =>
     timeoutSeconds: 8,
     maxResultItems: 10,
     vectorStoreInstanceId: null,
+    vectorStoreGeneration: null,
     similarityThreshold: 0.7,
     maxDocumentsPerQuery: 8,
     allowedAssetTypes: ["taxonomy", "modus_operandi", "similar_case", "flag"],

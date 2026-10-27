@@ -1,3 +1,4 @@
+import { VectorStoreGenerationsPanel } from "@/components/biblioteca/VectorStoreGenerationsPanel";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -25,7 +26,7 @@ import {
   useAddVectorStoreDocument,
   useCreateVectorStoreVersion,
   usePreviewVectorStoreDocument,
-  usePromoteVectorStoreInstance,
+  useBuildVectorStoreGeneration,
   useRemoveVectorStoreDocument,
   useVectorStoreDocuments,
   useVectorStoreVersions,
@@ -336,8 +337,8 @@ function BibliotecaPage() {
   const addVectorStoreDocument = useAddVectorStoreDocument();
   const previewVectorStoreDocument = usePreviewVectorStoreDocument();
   const removeVectorStoreDocument = useRemoveVectorStoreDocument();
-  const promoteVectorStoreInstance = usePromoteVectorStoreInstance();
-  const [isPromoting, setIsPromoting] = useState(false);
+  const buildVectorStoreGeneration = useBuildVectorStoreGeneration();
+  const [isBuilding, setIsBuilding] = useState(false);
   const [selectedVectorStoreId, setSelectedVectorStoreId] =
     useState<string>("");
   const [newVersionName, setNewVersionName] = useState("");
@@ -1123,38 +1124,38 @@ function BibliotecaPage() {
                           <span className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-text-secondary">
                             {vectorStoreRelations.length} documentos
                           </span>
-                          {selectedVectorStore.promotedVersion != null ? (
+                          {selectedVectorStore.latestGeneration != null ? (
                             <span
-                              title={`Generación v${selectedVectorStore.promotedVersion} en producción`}
+                              title={`Última generación construida: ${selectedVectorStore.latestGeneration}`}
                               className="inline-flex items-center gap-1 rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-[11px] text-success"
                             >
-                              <Check className="h-3 w-3" /> Promovida (gen. {selectedVectorStore.promotedVersion})
+                              <Check className="h-3 w-3" /> Construida (gen. {selectedVectorStore.latestGeneration})
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                              Sin promover
+                              Sin construir
                             </span>
                           )}
                           <button
                             type="button"
-                            disabled={isPromoting || vectorStoreRelations.length === 0}
-                            title="Carga la lista de documentos actual a producción y retira la generación anterior. No es una edición en línea."
+                            disabled={isBuilding || vectorStoreRelations.length === 0}
+                            title="Construye una generación sin modificar producción ni retirar las anteriores."
                             onClick={async () => {
-                              setIsPromoting(true);
+                              setIsBuilding(true);
                               try {
-                                await promoteVectorStoreInstance(selectedVectorStore.id);
+                                await buildVectorStoreGeneration(selectedVectorStore.id);
                               } finally {
-                                setIsPromoting(false);
+                                setIsBuilding(false);
                               }
                             }}
                             className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isPromoting ? (
+                            {isBuilding ? (
                               <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                             ) : (
                               <Rocket className="h-3.5 w-3.5" />
                             )}
-                            Promover
+                            Construir generación
                           </button>
                         </div>
                       </div>
@@ -1177,25 +1178,16 @@ function BibliotecaPage() {
                         <span>
                           Editado por: {selectedVectorStore.updatedBy ?? "—"}
                         </span>
-                        <span>
-                          Promovida:{" "}
-                          {selectedVectorStore.promotedAt
-                            ? new Date(
-                                selectedVectorStore.promotedAt,
-                              ).toLocaleString()
-                            : "—"}
-                        </span>
-                        <span>
-                          Promovida por: {selectedVectorStore.promotedBy ?? "—"}
-                        </span>
                         <span className="col-span-2 font-mono">
                           ID interno: {selectedVectorStore.id}
                         </span>
                       </div>
+                      <VectorStoreGenerationsPanel instanceId={selectedVectorStore.id} />
                       <VectorStoreSearchPanel
+                        key={selectedVectorStore.id}
                         instanceId={selectedVectorStore.id}
                         instanceName={`v${selectedVectorStore.version} · ${selectedVectorStore.name}`}
-                        promotedVersion={selectedVectorStore.promotedVersion}
+                        latestGeneration={selectedVectorStore.latestGeneration}
                       />
                       <div className="rounded-lg border border-border p-4 space-y-3">
                         <div>

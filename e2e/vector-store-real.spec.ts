@@ -179,7 +179,7 @@ test("E03 real: conflictos concurrentes, validación y rollback en Biblioteca", 
   const emptyBeforeFixture = initialSnapshots.find((entry) => entry.relations.length === 0);
   if (emptyBeforeFixture) {
     const promotion = await request.post(
-      `/api/v0/vector-store-instances/${encodeURIComponent(emptyBeforeFixture.candidate.id)}/promote`,
+      `/api/v0/vector-store-instances/${encodeURIComponent(emptyBeforeFixture.candidate.id)}/generations`,
       auth(token),
     );
     expect(promotion.status()).toBe(422);

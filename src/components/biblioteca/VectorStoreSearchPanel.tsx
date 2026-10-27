@@ -1,3 +1,4 @@
+import { useVectorStoreGenerations } from "@/hooks/useVectorStoreVersions";
 import { useMutation } from "@tanstack/react-query";
 import { Search, LoaderCircle } from "lucide-react";
 import { useState, type FormEvent } from "react";
@@ -11,7 +12,7 @@ import {
 type Props = {
   instanceId: string;
   instanceName: string;
-  promotedVersion: number | null;
+  latestGeneration: number | null;
 };
 
 const DOCUMENT_TYPES: Array<{
@@ -42,26 +43,30 @@ function errorMessage(error: Error) {
   return error.message || "No fue posible consultar esta instancia.";
 }
 
-export function VectorStoreSearchPanel({ instanceId, instanceName, promotedVersion }: Props) {
+export function VectorStoreSearchPanel({ instanceId, instanceName, latestGeneration }: Props) {
   const [query, setQuery] = useState("");
+  const [selectedGeneration, setSelectedGeneration] = useState<number | null>(null);
+  const generations = useVectorStoreGenerations(instanceId);
+  const generation = selectedGeneration ?? latestGeneration;
   const [documentType, setDocumentType] = useState<VectorStoreSearchDocumentType>("modus_operandi");
   const [pipeline, setPipeline] = useState<VectorStoreSearchPipeline>("balanced");
   const [resultScope, setResultScope] = useState<{
     instanceId: string;
-    promotedVersion: number;
+    latestGeneration: number;
   } | null>(null);
   const search = useMutation({ mutationFn: queryVectorStoreInstance });
   const isCurrentResult =
-    resultScope?.instanceId === instanceId && resultScope.promotedVersion === promotedVersion;
+    resultScope?.instanceId === instanceId && resultScope.latestGeneration === generation;
   const results = isCurrentResult ? search.data : undefined;
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedQuery = query.trim();
-    if (!normalizedQuery || promotedVersion == null) return;
-    setResultScope({ instanceId, promotedVersion });
+    if (!normalizedQuery || generation == null) return;
+    setResultScope({ instanceId, latestGeneration: generation });
     search.mutate({
       instanceId,
+      generation: generation ?? undefined,
       query: normalizedQuery,
       documentType,
       pipeline,
@@ -80,19 +85,30 @@ export function VectorStoreSearchPanel({ instanceId, instanceName, promotedVersi
             Probar búsqueda
           </h4>
           <p className="mt-0.5 text-[11px] text-text-secondary">
-            Consulta la generación activa de {instanceName}.
+            Consulta la generación seleccionada de {instanceName}.
           </p>
         </div>
-        {promotedVersion != null && (
+        {latestGeneration != null && (
           <span className="shrink-0 rounded-full border border-success/30 bg-success/10 px-2 py-1 text-[10px] text-success">
-            Generación v{promotedVersion}
+            Generación {generation}
           </span>
         )}
       </div>
 
-      {promotedVersion == null ? (
+      {(generations.data ?? []).length > 0 && (
+        <label className="block text-[11px] text-text-secondary">Generación a consultar
+          <select aria-label="Generación a consultar" value={generation ?? ""}
+            onChange={event => { setSelectedGeneration(Number(event.target.value)); setResultScope(null); }}
+            className="ml-2 rounded border border-border bg-background px-2 py-1">
+            {(generations.data ?? []).filter(g => g.status === "ready").map(g => (
+              <option key={g.generation} value={g.generation}>{g.generation}{g.in_production ? " · En producción" : ""}</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {latestGeneration == null ? (
         <p className="rounded-md bg-surface px-3 py-2 text-[11px] text-text-secondary">
-          Promueve esta instancia para probar consultas sobre sus documentos.
+          Construye esta instancia para probar consultas sobre sus documentos.
         </p>
       ) : (
         <>

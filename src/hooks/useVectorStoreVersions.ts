@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VectorStoreVersion } from "@/data/vectorStoreVersions";
 import {
   addVectorStoreDocument, createVectorStoreInstance, listVectorStoreDocuments,
-  listVectorStoreInstances, promoteVectorStoreInstance, removeVectorStoreDocument,
+  listVectorStoreInstances, listVectorStoreGenerations, buildVectorStoreGeneration, removeVectorStoreDocument,
   type VectorStoreDocumentRelation, previewVectorStoreDocument, type VectorStoreInstanceResponse,
 } from "@/lib/api/vectorStoreInstances.functions";
 
@@ -14,7 +14,7 @@ function toVersion(response: VectorStoreInstanceResponse): VectorStoreVersion {
   return {
     id: response.id, version: response.version, name: response.name, description: response.description,
     createdAt: response.created_at, createdBy: response.created_by, updatedAt: response.updated_at, updatedBy: response.updated_by,
-    promotedVersion: response.promoted_version, promotedAt: response.promoted_at, promotedBy: response.promoted_by,
+    latestGeneration: response.latest_generation, productionGenerations: response.production_generations ?? [],
     documentKeys: [],
   };
 }
@@ -38,11 +38,11 @@ export function useCreateVectorStoreVersion() {
   };
 }
 
-export function usePromoteVectorStoreInstance() {
+export function useBuildVectorStoreGeneration() {
   const queryClient = useQueryClient();
   return async (instanceId: string) => {
-    const promoted = await promoteVectorStoreInstance(instanceId);
-    await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    const promoted = await buildVectorStoreGeneration(instanceId);
+    await Promise.all([queryClient.invalidateQueries({ queryKey: QUERY_KEY }), queryClient.invalidateQueries({ queryKey: ["vectorStoreGenerations", instanceId] })]);
     return promoted;
   };
 }
@@ -66,4 +66,10 @@ export function useRemoveVectorStoreDocument() {
     await removeVectorStoreDocument(instanceId, relationId);
     await Promise.all([queryClient.invalidateQueries({ queryKey: documentsKey(instanceId) }), queryClient.invalidateQueries({ queryKey: QUERY_KEY })]);
   };
+}
+
+export function useVectorStoreGenerations(instanceId: string | undefined) {
+  return useQuery({queryKey: ["vectorStoreGenerations", instanceId ?? ""],
+    queryFn: () => listVectorStoreGenerations(instanceId!), enabled: !!instanceId,
+    refetchInterval: (query) => query.state.data?.some(g => g.status === "building") ? 2000 : false});
 }

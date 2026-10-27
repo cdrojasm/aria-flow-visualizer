@@ -194,7 +194,7 @@ export function AgentToolsSection<T extends ToolPickerFields>({
               <Switch
                 checked={research.vectorStore.enabled}
                 onCheckedChange={(enabled) =>
-                  patchVectorStore(enabled ? { enabled } : { enabled, vectorStoreInstanceId: null })
+                  patchVectorStore(enabled ? { enabled } : { enabled, vectorStoreInstanceId: null, vectorStoreGeneration: null })
                 }
                 disabled={disabled}
               />
@@ -202,9 +202,11 @@ export function AgentToolsSection<T extends ToolPickerFields>({
             {research.vectorStore.enabled && (
               <>
                 <VectorStoreInstancePicker
+                  generation={research.vectorStore.vectorStoreGeneration}
+                  onGenerationChange={vectorStoreGeneration => patchVectorStore({ vectorStoreGeneration })}
                   instanceId={research.vectorStore.vectorStoreInstanceId}
                   onInstanceIdChange={(vectorStoreInstanceId) =>
-                    patchVectorStore({ vectorStoreInstanceId })
+                    patchVectorStore({ vectorStoreInstanceId, vectorStoreGeneration: null })
                   }
                   disabled={disabled}
                 />

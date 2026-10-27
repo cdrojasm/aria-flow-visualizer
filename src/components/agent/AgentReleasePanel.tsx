@@ -309,12 +309,14 @@ const HANDOFF_COMPONENT: Record<string, string> = {
 
 const HANDOFF_FLOW: Record<string, string> = {
   configuration_deploy_request: "solicitud de despliegue",
-  vector_store_promotion: "promoción del Vector Store",
+  configuration_pin_required: "fijar la generación en una configuración y desplegarla",
   library_review: "revisión en Biblioteca",
+  // Releases approved before generations existed.
+  vector_store_promotion: "promoción del Vector Store",
 };
 
 const HANDOFF_STATUS: Record<string, string> = {
   pending: "pendiente de aprobación",
+  manual: "requiere acción manual",
   promoted: "promovido",
-  manual: "aplícalo en Biblioteca",
 };

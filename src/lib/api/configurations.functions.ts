@@ -105,6 +105,7 @@ export type ApiResearchAgentConfig = {
 export type ApiDelegatedResearchSettings = {
   vector_store: ApiResearchAgentConfig & {
     vector_store_instance_id: string | null;
+    vector_store_generation?: number | null;
     similarity_threshold: number;
     max_documents_per_query: number;
     allowed_asset_types: string[];

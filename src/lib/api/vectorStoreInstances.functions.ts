@@ -2,10 +2,8 @@ import { apiFetch } from "./client";
 
 export type VectorStoreInstanceResponse = {
   id: string; version: number; name: string; description: string; created_at: string; created_by: string; updated_at: string | null; updated_by: string | null;
-  // null until the first /promote call - see promoteVectorStoreInstance.
-  // A search/tool-loop/analyst-playbook match only ever considers this
-  // promoted generation, never the DynamoDB asset manifest above.
-  promoted_version: number | null; promoted_at: string | null; promoted_by: string | null;
+  latest_generation: number | null;
+  production_generations: number[];
 };
 export type VectorStoreDocumentRelation = { relation_id: string; asset_type: "taxonomy" | "modus_operandi" | "yellow_flag" | "red_flag" | "similar_case"; asset_id: string; asset_version: number };
 export type VectorStoreSearchPipeline = "embedding_heavy" | "balanced" | "keyword_heavy";
@@ -21,12 +19,20 @@ export type VectorStoreSearchResult = {
 
 export function listVectorStoreInstances(): Promise<VectorStoreInstanceResponse[]> { return apiFetch("/api/v0/vector-store-instances"); }
 export function createVectorStoreInstance(data: { name: string; description: string }): Promise<VectorStoreInstanceResponse> { return apiFetch("/api/v0/vector-store-instances", { method: "POST", body: JSON.stringify(data) }); }
-// Loads this instance's current asset manifest into OpenSearch as a new
-// generation, then deletes the previous one (no partial/in-place update -
-// see the router's docstring). Nothing else in this UI can make a vector
-// store usable by an agent's tool picker or an Analista playbook without
-// this call having run at least once.
-export function promoteVectorStoreInstance(instanceId: string): Promise<VectorStoreInstanceResponse> { return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/promote`, { method: "POST" }); }
+export type VectorStoreGenerationResponse = {
+  instance_id: string; generation: number;
+  status: "building" | "ready" | "failed" | "retired";
+  built_by: string; created_at: string; ready_at: string | null;
+  retired_at: string | null; fingerprint: string; document_count: number;
+  matches_manifest?: boolean | null;
+  error: string | null; migrated: boolean; in_production: boolean; pinned_by: string[];
+};
+export function buildVectorStoreGeneration(instanceId: string): Promise<VectorStoreGenerationResponse & { built: boolean }> {
+  return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/generations`, { method: "POST" });
+}
+export function listVectorStoreGenerations(instanceId: string): Promise<VectorStoreGenerationResponse[]> {
+  return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/generations`);
+}
 export function listVectorStoreDocuments(instanceId: string): Promise<VectorStoreDocumentRelation[]> { return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/documents`); }
 export function queryVectorStoreInstance(input: {
   instanceId: string;
@@ -34,6 +40,7 @@ export function queryVectorStoreInstance(input: {
   documentType: VectorStoreSearchDocumentType;
   pipeline: VectorStoreSearchPipeline;
   topK?: number;
+  generation?: number;
 }): Promise<VectorStoreSearchResult[]> {
   const params = new URLSearchParams({
     query: input.query,
@@ -41,6 +48,7 @@ export function queryVectorStoreInstance(input: {
     pipeline: input.pipeline,
     top_k: String(input.topK ?? 5),
   });
+  if (input.generation != null) params.set("generation", String(input.generation));
   return apiFetch(`/api/v0/vector-store-instances/${encodeURIComponent(input.instanceId)}/query?${params}`);
 }
 export function addVectorStoreDocument(data: { instanceId: string; assetType: VectorStoreDocumentRelation["asset_type"]; assetId: string; assetVersion?: number }): Promise<VectorStoreDocumentRelation[]> {

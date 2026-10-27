@@ -32,14 +32,14 @@ const instance = {
   created_by: "Andrea Analista",
   updated_at: null,
   updated_by: null,
-  promoted_version: 2,
-  promoted_at: "2026-09-22T11:00:00Z",
-  promoted_by: "Andrea Analista",
+  latest_generation: 2,
+  production_generations: [1],
 };
 
 let relations: Array<{ relation_id: string; asset_type: string; asset_id: string; asset_version: number }>;
 let addRequest: Record<string, unknown> | undefined;
 let createRequest: Record<string, unknown> | undefined;
+let buildRequests = 0;
 let queryRequest: Record<string, string> | undefined;
 
 const server = setupServer(
@@ -48,6 +48,16 @@ const server = setupServer(
     createRequest = await request.json() as Record<string, unknown>;
     return HttpResponse.json({ ...instance, id: "vector-store-v2", version: 2, name: createRequest.name });
   }),
+  http.post("*/api/v0/vector-store-instances/:instanceId/generations", () => {
+    buildRequests += 1;
+    return HttpResponse.json({generation: 2, status: "ready", built: false});
+  }),
+  http.get("*/api/v0/vector-store-instances/:instanceId/generations", () => HttpResponse.json([
+    { instance_id: instance.id, generation: 2, status: "ready", built_by: "Andrea Analista", created_at: instance.created_at,
+      ready_at: instance.created_at, document_count: 2, in_production: false, pinned_by: [], matches_manifest: true },
+    { instance_id: instance.id, generation: 1, status: "ready", built_by: "Andrea Analista", created_at: instance.created_at,
+      ready_at: instance.created_at, document_count: 2, in_production: true, pinned_by: ["cfg@v1"], matches_manifest: true },
+  ])),
   http.get("*/api/v0/vector-store-instances/:instanceId/documents", () => HttpResponse.json(relations)),
   http.get("*/api/v0/vector-store-instances/:instanceId/query", ({ request, params }) => {
     const url = new URL(request.url);
@@ -57,6 +67,7 @@ const server = setupServer(
       document_type: url.searchParams.get("document_type") ?? "",
       pipeline: url.searchParams.get("pipeline") ?? "",
       top_k: url.searchParams.get("top_k") ?? "",
+      generation: url.searchParams.get("generation") ?? "",
     };
     return HttpResponse.json([{
       id: "hit-1",
@@ -114,6 +125,7 @@ beforeEach(() => {
   addRequest = undefined;
   createRequest = undefined;
   queryRequest = undefined;
+  buildRequests = 0;
 });
 
 describe("Base de conocimiento / Vector Store", () => {
@@ -154,7 +166,7 @@ describe("Base de conocimiento / Vector Store", () => {
     await waitFor(() => expect(createRequest).toEqual({ name: "Candidato septiembre", description: "Validación antes de promover" }));
   });
 
-  it("consulta la generación activa con tipo y perfil elegidos y muestra score", async () => {
+  it("consulta la generación seleccionada con tipo y perfil elegidos y muestra score", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -174,21 +186,37 @@ describe("Base de conocimiento / Vector Store", () => {
       document_type: "red_flag",
       pipeline: "embedding_heavy",
       top_k: "5",
+      generation: "2",
     });
-    expect(screen.getByText("Generación v2")).toBeInTheDocument();
+    expect(screen.getAllByText("Generación 2", { exact: true }).length).toBeGreaterThan(0);
+    await user.selectOptions(screen.getByLabelText("Generación a consultar"), "1");
+    await user.click(screen.getByRole("button", { name: "Buscar" }));
+    await waitFor(() => expect(queryRequest?.generation).toBe("1"));
   });
 
-  it("explica que hace falta promover la instancia antes de consultar", async () => {
+  it("explica que hace falta construir la instancia antes de consultar", async () => {
     server.use(
       http.get("*/api/v0/vector-store-instances", () =>
-        HttpResponse.json([{ ...instance, promoted_version: null, promoted_at: null, promoted_by: null }]),
+        HttpResponse.json([{ ...instance, latest_generation: null, production_generations: [] }]),
       ),
     );
     renderPage();
 
     expect(
-      await screen.findByText("Promueve esta instancia para probar consultas sobre sus documentos."),
+      await screen.findByText("Construye esta instancia para probar consultas sobre sus documentos."),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Buscar" })).not.toBeInTheDocument();
   });
+  it("construir no publica ni cambia la generación en producción", async () => {
+    relations = [{relation_id: "taxonomy:taxonomy-1", asset_type: "taxonomy", asset_id: "taxonomy-1", asset_version: 1}];
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("En producción");
+    expect(screen.queryByRole("button", {name: "Promover", exact: true})).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", {name: "Construir generación"}));
+    await waitFor(() => expect(buildRequests).toBe(1));
+    expect(screen.getByTestId("vector-generation-1")).toHaveTextContent("En producción");
+    expect(screen.getByTestId("vector-generation-2")).not.toHaveTextContent("En producción");
+  });
+
 });

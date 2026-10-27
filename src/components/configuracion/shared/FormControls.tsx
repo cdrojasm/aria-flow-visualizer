@@ -9,7 +9,7 @@ import {
   type ToolPickerFields,
 } from "@/data/configs";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
-import { useVectorStoreVersions } from "@/hooks/useVectorStoreVersions";
+import { useVectorStoreVersions, useVectorStoreGenerations } from "@/hooks/useVectorStoreVersions";
 import { listWatchlists, type WatchlistType } from "@/lib/api/watchlist.functions";
 import { VariableCatalogManager } from "../VariableCatalogManager";
 
@@ -435,19 +435,24 @@ export function SamplingDistributionEditor({
 export function VectorStoreInstancePicker({
   instanceId,
   onInstanceIdChange,
+  generation,
+  onGenerationChange,
   disabled,
 }: {
   instanceId: string | null;
   onInstanceIdChange: (id: string | null) => void;
+  generation?: number | null;
+  onGenerationChange?: (generation: number | null) => void;
   disabled?: boolean;
 }) {
   const { versions: instances } = useVectorStoreVersions();
   const selected = instances.find((i) => i.id === instanceId);
+  const generations = useVectorStoreGenerations(instanceId ?? undefined);
 
   return (
     <Field
       label="Vector store"
-      hint="Instancia en la que busca el agente - debe estar promovida para que la búsqueda real encuentre algo."
+      hint="La configuración fija una generación concreta. Solo cambia producción cuando se aprueba su despliegue."
     >
       <select
         value={instanceId ?? ""}
@@ -459,7 +464,7 @@ export function VectorStoreInstancePicker({
         {instances.map((instance) => (
           <option key={instance.id} value={instance.id}>
             {`v${instance.version} · ${instance.name}`}
-            {instance.promotedVersion == null ? " (sin promover)" : ""}
+            {instance.latestGeneration == null ? " (sin construir)" : ""}
           </option>
         ))}
       </select>
@@ -473,10 +478,25 @@ export function VectorStoreInstancePicker({
           Sin instancias disponibles - créalas en Biblioteca → Repositorio de Conocimiento.
         </p>
       )}
-      {selected && selected.promotedVersion == null && (
-        <p className="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">
-          Esta instancia todavía no se ha promovido a producción (Biblioteca → Repositorio de
-          Conocimiento) - la búsqueda real no encontrará resultados hasta que se promueva.
+      {instanceId && onGenerationChange && (
+        <label className="mt-2 block text-[11px] text-text-secondary">
+          Generación de Vector Store
+          <select aria-label="Generación de Vector Store" value={generation ?? ""}
+            disabled={disabled} onChange={event => onGenerationChange(event.target.value ? Number(event.target.value) : null)}
+            className="mt-1 w-full h-9 rounded-md border border-border px-3 text-[13px] bg-background">
+            <option value="">Construir al guardar</option>
+            {(generations.data ?? []).filter(g => g.status === "ready").map(g => (
+              <option key={g.generation} value={g.generation}>Generación {g.generation}{g.in_production ? " · En producción" : ""}</option>
+            ))}
+            {generation != null && !(generations.data ?? []).some(g => g.generation === generation && g.status === "ready") && (
+              <option value={generation}>Generación {generation} · no disponible</option>
+            )}
+          </select>
+        </label>
+      )}
+      {selected && selected.latestGeneration == null && (
+        <p className="mt-1.5 text-[11px] text-text-secondary">
+          Al guardar se construirá una generación con los documentos de esta instancia. Producción mantiene su generación actual.
         </p>
       )}
     </Field>

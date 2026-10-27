@@ -53,6 +53,7 @@ async function restoreActiveConfiguration(
   api: APIRequestContext,
   token: string,
   original: Configuration,
+  requesterToken: string,
 ) {
   const current = await activeConfiguration(api, token);
   if (
@@ -66,7 +67,28 @@ async function restoreActiveConfiguration(
     `/api/v0/configurations/${encodeURIComponent(original.configuration_id)}/versions/${original.version}/activate`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  expect(response.ok(), `restauración de producción: ${await response.text()}`).toBeTruthy();
+  if (response.status() === 409 && /deploy request/.test(await response.text())) {
+    // A version that searches other vector-store generations is only
+    // published through an approved deploy request, also when restoring.
+    const created = await api.post("/api/v0/configuration-deploy-requests", {
+      headers: { Authorization: `Bearer ${requesterToken}` },
+      data: {
+        target_configuration_id: original.configuration_id,
+        target_version: original.version,
+        title: `E01 E2E restauración ${Date.now()}`,
+        message: "Restaura la configuración activa previa al escenario E01.",
+      },
+    });
+    expect(created.ok(), `solicitud de restauración: ${await created.text()}`).toBeTruthy();
+    const { id } = (await created.json()) as { id: string };
+    const approved = await api.post(
+      `/api/v0/configuration-deploy-requests/${encodeURIComponent(id)}/approve`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(approved.ok(), `aprobación de restauración: ${await approved.text()}`).toBeTruthy();
+  } else {
+    expect(response.ok(), `restauración de producción: ${await response.text()}`).toBeTruthy();
+  }
   await expect
     .poll(async () => {
       const active = await activeConfiguration(api, token);
@@ -260,6 +282,11 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
       await approverPage.close();
     }
   } finally {
-    await restoreActiveConfiguration(request, manager.access_token, originalActive);
+    await restoreActiveConfiguration(
+      request,
+      manager.access_token,
+      originalActive,
+      channelManager.access_token,
+    );
   }
 });

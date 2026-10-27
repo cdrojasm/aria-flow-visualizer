@@ -43,6 +43,7 @@ function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearc
     vector_store: {
       ...base(research.vectorStore),
       vector_store_instance_id: research.vectorStore.vectorStoreInstanceId,
+      vector_store_generation: research.vectorStore.vectorStoreGeneration ?? null,
       similarity_threshold: research.vectorStore.similarityThreshold,
       max_documents_per_query: research.vectorStore.maxDocumentsPerQuery,
       allowed_asset_types: research.vectorStore.allowedAssetTypes,
@@ -79,6 +80,7 @@ function researchFromApi(
     vectorStore: {
       ...base(vs, fallback.vectorStore),
       vectorStoreInstanceId: vs?.vector_store_instance_id ?? null,
+      vectorStoreGeneration: vs?.vector_store_generation ?? null,
       similarityThreshold: vs?.similarity_threshold ?? fallback.vectorStore.similarityThreshold,
       maxDocumentsPerQuery:
         vs?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery,

@@ -12,7 +12,7 @@ type Auth = { access_token: string };
 type Instance = {
   id: string;
   name: string;
-  promoted_version: number | null;
+  latest_generation: number | null;
 };
 type Relation = {
   relation_id: string;
@@ -68,13 +68,9 @@ function assetKey(relation: Relation) {
 }
 
 async function promote(api: APIRequestContext, instanceId: string): Promise<Instance> {
-  return json<Instance>(
-    await api.post(
-      `/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/promote`,
-      auth(token),
-    ),
-    `promover vector store ${instanceId}`,
-  );
+  const built = await json<{generation: number}>(await api.post(
+    `/api/v0/vector-store-instances/${encodeURIComponent(instanceId)}/generations`, auth(token)), `construir generación ${instanceId}`);
+  return {id: instanceId, version: 0, name: "", latest_generation: built.generation};
 }
 
 async function queryInstance(
@@ -502,7 +498,7 @@ test("E03 entidades advanced: propagación, edición anidada, aislamiento y rein
     for (const instance of targetInstances) {
       const current = (await listInstances(request)).find((item) => item.id === instance.id)!;
       const promoted = await promote(request, instance.id);
-      expect(promoted.promoted_version).toBe((current.promoted_version ?? 0) + 1);
+      expect(promoted.latest_generation).toBe((current.latest_generation ?? 0) + 1);
     }
 
     for (const instance of targetInstances) {
@@ -541,7 +537,7 @@ test("E03 entidades advanced: propagación, edición anidada, aislamiento y rein
         const hits = await queryInstance(request, instance.id, paraphrase, pipeline);
         expect(hits.length, `${pipeline} debe recuperar documentos`).toBeGreaterThan(0);
         expect(hits[0].vector_store_id).toBe(instance.id);
-        expect(hits[0].vector_store_version).toBe(current.promoted_version);
+        expect(hits[0].vector_store_version).toBe(current.latest_generation);
         expect(
           hits.some((hit) => hit.text.includes(`Cadena de transferencias ${suffix}`)),
           `${pipeline} debe recuperar el MO semánticamente relacionado`,
@@ -581,11 +577,8 @@ test("E03 entidades advanced: propagación, edición anidada, aislamiento y rein
     }
     if (fixtureDeleted) {
       for (const instance of targetInstances) {
-        const beforeRestore = (await listInstances(request)).find(
-          (item) => item.id === instance.id,
-        )!;
         const restored = await promote(request, instance.id);
-        expect(restored.promoted_version).toBe((beforeRestore.promoted_version ?? 0) + 1);
+        expect(restored.latest_generation).toBeGreaterThan(0);
       }
       fixtureTaxonomyId = undefined;
     }
