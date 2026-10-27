@@ -96,7 +96,7 @@ const SECTIONS: SectionDefinition[] = [
       {
         key: "optimizer_stop_on_critical_failure",
         label: "Detener ante fallo crítico",
-        hint: "Finaliza la sesión si un control crítico falla.",
+        hint: "Detiene la sesión ante un fallo no reintentable o cuando se agotan los reintentos.",
       },
     ],
     numbers: [
@@ -152,6 +152,12 @@ const SECTIONS: SectionDefinition[] = [
         label: "Iteraciones sin mejora antes de parar",
         min: 1,
         max: 100,
+      },
+      {
+        key: "optimizer_max_retryable_failures",
+        label: "Reintentos ante fallos reintentables",
+        min: 0,
+        max: 10,
       },
     ],
   },
@@ -325,6 +331,7 @@ const DEFAULT_SETTINGS: AssistantOptimizerSettings = {
   optimizer_max_budget_renewals: 0,
   optimizer_iterations_without_improvement: 3,
   optimizer_stop_on_critical_failure: true,
+  optimizer_max_retryable_failures: 2,
   objective_precision_floor: 0.9,
   objective_minimum_support_per_segment: 100,
   objective_minimum_count_to_publish_aggregates: 20,

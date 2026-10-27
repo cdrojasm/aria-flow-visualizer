@@ -18,6 +18,7 @@ export type AssistantOptimizerSettings = Record<string, boolean | number | strin
   optimizer_max_budget_renewals: number;
   optimizer_iterations_without_improvement: number;
   optimizer_stop_on_critical_failure: boolean;
+  optimizer_max_retryable_failures: number;
   objective_precision_floor: number;
   objective_minimum_support_per_segment: number;
   objective_minimum_count_to_publish_aggregates: number;

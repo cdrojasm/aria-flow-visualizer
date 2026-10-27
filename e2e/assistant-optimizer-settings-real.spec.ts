@@ -71,3 +71,45 @@ test("H2 real: guarda ajustes del asistente y registra el historial", async ({ p
     expect(restored.ok(), `restauración H2: ${await restored.text()}`).toBeTruthy();
   }
 });
+
+test("H2 real: guarda los reintentos ante fallos reintentables del optimizador", async ({
+  page,
+  request,
+}) => {
+  const email = process.env.E2E_MANAGER_EMAIL;
+  const password = process.env.E2E_MANAGER_PASSWORD;
+  test.skip(!email || !password, "Define E2E_MANAGER_EMAIL y E2E_MANAGER_PASSWORD.");
+
+  const manager = await login(request, email!, password!);
+  const original = await settings(request, manager.access_token);
+  const headers = { Authorization: `Bearer ${manager.access_token}` };
+  expect(typeof original.optimizer_max_retryable_failures).toBe("number");
+  const next = original.optimizer_max_retryable_failures === 3 ? 4 : 3;
+
+  try {
+    await authenticatePage(page, manager.access_token);
+    await page.goto("/configuracion");
+    await page.getByRole("button", { name: "Asistente y optimizador" }).click();
+    const optimizerSection = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Optimizador", exact: true }),
+    });
+    await expect(optimizerSection).toBeVisible();
+    await optimizerSection
+      .locator("div")
+      .filter({ has: page.getByText("Reintentos ante fallos reintentables", { exact: true }) })
+      .last()
+      .locator('input[type="number"]')
+      .fill(String(next));
+    await optimizerSection.getByRole("button", { name: "Guardar sección" }).click();
+
+    await expect
+      .poll(async () => (await settings(request, manager.access_token)).optimizer_max_retryable_failures)
+      .toBe(next);
+  } finally {
+    const restored = await request.put("/api/v0/assistant-optimizer-settings", {
+      headers,
+      data: { settings: original },
+    });
+    expect(restored.ok(), `restauración H2: ${await restored.text()}`).toBeTruthy();
+  }
+});
