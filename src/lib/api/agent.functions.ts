@@ -235,7 +235,7 @@ export type AgentLibraryDraft = {
     items?: Array<{
       item_id: string;
       item_type: string;
-      operation: "create" | "update";
+      operation: "create" | "update" | "add_elements";
       target_ref: string | null;
       base_version: string | null;
       draft: Record<string, unknown>;
@@ -262,10 +262,19 @@ export type AgentConfirmation = {
 const path = "/api/v0/agent";
 
 export type AgentDraftAction = {
-  action_id: "modus_operandi" | "flag" | "similar_case" | "taxonomy" | "watchlist";
+  action_id:
+    | "modus_operandi"
+    | "flag"
+    | "similar_case"
+    | "taxonomy"
+    | "watchlist"
+    | "watchlist_element"
+    | "channel"
+    | "catalog_entry"
+    | "dataset_empty";
   label: string;
   endpoint_kind: string;
-  operations: Array<"create" | "update">;
+  operations: Array<"create" | "update" | "add_elements">;
   required_permissions: string[];
   fields: string[];
   context: string[];
@@ -501,8 +510,9 @@ function generateLibraryDraft(
   sessionId: string,
   kind: "taxonomy" | "watchlist",
   clientMessageId: string,
-  operation: "create" | "update",
+  operation: "create" | "update" | "add_elements",
   targetId?: string,
+  sourceMessageContent?: string,
 ) {
   return apiFetch<AgentLibraryDraft>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/${kind}-drafts`,
@@ -512,6 +522,7 @@ function generateLibraryDraft(
         client_message_id: clientMessageId,
         operation,
         ...(targetId ? { target_id: targetId } : {}),
+        ...(sourceMessageContent ? { source_message_content: sourceMessageContent } : {}),
       }),
     },
   );
@@ -536,15 +547,41 @@ export function confirmTaxonomyDraft(sessionId: string, packageId: string, itemI
 export function generateWatchlistDraft(
   sessionId: string,
   clientMessageId: string,
-  operation: "create" | "update",
+  operation: "create" | "update" | "add_elements",
   targetId?: string,
+  sourceMessageContent?: string,
 ) {
-  return generateLibraryDraft(sessionId, "watchlist", clientMessageId, operation, targetId);
+  return generateLibraryDraft(
+    sessionId,
+    "watchlist",
+    clientMessageId,
+    operation,
+    targetId,
+    sourceMessageContent,
+  );
 }
 
 export function confirmWatchlistDraft(sessionId: string, packageId: string, itemId: string) {
   return apiFetch<AgentConfirmation>(
     `${path}/sessions/${encodeURIComponent(sessionId)}/watchlist-drafts/${encodeURIComponent(packageId)}/confirm`,
+    { method: "POST", body: JSON.stringify({ item_id: itemId }) },
+  );
+}
+
+export function generateResourceDraft(
+  sessionId: string,
+  clientMessageId: string,
+  resource: "channel" | "catalog_entry" | "dataset_empty",
+) {
+  return apiFetch<AgentLibraryDraft>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/resource-drafts`,
+    { method: "POST", body: JSON.stringify({ client_message_id: clientMessageId, resource }) },
+  );
+}
+
+export function confirmResourceDraft(sessionId: string, packageId: string, itemId: string) {
+  return apiFetch<AgentConfirmation>(
+    `${path}/sessions/${encodeURIComponent(sessionId)}/resource-drafts/${encodeURIComponent(packageId)}/confirm`,
     { method: "POST", body: JSON.stringify({ item_id: itemId }) },
   );
 }

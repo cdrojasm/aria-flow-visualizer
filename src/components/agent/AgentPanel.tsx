@@ -24,12 +24,14 @@ import {
   confirmSimilarCaseDraft,
   confirmTaxonomyDraft,
   confirmWatchlistDraft,
+  confirmResourceDraft,
   createAgentSession,
   generateFlagDraft,
   generateModusOperandiDraft,
   generateSimilarCaseDraft,
   generateTaxonomyDraft,
   generateWatchlistDraft,
+  generateResourceDraft,
   listAgentDraftActions,
   getAgentSessionSummary,
   listAgentInsights,
@@ -61,12 +63,22 @@ const PAGE_LABELS: Record<string, string> = {
 };
 
 type PendingMessage = { id: string; content: string; failed: boolean };
-type DraftKind = "modus_operandi" | "flag" | "similar_case" | "taxonomy" | "watchlist";
+type DraftKind =
+  | "modus_operandi"
+  | "flag"
+  | "similar_case"
+  | "taxonomy"
+  | "watchlist"
+  | "watchlist_element"
+  | "channel"
+  | "catalog_entry"
+  | "dataset_empty";
 type DraftRequest = {
   kind: DraftKind;
   clientMessageId: string;
-  operation: "create" | "update";
+  operation: "create" | "update" | "add_elements";
   targetId?: string;
+  sourceMessageContent?: string;
 };
 
 function draftTitle(kind: DraftKind, content?: Record<string, unknown>) {
@@ -74,6 +86,10 @@ function draftTitle(kind: DraftKind, content?: Record<string, unknown>) {
   if (kind === "similar_case") return "caso similar";
   if (kind === "taxonomy") return "taxonomía";
   if (kind === "watchlist") return "watchlist";
+  if (kind === "watchlist_element") return "elementos de watchlist";
+  if (kind === "channel") return "canal";
+  if (kind === "catalog_entry") return "catálogo de configuración";
+  if (kind === "dataset_empty") return "dataset vacío";
   return content?.flag_type === "yellow" ? "yellow flag" : "red flag";
 }
 
@@ -148,9 +164,10 @@ export function AgentPanel({
   const [composer, setComposer] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [lastUserMessage, setLastUserMessage] = useState<AgentMessage | null>(null);
+  const [lastUserMessageSource, setLastUserMessageSource] = useState("");
   const [draft, setDraft] = useState<AgentLibraryDraft | null>(null);
   const [draftKind, setDraftKind] = useState<DraftKind>("modus_operandi");
-  const [operation, setOperation] = useState<"create" | "update">("create");
+  const [operation, setOperation] = useState<"create" | "update" | "add_elements">("create");
   const [targetId, setTargetId] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [draftDrawerOpen, setDraftDrawerOpen] = useState(false);
@@ -236,7 +253,9 @@ export function AgentPanel({
   const watchlistQuery = useQuery({
     queryKey: ["watchlists", false],
     queryFn: () => listWatchlists({ data: { activeOnly: false } }),
-    enabled: open && draftKind === "watchlist" && operation === "update",
+    enabled:
+      open &&
+      ((draftKind === "watchlist" && operation === "update") || draftKind === "watchlist_element"),
   });
   const displayedMessages = useMemo(() => {
     const rows = [...(messages ?? [])];
@@ -266,6 +285,7 @@ export function AgentPanel({
       setSessionId(session.session_id);
       setPending([]);
       setLastUserMessage(null);
+      setLastUserMessageSource("");
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["agentSessions"] });
       setNotice("");
@@ -278,6 +298,7 @@ export function AgentPanel({
       sendAgentMessage(activeSessionId, id, content, pathname),
     onSuccess: async (turn, variables) => {
       setLastUserMessage(turn.user_message);
+      setLastUserMessageSource(variables.content);
       setPending((items) => items.filter((item) => item.id !== variables.id));
       queryClient.setQueryData<AgentMessage[]>(
         ["agentMessages", activeSessionId],
@@ -334,6 +355,7 @@ export function AgentPanel({
       clientMessageId,
       operation: draftOperation,
       targetId: draftTargetId,
+      sourceMessageContent,
     }: DraftRequest) => {
       if (kind === "flag")
         return generateFlagDraft(activeSessionId, clientMessageId, draftOperation, draftTargetId);
@@ -358,6 +380,16 @@ export function AgentPanel({
           draftOperation,
           draftTargetId,
         );
+      if (kind === "watchlist_element")
+        return generateWatchlistDraft(
+          activeSessionId,
+          clientMessageId,
+          "add_elements",
+          draftTargetId,
+          sourceMessageContent,
+        );
+      if (kind === "channel" || kind === "catalog_entry" || kind === "dataset_empty")
+        return generateResourceDraft(activeSessionId, clientMessageId, kind);
       return generateModusOperandiDraft(
         activeSessionId,
         clientMessageId,
@@ -374,15 +406,19 @@ export function AgentPanel({
     },
     onError: (error) => setNotice(safeError(error)),
   });
-  const startDraft = (kind: DraftKind) => {
-    if (!lastUserMessage) return;
+  const startDraft = (kind: DraftKind, message: AgentMessage) => {
     setDraftKind(kind);
-    setOperation("create");
+    const nextOperation = kind === "watchlist_element" ? "add_elements" : "create";
+    setOperation(nextOperation);
     setTargetId("");
     draftMutation.mutate({
       kind,
-      clientMessageId: lastUserMessage.client_message_id,
-      operation: "create",
+      clientMessageId: message.client_message_id,
+      operation: nextOperation,
+      ...(kind === "watchlist_element" &&
+      lastUserMessage?.client_message_id === message.client_message_id
+        ? { sourceMessageContent: lastUserMessageSource }
+        : {}),
     });
   };
   const regenerateDraft = () => {
@@ -392,6 +428,7 @@ export function AgentPanel({
       clientMessageId: lastUserMessage.client_message_id,
       operation,
       ...(operation === "update" && targetId ? { targetId } : {}),
+      ...(draftKind === "watchlist_element" ? { sourceMessageContent: lastUserMessageSource } : {}),
     });
   };
   const confirmMutation = useMutation({
@@ -404,8 +441,10 @@ export function AgentPanel({
         return confirmSimilarCaseDraft(activeSessionId, draft.package_id, item.item_id);
       if (draftKind === "taxonomy")
         return confirmTaxonomyDraft(activeSessionId, draft.package_id, item.item_id);
-      if (draftKind === "watchlist")
+      if (draftKind === "watchlist" || draftKind === "watchlist_element")
         return confirmWatchlistDraft(activeSessionId, draft.package_id, item.item_id);
+      if (draftKind === "channel" || draftKind === "catalog_entry" || draftKind === "dataset_empty")
+        return confirmResourceDraft(activeSessionId, draft.package_id, item.item_id);
       return confirmModusOperandiDraft(activeSessionId, draft.package_id, item.item_id);
     },
     onSuccess: async () => {
@@ -418,6 +457,10 @@ export function AgentPanel({
         queryClient.invalidateQueries({ queryKey: ["libraryModusOperandi"] }),
         queryClient.invalidateQueries({ queryKey: ["flagEntries"] }),
         queryClient.invalidateQueries({ queryKey: ["similarCaseEntries"] }),
+        queryClient.invalidateQueries({ queryKey: ["watchlists"] }),
+        queryClient.invalidateQueries({ queryKey: ["datasets"] }),
+        queryClient.invalidateQueries({ queryKey: ["channelLibrary"] }),
+        queryClient.invalidateQueries({ queryKey: ["tagCatalog"] }),
       ]);
     },
     onError: (error) => {
@@ -537,9 +580,10 @@ export function AgentPanel({
               disabled={sendMutation.isPending || createSession.isPending}
               onChange={(event) => {
                 setSessionId(event.target.value);
+                setLastUserMessage(null);
+                setLastUserMessageSource("");
                 setPending([]);
                 setDraft(null);
-                setLastUserMessage(null);
                 setNotice("");
               }}
               className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-text-primary"
@@ -639,19 +683,30 @@ export function AgentPanel({
                         <div className="mt-1 flex flex-wrap gap-1">
                           {(draftActionsQuery.data ?? []).map(({ action_id: kind }) => {
                             const label =
-                              kind === "modus_operandi"
-                                ? "modus operandi"
-                                : kind === "similar_case"
-                                  ? "caso similar"
-                                  : kind === "taxonomy"
-                                    ? "taxonomía"
-                                    : kind;
+                              kind === "watchlist_element"
+                                ? "elementos de watchlist"
+                                : kind === "dataset_empty"
+                                  ? "dataset vacío"
+                                  : kind === "catalog_entry"
+                                    ? "catálogo de configuración"
+                                    : kind === "channel"
+                                      ? "canal"
+                                      : kind === "modus_operandi"
+                                        ? "modus operandi"
+                                        : kind === "similar_case"
+                                          ? "caso similar"
+                                          : kind === "taxonomy"
+                                            ? "taxonomía"
+                                            : kind;
                             return (
                               <button
                                 key={kind}
                                 type="button"
-                                onClick={() => startDraft(kind)}
-                                disabled={draftMutation.isPending}
+                                onClick={() => startDraft(kind, message)}
+                                disabled={
+                                  draftMutation.isPending ||
+                                  (kind === "watchlist_element" && !lastUserMessageSource)
+                                }
                                 aria-label={`Crear borrador de ${label} desde este mensaje`}
                                 className="rounded border border-white/40 px-1.5 py-0.5 text-[11px] hover:bg-white/10 disabled:opacity-50"
                               >
@@ -752,15 +807,17 @@ export function AgentPanel({
               <label className="sr-only" htmlFor="draft-operation">
                 Operación del borrador
               </label>
-              <select
-                id="draft-operation"
-                value={operation}
-                onChange={(event) => setOperation(event.target.value as "create" | "update")}
-                className="rounded border border-border bg-card px-2 py-1 text-xs"
-              >
-                <option value="create">Crear</option>
-                <option value="update">Editar</option>
-              </select>
+              {draftKind !== "watchlist_element" && (
+                <select
+                  id="draft-operation"
+                  value={operation}
+                  onChange={(event) => setOperation(event.target.value as "create" | "update")}
+                  className="rounded border border-border bg-card px-2 py-1 text-xs"
+                >
+                  <option value="create">Crear</option>
+                  <option value="update">Editar</option>
+                </select>
+              )}
               {operation === "update" && (
                 <select
                   aria-label="Entrada de Biblioteca"
@@ -1031,8 +1088,12 @@ function DraftCard({
         </span>
       </div>
       <p className="mt-1 text-xs text-text-secondary">
-        {item.operation === "create" ? "Crear entrada" : "Editar entrada"} · paquete{" "}
-        {draft.package_id.slice(0, 8)}
+        {item.operation === "add_elements"
+          ? "Agregar elementos"
+          : item.operation === "create"
+            ? "Crear entrada"
+            : "Editar entrada"}{" "}
+        · paquete {draft.package_id.slice(0, 8)}
       </p>
       <div className="mt-3 space-y-2">
         {Object.entries(item.draft).map(([field, value]) => (

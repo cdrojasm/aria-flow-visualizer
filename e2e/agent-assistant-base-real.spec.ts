@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 
-test.setTimeout(300_000);
+test.setTimeout(600_000);
 
 const email = `e2e-agent-ui-${randomUUID()}@aria.test`;
 const title = `ARIA E2E modus operandi ${randomUUID().slice(0, 8)}`;
@@ -12,6 +12,9 @@ let token = "";
 let taxonomyId = "";
 let temporaryTaxonomyId = "";
 let watchlistId = "";
+let channelId = "";
+let tagId = "";
+let draftDatasetName = "";
 let entityId = "";
 let originalSettings: Record<string, unknown> | undefined;
 let bootstrapToken = "";
@@ -106,28 +109,64 @@ async function proposeAndConfirmFromChat(
   page: Page,
   sessionId: string,
   prompt: string,
-  kind: "flag" | "similar-case" | "taxonomy" | "watchlist",
+  kind:
+    | "flag"
+    | "similar-case"
+    | "taxonomy"
+    | "watchlist"
+    | "watchlist_element"
+    | "channel"
+    | "catalog_entry"
+    | "dataset_empty",
   expectedTypeOrText: string,
 ) {
   const turn = await sendChatPrompt(page, prompt);
-  const message = page.locator("article").filter({ hasText: prompt }).last();
-  const draftPath = `${kind === "similar-case" ? "similar-case" : kind}-drafts`;
+  const draftPath = ["channel", "catalog_entry", "dataset_empty"].includes(kind)
+    ? "resource-drafts"
+    : `${kind === "similar-case" ? "similar-case" : kind === "watchlist_element" ? "watchlist" : kind === "watchlist" ? "watchlist" : kind}-drafts`;
+  const actionName =
+    kind === "similar-case"
+      ? "caso similar"
+      : kind === "watchlist_element"
+        ? "elementos de watchlist"
+        : kind === "catalog_entry"
+          ? "catálogo de configuración"
+          : kind === "dataset_empty"
+            ? "dataset vacío"
+            : kind === "channel"
+              ? "canal"
+              : kind;
+  const draftRequestMatches = (request: { url(): string; method(): string }) =>
+    request.url().includes(`/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/`) &&
+    request.method() === "POST";
+  const draftRequestPromise = page.waitForRequest(draftRequestMatches, { timeout: 30_000 });
   const draftResponsePromise = page.waitForResponse(
-    (response) =>
-      response
-        .url()
-        .includes(`/api/v0/agent/sessions/${encodeURIComponent(sessionId)}/${draftPath}`) &&
-      response.request().method() === "POST",
+    (response) => draftRequestMatches(response.request()),
+    { timeout: 180_000 },
   );
-  await message
-    .getByRole("button", {
-      name: `Crear borrador de ${kind === "similar-case" ? "caso similar" : kind === "taxonomy" ? "taxonomía" : kind} desde este mensaje`,
-    })
-    .click();
+  const draftButton = page.getByRole("button", {
+    name: `Crear borrador de ${kind === "taxonomy" ? "taxonomía" : actionName} desde este mensaje`,
+  });
+  await expect(draftButton).toHaveCount(1);
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+  await draftButton.click();
+  try {
+    await expect(draftButton).toContainText("Preparando borrador", { timeout: 2_000 });
+  } catch {
+    throw new Error(
+      `El botón de borrador no inició la mutación. Errores del navegador: ${browserErrors.join(" | ") || "ninguno"}`,
+    );
+  }
+  const draftRequest = await draftRequestPromise;
+  expect(new URL(draftRequest.url()).pathname).toContain(`/${draftPath}`);
   const result = await checked(await draftResponsePromise, `generar borrador de ${kind}`);
   const item = result.content.items[0];
   expect(item).toMatchObject({
-    operation: "create",
+    operation: kind === "watchlist_element" ? "add_elements" : "create",
     approval_status: "PENDING",
     verification_status: "PASS",
     source_message_id: turn.user_message.message_id,
@@ -144,9 +183,17 @@ async function proposeAndConfirmFromChat(
       ? `${expectedTypeOrText} flag`
       : kind === "similar-case"
         ? "caso similar"
-        : kind === "taxonomy"
-          ? "taxonomía"
-          : "watchlist";
+        : kind === "watchlist_element"
+          ? "elementos de watchlist"
+          : kind === "channel"
+            ? "canal"
+            : kind === "catalog_entry"
+              ? "catálogo de configuración"
+              : kind === "dataset_empty"
+                ? "dataset vacío"
+                : kind === "taxonomy"
+                  ? "taxonomía"
+                  : "watchlist";
   await expect(page.getByTestId("side-drawer-aria-proposal")).toBeVisible();
   await expect(page.getByRole("heading", { name: `Borrador de ${draftTitle}` })).toBeVisible();
   const card = page
@@ -174,6 +221,7 @@ async function proposeAndConfirmFromChat(
   expect(confirmation.entity_id).toBeTruthy();
   await expect(page.getByRole("alert")).toContainText("se confirmó y ya está en la Biblioteca");
   return {
+    turn,
     draft: item.draft as Record<string, unknown>,
     entityId: confirmation.entity_id as string,
   };
@@ -261,6 +309,18 @@ test.afterAll(async () => {
     if (watchlistId)
       await api
         .delete(`/api/v0/watchlists/${encodeURIComponent(watchlistId)}`, auth)
+        .catch(() => undefined);
+    if (channelId)
+      await api
+        .delete(`/api/v0/library/channels/${encodeURIComponent(channelId)}`, auth)
+        .catch(() => undefined);
+    if (tagId)
+      await api
+        .delete(`/api/v0/tag-catalog/event_type/${encodeURIComponent(tagId)}`, auth)
+        .catch(() => undefined);
+    if (draftDatasetName)
+      await api
+        .delete(`/api/v0/datasets/${encodeURIComponent(draftDatasetName)}`, auth)
         .catch(() => undefined);
     if (temporaryTaxonomyId)
       await api
@@ -403,6 +463,13 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
   const taxonomyPrompt = `Crea una taxonomía nueva con code exacto ${taxonomyCode}, name exacto ${taxonomyName}, description: fraude por suplantación durante autenticación digital, variables canal y dispositivo, examples: autenticación digital no reconocida.`;
   const watchlistName = `ARIA E2E watchlist ${randomUUID().slice(0, 8)}`;
   const watchlistPrompt = `Crea una watchlist blacklist con name exacto ${watchlistName} y description: identificadores confirmados de pruebas E2E. No agregues elementos.`;
+  const channelCode = `E2E-${randomUUID().slice(0, 8)}`;
+  const channelName = `ARIA E2E canal ${channelCode}`;
+  const channelPrompt = `Crea un canal de negocio nuevo con code exacto ${channelCode}, name exacto ${channelName} y description: canal de pruebas automatizadas.`;
+  const catalogValue = `ARIA_E2E_EVENT_${randomUUID().slice(0, 8)}`;
+  const catalogPrompt = `Crea un elemento nuevo del catálogo event_type con value exacto ${catalogValue}.`;
+  draftDatasetName = `aria_e2e_empty_${randomUUID().slice(0, 8)}`;
+  const datasetPrompt = `Crea un dataset vacío con name exacto ${draftDatasetName} y fields: event_id, event_type.`;
 
   const branches = [
     { key: "red", kind: "flag", expected: "red", prompt: redFlagPrompt },
@@ -416,29 +483,24 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
     { key: "taxonomy", kind: "taxonomy", expected: taxonomyName, prompt: taxonomyPrompt },
     { key: "watchlist", kind: "watchlist", expected: watchlistName, prompt: watchlistPrompt },
   ] as const;
-  const parallelResults = await Promise.allSettled(
-    branches.map(async (branch) => {
-      const context = await browser.newContext({ baseURL: "http://localhost" });
-      try {
-        const branchPage = await context.newPage();
-        const branchSessionId = await openAssistantSession(branchPage);
-        const result = await proposeAndConfirmFromChat(
-          branchPage,
-          branchSessionId,
-          branch.prompt,
-          branch.kind,
-          branch.expected,
-        );
-        return { key: branch.key, ...result };
-      } finally {
-        await context.close();
-      }
-    }),
-  );
-  const confirmedBranches = parallelResults.map((result) => {
-    if (result.status === "rejected") throw result.reason;
-    return result.value;
-  });
+  const confirmedBranches = [];
+  for (const branch of branches) {
+    const context = await browser.newContext({ baseURL: "http://localhost" });
+    try {
+      const branchPage = await context.newPage();
+      const branchSessionId = await openAssistantSession(branchPage);
+      const result = await proposeAndConfirmFromChat(
+        branchPage,
+        branchSessionId,
+        branch.prompt,
+        branch.kind,
+        branch.expected,
+      );
+      confirmedBranches.push({ key: branch.key, ...result });
+    } finally {
+      await context.close();
+    }
+  }
   const redFlag = confirmedBranches.find((result) => result.key === "red");
   const yellowFlag = confirmedBranches.find((result) => result.key === "yellow");
   const similarCase = confirmedBranches.find((result) => result.key === "similar-case");
@@ -483,6 +545,96 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
     element_count: 0,
   });
 
+  const resourceContext = await browser.newContext({ baseURL: "http://localhost" });
+  let channel: Awaited<ReturnType<typeof proposeAndConfirmFromChat>>;
+  let catalog: Awaited<ReturnType<typeof proposeAndConfirmFromChat>>;
+  let dataset: Awaited<ReturnType<typeof proposeAndConfirmFromChat>>;
+  try {
+    const resourcePage = await resourceContext.newPage();
+    const resourceSessionId = await openAssistantSession(resourcePage);
+    channel = await proposeAndConfirmFromChat(
+      resourcePage,
+      resourceSessionId,
+      channelPrompt,
+      "channel",
+      channelName,
+    );
+    catalog = await proposeAndConfirmFromChat(
+      resourcePage,
+      resourceSessionId,
+      catalogPrompt,
+      "catalog_entry",
+      catalogValue,
+    );
+    dataset = await proposeAndConfirmFromChat(
+      resourcePage,
+      resourceSessionId,
+      datasetPrompt,
+      "dataset_empty",
+      draftDatasetName,
+    );
+  } finally {
+    await resourceContext.close();
+  }
+  expect(channel!.draft).toMatchObject({ code: channelCode, name: channelName });
+  expect(catalog!.draft).toMatchObject({ category: "event_type", value: catalogValue });
+  expect(dataset!.draft).toMatchObject({
+    name: draftDatasetName,
+    fields: ["event_id", "event_type"],
+  });
+  channelId = channel!.entityId;
+  const createdChannels = await checked(
+    await api!.get("/api/v0/library/channels", { headers: { Authorization: `Bearer ${token}` } }),
+    "comprobar canal creado desde chat",
+  );
+  expect(createdChannels.find((entry: { id: string }) => entry.id === channelId)).toMatchObject({
+    code: channelCode,
+    name: channelName,
+  });
+  tagId = catalog!.entityId;
+  const createdTags = await checked(
+    await api!.get("/api/v0/tag-catalog?category=event_type", {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "comprobar catálogo creado desde chat",
+  );
+  expect(createdTags.find((entry: { id: string }) => entry.id === tagId)).toMatchObject({
+    value: catalogValue,
+  });
+  const createdDatasets = await checked(
+    await api!.get("/api/v0/datasets", { headers: { Authorization: `Bearer ${token}` } }),
+    "comprobar dataset vacío creado desde chat",
+  );
+  expect(
+    createdDatasets.find((entry: { name: string }) => entry.name === draftDatasetName),
+  ).toBeTruthy();
+
+  const elementPrompt = `Agrega la cédula 999888777 a la watchlist ${watchlistName}.`;
+  const elementContext = await browser.newContext({ baseURL: "http://localhost" });
+  try {
+    const elementPage = await elementContext.newPage();
+    const elementSessionId = await openAssistantSession(elementPage);
+    const proposed = await proposeAndConfirmFromChat(
+      elementPage,
+      elementSessionId,
+      elementPrompt,
+      "watchlist_element",
+      "999888777",
+    );
+    expect(proposed.turn.user_message.content).not.toContain("999888777");
+    expect(proposed.turn.user_message.content).toContain("[CC_1]");
+    expect(proposed.draft).toMatchObject({ watchlist_id: watchlistId, values: ["999888777"] });
+  } finally {
+    await elementContext.close();
+  }
+  const elements = await checked(
+    await api!.get(`/api/v0/watchlists/${encodeURIComponent(watchlistId)}/elements`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+    "comprobar elemento agregado mediante propuesta reversible",
+  );
+  expect(elements.values).toContain("999888777");
+
   const flagsAfterRed = await checked(
     await api!.get("/api/v0/library/flags?active_only=false", {
       headers: { Authorization: `Bearer ${token}` },
@@ -516,6 +668,114 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
   expect(
     similarCases.find((entry: { id: string }) => entry.id === similarCase!.entityId),
   ).toMatchObject({ modus_operandi_library_id: entityId, taxonomy_library_id: taxonomyId });
+});
+
+test("agent resource-drafts real: canal, catálogo y dataset vacío con aprobación", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  const channelCode = `E2E-${randomUUID().slice(0, 8)}`;
+  const channelName = `ARIA E2E canal ${channelCode}`;
+  const catalogValue = `ARIA_E2E_EVENT_${randomUUID().slice(0, 8)}`;
+  draftDatasetName = `aria_e2e_empty_${randomUUID().slice(0, 8)}`;
+  const context = await browser.newContext({ baseURL: "http://localhost" });
+  try {
+    const page = await context.newPage();
+    const sessionId = await openAssistantSession(page);
+    const channel = await proposeAndConfirmFromChat(
+      page,
+      sessionId,
+      `Crea un canal de negocio nuevo con code exacto ${channelCode}, name exacto ${channelName} y description: canal de pruebas automatizadas.`,
+      "channel",
+      channelName,
+    );
+    expect(channel.draft).toMatchObject({ code: channelCode, name: channelName });
+    channelId = channel.entityId;
+
+    const catalog = await proposeAndConfirmFromChat(
+      page,
+      sessionId,
+      `Crea un elemento nuevo del catálogo event_type con value exacto ${catalogValue}.`,
+      "catalog_entry",
+      catalogValue,
+    );
+    expect(catalog.draft).toMatchObject({ category: "event_type", value: catalogValue });
+    tagId = catalog.entityId;
+
+    const dataset = await proposeAndConfirmFromChat(
+      page,
+      sessionId,
+      `Crea un dataset vacío con name exacto ${draftDatasetName} y fields: event_id, event_type.`,
+      "dataset_empty",
+      draftDatasetName,
+    );
+    expect(dataset.draft).toMatchObject({
+      name: draftDatasetName,
+      fields: ["event_id", "event_type"],
+    });
+
+    const datasets = await checked(
+      await api!.get("/api/v0/datasets", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      "comprobar dataset vacío creado desde chat",
+    );
+    expect(
+      datasets.find((entry: { name: string }) => entry.name === draftDatasetName),
+    ).toBeTruthy();
+  } finally {
+    await context.close();
+  }
+});
+
+test("agent watchlist-element real: enmascara y restaura identificador al aprobar", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const value = "999888777";
+  const name = `ARIA E2E watchlist elements ${randomUUID().slice(0, 8)}`;
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const watchlist = await checked(
+    await api!.post("/api/v0/watchlists", {
+      ...auth,
+      data: {
+        name,
+        description: "Watchlist temporal para probar valores enmascarados.",
+        list_type: "blacklist",
+        elements: [],
+      },
+    }),
+    "crear watchlist fixture",
+  );
+  const watchlistIdForTest = watchlist.id as string;
+  const context = await browser.newContext({ baseURL: "http://localhost" });
+  try {
+    const page = await context.newPage();
+    const sessionId = await openAssistantSession(page);
+    const proposed = await proposeAndConfirmFromChat(
+      page,
+      sessionId,
+      `Agrega la cédula ${value} a la watchlist exacta ${name}.`,
+      "watchlist_element",
+      value,
+    );
+    expect(proposed.turn.user_message.content).not.toContain(value);
+    expect(proposed.turn.user_message.content).toContain("[CC_1]");
+    expect(proposed.draft).toMatchObject({
+      watchlist_id: watchlistIdForTest,
+      values: [value],
+    });
+    const elements = await checked(
+      await api!.get(`/api/v0/watchlists/${encodeURIComponent(watchlistIdForTest)}/elements`, auth),
+      "comprobar elemento agregado mediante propuesta enmascarada",
+    );
+    expect(elements.values).toContain(value);
+  } finally {
+    await context.close();
+    await api!
+      .delete(`/api/v0/watchlists/${encodeURIComponent(watchlistIdForTest)}`, auth)
+      .catch(() => undefined);
+  }
 });
 
 test("agent draft actions: role sin permiso de Biblioteca no ve acciones ni puede forzarlas", async ({
