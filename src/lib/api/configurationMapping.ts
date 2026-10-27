@@ -52,6 +52,7 @@ function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearc
       max_history_rows: research.historyPandas.maxHistoryRows,
       window_days: research.historyPandas.windowDays,
       max_analysis_operations: research.historyPandas.maxAnalysisOperations,
+      planner: research.historyPandas.planner,
       allowed_columns: research.historyPandas.allowedColumns,
       allowed_operations: research.historyPandas.allowedOperations,
     },
@@ -89,6 +90,7 @@ function researchFromApi(
       windowDays: hp?.window_days ?? fallback.historyPandas.windowDays,
       maxAnalysisOperations:
         hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations,
+      planner: hp?.planner ?? fallback.historyPandas.planner,
       allowedColumns: hp?.allowed_columns ?? fallback.historyPandas.allowedColumns,
       allowedOperations: hp?.allowed_operations ?? fallback.historyPandas.allowedOperations,
     },

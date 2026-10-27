@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { Switch } from "@/components/ui/switch";
-import { type DelegatedResearchSettings, type ToolPickerFields } from "@/data/configs";
+import {
+  type DelegatedResearchSettings,
+  type HistoryPlanner,
+  type ToolPickerFields,
+} from "@/data/configs";
 import { getModels } from "@/lib/api/models.functions";
 import { AgentToolsFields, Field, VectorStoreInstancePicker } from "./FormControls";
 
@@ -360,6 +364,21 @@ export function AgentToolsSection<T extends ToolPickerFields>({
                       }
                       className={inputClass}
                     />
+                  </Field>
+                  <Field
+                    label="Planificador"
+                    hint="LLM propone las operaciones según la pregunta; Fijo usa siempre el mismo plan. Sirve para compararlos en un lote CSV."
+                  >
+                    <select
+                      aria-label="Planificador del análisis de historial"
+                      value={history.planner}
+                      disabled={disabled}
+                      onChange={(e) => patchHistory({ planner: e.target.value as HistoryPlanner })}
+                      className={inputClass}
+                    >
+                      <option value="llm">LLM</option>
+                      <option value="heuristic">Fijo</option>
+                    </select>
                   </Field>
                 </div>
               </>

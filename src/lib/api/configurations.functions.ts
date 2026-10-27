@@ -113,6 +113,7 @@ export type ApiDelegatedResearchSettings = {
     max_history_rows: number;
     window_days: number;
     max_analysis_operations: number;
+    planner?: "llm" | "heuristic";
     allowed_columns: string[];
     allowed_operations: string[];
   };
