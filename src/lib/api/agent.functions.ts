@@ -112,13 +112,7 @@ export type AgentAuditEvent = {
   duration_ms: number | null;
   cost_micros: number | null;
   specialist:
-    | "optimizer"
-    | "configuration"
-    | "library"
-    | "vector_store"
-    | "model"
-    | "dataset"
-    | null;
+    "optimizer" | "configuration" | "library" | "vector_store" | "model" | "dataset" | null;
   tool:
     | "read"
     | "write"
@@ -293,6 +287,12 @@ export function createAgentSession(mode: "assistant" | "optimization" = "assista
     method: "POST",
     body: JSON.stringify({ mode, scope: mode === "assistant" ? ["library"] : [] }),
   });
+}
+
+export function getActiveAgentObjective() {
+  return apiFetch<AgentObjective>("/api/v0/agent/objectives/active");
+}
+
 export type OptimizerLaunchLimits = {
   enabled: boolean;
   max_concurrent_sessions: number;
@@ -301,12 +301,6 @@ export type OptimizerLaunchLimits = {
 
 export function getOptimizerLaunchLimits() {
   return apiFetch<OptimizerLaunchLimits>(`${path}/optimizer-launch-limits`);
-}
-
-}
-
-export function getActiveAgentObjective() {
-  return apiFetch<AgentObjective>("/api/v0/agent/objectives/active");
 }
 
 export function createOptimizerSession(areas: string[]) {
@@ -737,10 +731,10 @@ export function listOptimizerMemory(area: OptimizerArea) {
 }
 
 export function resolveAgentBlock(sessionId: string, request: ResolveBlockRequest) {
-  return apiFetch<AgentSession>(
-    `${path}/sessions/${encodeURIComponent(sessionId)}/block/resolve`,
-    { method: "POST", body: JSON.stringify(request) },
-  );
+  return apiFetch<AgentSession>(`${path}/sessions/${encodeURIComponent(sessionId)}/block/resolve`, {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
 }
 
 export type AgentFailureInfo = {

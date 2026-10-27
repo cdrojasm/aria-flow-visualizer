@@ -407,6 +407,9 @@ test("worker caído: se ve como sin respuesta y el sistema lo recupera y lo deja
 });
 
 test("lanzar optimizador abre el drawer lateral con alcance y revisión", async ({ page }) => {
+  // Earlier health scenarios deliberately leave ACTIVE sessions. Release this
+  // spec's own fixtures so the drawer is not blocked by the concurrency limit.
+  seedScript(["cleanup", "--prefix", prefix]);
   const sessionId = seed("completed");
   await openOptimizer(page, sessionId);
   await page.getByRole("button", { name: "Lanzar optimizador" }).click();
