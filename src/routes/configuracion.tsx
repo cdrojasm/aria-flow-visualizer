@@ -42,6 +42,7 @@ import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
 import { AlertSchemaEditor } from "@/components/configuracion/schema/AlertSchemaEditor";
 import { rubricValidationErrors } from "@/components/configuracion/SegmentRubricsSection";
+import { vectorStoreValidationErrors } from "@/components/configuracion/shared/vectorStoreValidation";
 import { SegmentoTab } from "@/components/configuracion/SegmentoTab";
 import { OptimizerCenter } from "@/components/optimizer/OptimizerCenter";
 import { Field, LimitField } from "@/components/configuracion/shared/FormControls";
@@ -1384,12 +1385,16 @@ function ConfiguracionPage() {
   const rubricErrors = selectedDraft
     ? rubricValidationErrors(selectedDraft.workingCopy.segments ?? {})
     : [];
+  const vectorStoreErrors = selectedDraft
+    ? vectorStoreValidationErrors(selectedDraft.workingCopy.segments ?? {})
+    : [];
   const canSave =
     !locked &&
     (selectedDraft?.mergeConflicts?.length ?? 0) === 0 &&
     !!selectedConfigId &&
     (unsaved || hasChanges) &&
-    rubricErrors.length === 0;
+    rubricErrors.length === 0 &&
+    vectorStoreErrors.length === 0;
   const canRestore =
     isDraftView && !!selectedDraft && hasChanges && !saving && !restoring && !savePreviewLoading;
   const actionButtonClass =
@@ -1422,6 +1427,16 @@ function ConfiguracionPage() {
               <p className="text-danger" title={rubricErrors.join("\n")}>
                 No se puede guardar: {rubricErrors.length === 1 ? "la rúbrica" : "las rúbricas"}{" "}
                 {rubricErrors.join(" · ")} (deben sumar 100 pts).
+              </p>
+            )}
+            {isDraftView && vectorStoreErrors.length > 0 && (
+              <p
+                className="text-danger"
+                title={vectorStoreErrors.join("\n")}
+                data-testid="vector-store-save-block"
+              >
+                No se puede guardar: Búsqueda en Vector Store activa sin instancia en{" "}
+                {vectorStoreErrors.join(" · ")}.
               </p>
             )}
           </div>

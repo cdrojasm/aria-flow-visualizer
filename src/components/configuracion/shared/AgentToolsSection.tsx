@@ -204,6 +204,11 @@ export function AgentToolsSection<T extends ToolPickerFields>({
                   }
                   disabled={disabled}
                 />
+                {!research.vectorStore.vectorStoreInstanceId && (
+                  <p className="text-[12px] text-danger" role="alert">
+                    Elige una instancia de Vector Store o desactiva la búsqueda para poder guardar.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Field
                     label="Máx. interacciones"
