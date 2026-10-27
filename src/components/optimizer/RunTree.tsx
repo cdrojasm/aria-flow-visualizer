@@ -38,8 +38,9 @@ const COMPONENT_LABEL: Record<string, string> = {
   vector_store: "Vector store",
 };
 
-const pct = (value: number | undefined) =>
-  value === undefined ? "—" : `${(value * 100).toFixed(1)}%`;
+// Precision is null when nothing was predicted positive: show it as undefined.
+const pct = (value: number | null | undefined) =>
+  value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 
 /** The whole optimization run as one structure: base, winners, candidates. */
 export function RunTree({

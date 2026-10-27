@@ -118,7 +118,7 @@ export const BLOCK_ERROR_COPY: Record<string, string> = {
 
 export const SESSION_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Borrador",
-  ACTIVE: "Ejecutando",
+  ACTIVE: "Corriendo",
   PAUSED: "En pausa",
   WAITING_USER: "Esperando tu respuesta",
   WAITING_APPROVAL: "Requiere aprobación",

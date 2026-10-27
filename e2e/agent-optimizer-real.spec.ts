@@ -279,7 +279,7 @@ test("FP4/FP5 real: revisión, inicio, presupuesto, pausa, conversación y cance
   );
   await optimizerTabs
     .getByRole("tab", {
-      name: `Optimizador ${startedSession.session_id} · Ejecutando`,
+      name: `Optimizador ${startedSession.session_id} · Corriendo`,
     })
     .click();
   const sessionIdEncoded = encodeURIComponent(startedSession.session_id);

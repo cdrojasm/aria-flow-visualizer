@@ -9,8 +9,8 @@ import { AREA_LABEL } from "./labels";
 
 const DATE = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeZone: "America/Bogota" });
 
-function percent(value: number | undefined) {
-  return value === undefined ? "—" : `${(value * 100).toFixed(1)}%`;
+function percent(value: number | null | undefined) {
+  return value == null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
 
 /** What earlier sessions learned (only with enough evidence) and this session's aggregates. */
