@@ -31,7 +31,12 @@ async function openAs(page: Page, accessToken: string, path: string) {
 
 // A real escalated alert: the same velocity event scripts/e2e_alert_processing.py
 // uses, run through the real 7-step workflow with analysts switched on.
-async function escalatedAlert(request: APIRequestContext, managerToken: string) {
+// whileProcessing runs right after intake, while ARIA is still analysing it.
+async function escalatedAlert(
+  request: APIRequestContext,
+  managerToken: string,
+  whileProcessing?: (alertId: string) => Promise<void>,
+) {
   const headers = { Authorization: `Bearer ${managerToken}` };
   const before = await request.get(`${baseURL}/api/v0/operational-settings`, { headers });
   expect(before.ok()).toBeTruthy();
@@ -87,6 +92,7 @@ async function escalatedAlert(request: APIRequestContext, managerToken: string) 
     });
     expect(started.status(), await started.text()).toBe(202);
     const { alert_id: alertId } = (await started.json()) as { alert_id: string };
+    await whileProcessing?.(alertId);
 
     await expect
       .poll(
@@ -177,4 +183,69 @@ test("cola real: tomar, liberar, resolver y ver la resolución en la alerta cerr
   await expect(resolution).toContainText("Falso positivo (dejada pasar)");
   await expect(resolution).toContainText(notes);
   await expect(page.getByText(/Cerrada por/)).toBeVisible();
+});
+
+// Display names of the workflow steps (src/lib/alertSteps.ts) plus the label
+// for an alert whose workflow has not started yet.
+const IN_PROCESS_STAGE =
+  /Pre-proceso|Reglas determinísticas|Perfilamiento|Detector|Adversarial|Clasificación|Analista \(agente\)|Ejecutor|Post-proceso|En espera de procesamiento/;
+
+test("cola real: la alerta que ARIA analiza aparece en 'Alertas en proceso' y sale al escalar", async ({
+  page,
+  request,
+}) => {
+  test.skip(
+    !managerEmail || !managerPassword || !analystEmail || !analystPassword,
+    "Configura E2E_MANAGER_EMAIL/PASSWORD y E2E_FRAUD_ANALYST_EMAIL/PASSWORD.",
+  );
+
+  const managerToken = await login(request, managerEmail!, managerPassword!);
+  const analystToken = await login(request, analystEmail!, analystPassword!);
+  const headers = { Authorization: `Bearer ${analystToken}` };
+  type InProcessAlert = { alert_id: string; customer_id: string | null };
+
+  const alertId = await escalatedAlert(request, managerToken, async (startedId) => {
+    // The backend lists the new alert while ARIA analyses it...
+    let listed: InProcessAlert | undefined;
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(`${baseURL}/api/v0/analyst-queue/in-process`, {
+            headers,
+          });
+          listed = ((await response.json()) as InProcessAlert[]).find(
+            (alert) => alert.alert_id === startedId,
+          );
+          return !!listed;
+        },
+        { timeout: 30_000, intervals: [500] },
+      )
+      .toBeTruthy();
+
+    // ...and the tab renders that same alert, with its customer and current stage.
+    await openAs(page, analystToken, "/cola");
+    await page.getByRole("button", { name: "Alertas en proceso" }).click();
+    await expect(page.getByRole("heading", { name: "Alertas en proceso" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Buscar en la tabla" }).fill(startedId.slice(0, 8));
+    const row = page.getByRole("row", { name: new RegExp(startedId.slice(0, 8)) });
+    await expect(row).toBeVisible({ timeout: 15_000 });
+    if (listed?.customer_id) await expect(row).toContainText(listed.customer_id);
+    await expect(row).toContainText(IN_PROCESS_STAGE);
+    await expect(row.getByRole("link", { name: "Ver" })).toHaveAttribute(
+      "href",
+      `/alerta/${startedId}`,
+    );
+  });
+
+  // Once escalated it leaves the in-process list and the tab.
+  const inProcess = await request.get(`${baseURL}/api/v0/analyst-queue/in-process`, { headers });
+  expect(inProcess.status()).toBe(200);
+  expect(((await inProcess.json()) as InProcessAlert[]).map((a) => a.alert_id)).not.toContain(
+    alertId,
+  );
+  await page.reload();
+  await page.getByRole("button", { name: "Alertas en proceso" }).click();
+  await expect(page.getByText("No se pudieron cargar las alertas en proceso")).toHaveCount(0);
+  await page.getByRole("textbox", { name: "Buscar en la tabla" }).fill(alertId.slice(0, 8));
+  await expect(page.getByRole("row", { name: new RegExp(alertId.slice(0, 8)) })).toHaveCount(0);
 });
