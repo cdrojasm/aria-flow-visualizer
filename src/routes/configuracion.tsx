@@ -1,4 +1,5 @@
 import { SectionTabs } from "@/components/ui/section-tabs";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
@@ -2591,114 +2592,107 @@ function ConfiguracionPage() {
         </div>
       )}
 
-      {/* New config modal */}
-      {newConfigForm && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => setNewConfigForm(null)}
-        >
-          <div
-            className="bg-card rounded-xl border border-border w-full max-w-md shadow-xl"
-            onClick={(e) => e.stopPropagation()}
+      {/* New config drawer */}
+      <SideDrawer
+        open={newConfigForm !== null}
+        onOpenChange={(open) => {
+          if (!open) setNewConfigForm(null);
+        }}
+        size="md"
+        title="Nueva configuración"
+        dirty={newConfigForm !== null && newConfigForm.name.trim() !== ""}
+        footer={
+          <>
+            <button
+              onClick={() => setNewConfigForm(null)}
+              className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={createConfig}
+              disabled={!newConfigForm?.name.trim()}
+              className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Crear borrador
+            </button>
+          </>
+        }
+      >
+        {newConfigForm && (
+          <>
+          <Field label="Nombre">
+            <input
+              value={newConfigForm.name}
+              onChange={(e) => setNewConfigForm({ ...newConfigForm, name: e.target.value })}
+              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+              placeholder="Ej: Canario 5%"
+            />
+          </Field>
+          <Field
+            label="Basada en"
+            hint="Clona las taxonomías, límites y prompts de la configuración elegida, o arranca en blanco."
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h3 className="text-[14px] font-semibold text-text-primary">Nueva configuración</h3>
-              <button
-                onClick={() => setNewConfigForm(null)}
-                className="text-text-secondary hover:text-text-primary"
+            <select
+              value={newConfigForm.baseId}
+              onChange={(e) =>
+                setNewConfigForm({
+                  ...newConfigForm,
+                  baseId: e.target.value,
+                  baseVersion: "latest",
+                })
+              }
+              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
+            >
+              <option value={NEW_CONFIG_NONE_BASE_ID}>Ninguna (valores por defecto)</option>
+              {configs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {newConfigBaseItem && !newConfigBaseIsTemp && (
+            <Field
+              label="Versión"
+              hint="La versión más reciente incluye cambios sin guardar de esa configuración, si la tienes abierta ahora mismo."
+            >
+              <select
+                value={
+                  newConfigForm.baseVersion === "latest"
+                    ? "latest"
+                    : String(newConfigForm.baseVersion)
+                }
+                onChange={(e) =>
+                  setNewConfigForm({
+                    ...newConfigForm,
+                    baseVersion:
+                      e.target.value === "latest" ? "latest" : Number(e.target.value),
+                  })
+                }
+                disabled={newConfigBaseVersionsQuery.isLoading}
+                className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <Field label="Nombre">
-                <input
-                  value={newConfigForm.name}
-                  onChange={(e) => setNewConfigForm({ ...newConfigForm, name: e.target.value })}
-                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-                  placeholder="Ej: Canario 5%"
-                />
-              </Field>
-              <Field
-                label="Basada en"
-                hint="Clona las taxonomías, límites y prompts de la configuración elegida, o arranca en blanco."
-              >
-                <select
-                  value={newConfigForm.baseId}
-                  onChange={(e) =>
-                    setNewConfigForm({
-                      ...newConfigForm,
-                      baseId: e.target.value,
-                      baseVersion: "latest",
-                    })
-                  }
-                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
-                >
-                  <option value={NEW_CONFIG_NONE_BASE_ID}>Ninguna (valores por defecto)</option>
-                  {configs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
+                <option value="latest">
+                  Más reciente
+                  {newConfigBaseItem.latestVersion != null
+                    ? ` (v${newConfigBaseItem.latestVersion})`
+                    : ""}
+                </option>
+                {[...newConfigBaseVersions]
+                  .sort((a, b) => b.version - a.version)
+                  .map((v) => (
+                    <option key={v.version} value={v.version}>
+                      v{v.version}
+                      {v.ever_activated ? " · estuvo en producción" : ""}
                     </option>
                   ))}
-                </select>
-              </Field>
-              {newConfigBaseItem && !newConfigBaseIsTemp && (
-                <Field
-                  label="Versión"
-                  hint="La versión más reciente incluye cambios sin guardar de esa configuración, si la tienes abierta ahora mismo."
-                >
-                  <select
-                    value={
-                      newConfigForm.baseVersion === "latest"
-                        ? "latest"
-                        : String(newConfigForm.baseVersion)
-                    }
-                    onChange={(e) =>
-                      setNewConfigForm({
-                        ...newConfigForm,
-                        baseVersion:
-                          e.target.value === "latest" ? "latest" : Number(e.target.value),
-                      })
-                    }
-                    disabled={newConfigBaseVersionsQuery.isLoading}
-                    className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background disabled:opacity-50"
-                  >
-                    <option value="latest">
-                      Más reciente
-                      {newConfigBaseItem.latestVersion != null
-                        ? ` (v${newConfigBaseItem.latestVersion})`
-                        : ""}
-                    </option>
-                    {[...newConfigBaseVersions]
-                      .sort((a, b) => b.version - a.version)
-                      .map((v) => (
-                        <option key={v.version} value={v.version}>
-                          v{v.version}
-                          {v.ever_activated ? " · estuvo en producción" : ""}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
-              )}
-            </div>
-            <div className="px-5 py-4 border-t border-border flex justify-end gap-2">
-              <button
-                onClick={() => setNewConfigForm(null)}
-                className="px-4 py-2 rounded-md text-[13px] border border-border hover:bg-surface"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={createConfig}
-                disabled={!newConfigForm.name.trim()}
-                className="px-4 py-2 rounded-md text-[13px] bg-primary text-white font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Crear borrador
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </select>
+            </Field>
+          )}
+          </>
+        )}
+      </SideDrawer>
 
       {/* Deploy to production modal */}
       {deployTarget && (

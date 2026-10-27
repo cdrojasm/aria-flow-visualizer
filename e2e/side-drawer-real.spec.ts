@@ -423,6 +423,29 @@ test.describe("drawer lateral único: Configuración", () => {
     await page.getByRole("button", { name: "Analista", exact: true }).click();
   });
 
+  test("Nueva configuración abre el drawer, avisa de cambios sin guardar y crea el borrador", async ({
+    page,
+  }) => {
+    await page.goto("/configuracion");
+    await page.getByRole("button", { name: "Nueva configuración" }).click();
+    const drawer = await expectRightDrawer(page, "Nueva configuración");
+    await expect(drawer.getByRole("button", { name: "Crear borrador" })).toBeDisabled();
+
+    // Unsaved name: closing asks first, "Seguir editando" keeps the drawer.
+    const name = `E2E drawer ${Date.now()}`;
+    await drawer.getByPlaceholder("Ej: Canario 5%").fill(name);
+    await page.keyboard.press("Escape");
+    const confirm = page.getByRole("alertdialog");
+    await expect(confirm.getByText("¿Descartar los cambios?")).toBeVisible();
+    await confirm.getByRole("button", { name: "Seguir editando" }).click();
+    await waitForAlertDialogAnimation(page);
+    await expect(drawer).toBeVisible();
+
+    await drawer.getByRole("button", { name: "Crear borrador" }).click();
+    await expect(page.getByTestId("side-drawer")).toBeHidden();
+    await expect(page.getByText(name).first()).toBeVisible();
+  });
+
   for (const catalog of [
     {
       trigger: "marcación",
