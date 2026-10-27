@@ -40,7 +40,35 @@ export type FraudMarkingAnalysisResponse = {
   maturation: FraudMaturationProfile;
 };
 
-export type DatasetSplitMetadata = {
+type PartitionName = "training" | "validation" | "calibration" | "test";
+export type DatasetSplitSourceContext = {
+  kind?: "uploaded" | "catalog" | "mature_sample";
+  origin?: DatasetOrigin;
+  source_dataset_names?: string[];
+  mature_snapshot_id?: string;
+  mature_content_hash?: string;
+  source_partition?: string;
+  period_start?: string;
+  period_end?: string;
+  maturing_days?: number;
+  excluded_partitions?: string[];
+  sampler_partition_counts?: Record<string, number>;
+};
+export type DatasetSplitSchemaContext = {
+  active_version?: number | null;
+  validated_versions?: number[];
+  context?: "mature_sample" | "alert_field_mapping" | "column_names";
+  missing_mandatory_fields?: string[];
+  compatible?: boolean;
+};
+type DatasetSplitContext = {
+  strata_distribution?: Record<string, Record<PartitionName, number>>;
+  source_context?: DatasetSplitSourceContext;
+  schema_context?: DatasetSplitSchemaContext;
+  warnings?: string[];
+};
+
+export type DatasetSplitMetadata = DatasetSplitContext & {
   source_name: string;
   source_content_sha256: string;
   proportions: Record<"training" | "validation" | "calibration" | "test", number>;
@@ -79,7 +107,7 @@ export type DatasetOperationResponse = {
   status: DatasetStatus;
   async_operation_id: string | null;
 };
-export type DatasetSplitPreview = {
+export type DatasetSplitPreview = DatasetSplitContext & {
   source_dataset_name: string;
   source_content_sha256: string;
   source_row_count: number;

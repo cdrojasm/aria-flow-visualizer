@@ -9,6 +9,7 @@ import {
   getDatasetSummary,
   type DatasetOrigin,
 } from "@/lib/api/datasets.functions";
+import { DatasetSplitContext } from "@/components/datasets/DatasetSplitContext";
 
 const MARK_FIELD_DATALIST_ID = "dataset-summary-mark-fields";
 
@@ -295,6 +296,12 @@ export function DatasetSummaryTab({ datasetName }: { datasetName: string }) {
           <p className="break-all text-[11px] text-text-secondary">
             SHA-256 fuente: {s.split_metadata.source_content_sha256}
           </p>
+          <DatasetSplitContext
+            sourceContext={s.split_metadata.source_context}
+            schemaContext={s.split_metadata.schema_context}
+            warnings={s.split_metadata.warnings}
+            strataDistribution={s.split_metadata.strata_distribution}
+          />
         </div>
       )}
 

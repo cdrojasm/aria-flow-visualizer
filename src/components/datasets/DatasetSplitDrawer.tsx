@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 
 import { Field } from "@/components/configuracion/shared/FormControls";
+import { DatasetSplitContext } from "@/components/datasets/DatasetSplitContext";
 import { SideDrawer } from "@/components/ui/side-drawer";
 import {
   prepareDatasetSplit,
@@ -225,6 +226,12 @@ export function DatasetSplitDrawer({
                 </div>
               ))}
             </div>
+            <DatasetSplitContext
+              sourceContext={preview.data.source_context}
+              schemaContext={preview.data.schema_context}
+              warnings={preview.data.warnings}
+              strataDistribution={preview.data.strata_distribution}
+            />
           </>
         )}
         {!validProportions && (
