@@ -75,11 +75,9 @@ export function AlertFlowDiagrams({
               const phaseSteps = phase.steps.filter((name) => completed.has(name));
               const humanResolution = phase.title === "Resolver" && analystResolved;
               const isCurrent = phaseSteps.length > 0 || humanResolution;
-              const phaseDescription = phaseSteps.length
-                ? phaseSteps.map((name) => STEP_LABELS[name] ?? name).join(" · ")
-                : humanResolution
-                  ? "Resuelto por analista"
-                  : "Aún sin registrar";
+              const descriptions = phaseSteps.map((name) => STEP_LABELS[name] ?? name);
+              if (humanResolution) descriptions.push("Resuelto por analista");
+              const phaseDescription = descriptions.join(" · ") || "Aún sin registrar";
               return (
                 <li key={phase.title} className="relative min-w-0">
                   {index > 0 && (

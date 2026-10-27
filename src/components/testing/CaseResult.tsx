@@ -75,6 +75,20 @@ export function CaseResult({
     return <ResultBox tone="live" title={`En proceso: ${stepLabel(current?.step_name ?? null)}`} />;
   }
 
+  const firstReview = latestOutput(steps, "detector_adversarial");
+  if (!firstReview?.requires_classification_feedback &&
+      ["pass", "scale_to_analyst"].includes(String(firstReview?.decision))) {
+    return (
+      <ResultBox tone="primary" title={firstReview?.decision === "pass"
+        ? "Primer adversarial: deja pasar"
+        : "Primer adversarial: escala a analista humano"}>
+        <p className="text-[12px] text-text-primary">{String(firstReview?.reasoning ?? "")}</p>
+        <p className="text-[12px] text-text-secondary">
+          Prueba: la acción propuesta se simula, sin intervención operativa.
+        </p>
+      </ResultBox>
+    );
+  }
   const classification = latestOutput(steps, "classification");
   if (!classification) return <ResultBox tone="primary" title="Completado" />;
   const predicted = String(classification.is_fraud ?? "—");

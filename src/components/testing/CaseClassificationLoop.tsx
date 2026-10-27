@@ -4,7 +4,7 @@ import { asObject, sortByStart, stepDurationSeconds } from "./caseExecutions";
 import { IS_FRAUD_TO_ANALYST, stepLabel } from "./caseStatus";
 import { formatDuration } from "./formatDuration";
 
-const LOOP_STEPS = new Set(["classification", "adversarial"]);
+const LOOP_STEPS = new Set(["detector", "detector_adversarial", "classification", "adversarial"]);
 
 export function CaseClassificationLoop({ steps }: { steps: WorkflowStepResponse[] }) {
   const loop = sortByStart(steps).filter((step) => LOOP_STEPS.has(step.step_name));
@@ -13,9 +13,9 @@ export function CaseClassificationLoop({ steps }: { steps: WorkflowStepResponse[
   return (
     <div className="border border-border rounded-lg px-4 py-3.5">
       <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h4 className="text-[13px] font-semibold text-text-primary">Intentos del clasificador</h4>
+        <h4 className="text-[13px] font-semibold text-text-primary">Detección, revisión y clasificación</h4>
         <span className="text-[11px] text-text-secondary">
-          El adversarial revisa cada clasificación y puede devolverla
+          El primer adversarial decide si dejar pasar, escalar a una persona o gestionar como ARIA
         </span>
       </div>
       <ol>
@@ -26,7 +26,7 @@ export function CaseClassificationLoop({ steps }: { steps: WorkflowStepResponse[
           >
             <span className="text-[10px] font-semibold uppercase tracking-wider text-text-secondary pt-0.5">
               {stepLabel(step.step_name)}
-              {step.step_name === "classification" && ` ${step.attempt}`}
+              {["detector", "classification"].includes(step.step_name) && ` ${step.attempt}`}
             </span>
             <LoopOutcome step={step} />
             <span className="text-[11px] text-text-secondary tabular-nums">
@@ -46,12 +46,25 @@ function LoopOutcome({ step }: { step: WorkflowStepResponse }) {
   }
   if (!output) return <span className="text-[12px] text-text-secondary">Sin resultado</span>;
 
-  if (step.step_name === "adversarial") {
+  if (["adversarial", "detector_adversarial"].includes(step.step_name)) {
     const feedback = typeof output.feedback === "string" && output.feedback;
     return output.requires_classification_feedback ? (
       <span className="text-[12px] text-text-primary">
-        <span className="font-semibold text-text-secondary">Devuelve al clasificador</span>
+        <span className="font-semibold text-text-secondary">Devuelve al {step.step_name === "detector_adversarial" ? "Detector" : "clasificador"}</span>
         {feedback && ` · ${feedback}`}
+      </span>
+    ) : step.step_name === "detector_adversarial" ? (
+      <span className="text-[12px] text-text-primary">
+        <span className="font-semibold text-primary">
+          {output.decision === "pass"
+            ? "Deja pasar"
+            : output.decision === "scale_to_analyst"
+              ? "Escala a analista humano"
+              : output.decision === "handle_by_aria"
+                ? "Gestiona ARIA"
+                : "Revisión aprobada"}
+        </span>
+        {typeof output.reasoning === "string" && ` · ${output.reasoning}`}
       </span>
     ) : (
       <span className="text-[12px] font-semibold text-primary">Aprueba la clasificación</span>

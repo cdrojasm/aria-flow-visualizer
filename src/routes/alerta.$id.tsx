@@ -351,7 +351,7 @@ function RazonamientoTab({
       <AlertFlowDiagrams
         steps={detail.steps}
         status={detail.status}
-        decision={String(stepOutput(detail, "analyst").decision ?? "") || undefined}
+        decision={String(stepOutput(detail, "analyst").decision ?? stepOutput(detail, "detector_adversarial").decision ?? "") || undefined}
         executedAction={String(stepOutput(detail, "executor").executed_action ?? "") || undefined}
         analystResolved={Boolean(detail.analyst_resolution)}
       />
