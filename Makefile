@@ -2,17 +2,20 @@
 
 .DEFAULT_GOAL := help
 
+# Override with `make CONTAINER_CMD=docker <target>` when needed.
+CONTAINER_CMD ?= podman
+
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 # nginx image serving the static SPA build (dist/client), proxying /api and
 # /health to the backend api container - see nginx.conf.
 build: ## Build static SPA image (nginx)
-	docker compose build
+	$(CONTAINER_CMD) compose build
 
 # Static deploy (GitHub Pages): SPA shell in dist/client, publish that dir
 build-static: ## Build static SPA, publish to docs/ (GitHub Pages)
-	docker run --rm -v $(PWD):/app -v /app/node_modules -w /app oven/bun:1-alpine \
+	$(CONTAINER_CMD) run --rm -v $(PWD):/app -v /app/node_modules -w /app oven/bun:1-alpine \
 		sh -c "bun install --frozen-lockfile && bun run build:static"
 	cp dist/client/index.html dist/client/404.html
 	rm -rf docs && cp -R dist/client docs
@@ -48,13 +51,13 @@ refresh-github-token: ## Replace the saved GitHub credential with a classic PAT
 	echo "Saved the new credential for $$username@$$host."
 
 run: ## Start app in background
-	docker compose up -d
+	$(CONTAINER_CMD) compose up -d
 
 down: ## Stop app
-	docker compose down
+	$(CONTAINER_CMD) compose down
 
 logs: ## Tail app logs
-	docker compose logs -f web
+	$(CONTAINER_CMD) compose logs -f web
 
 test-web-prepare: ## Install the locked npm test tooling after a Bun install
 	npm ci --legacy-peer-deps
@@ -99,4 +102,18 @@ test-e2e-capability-help: ## Run contextual capability help E2E through nginx wi
 	E2E_PLAYWRIGHT_WORKERS=1 npm run test:e2e -- capability-help-real
 
 shell: ## Shell into running app container
-	docker compose exec web sh
+	$(CONTAINER_CMD) compose exec web sh
+
+
+.PHONY: local-deps local-build local-run local-down
+local-deps: ## Install frontend dependencies once into persistent local Docker volumes
+	$(CONTAINER_CMD) compose -f docker-compose.local.yml run --rm --no-deps builder "bun install --frozen-lockfile"
+
+local-build: ## Build the local static frontend using cached dependencies
+	$(CONTAINER_CMD) compose -f docker-compose.local.yml run --rm --no-deps builder "STATIC=1 STATIC_BASE=/ bun run build:static"
+
+local-run: local-build ## Build changed frontend code and serve the shared dist folder with nginx
+	$(CONTAINER_CMD) compose -f docker-compose.local.yml up -d web
+
+local-down: ## Stop the local nginx frontend
+	$(CONTAINER_CMD) compose -f docker-compose.local.yml down

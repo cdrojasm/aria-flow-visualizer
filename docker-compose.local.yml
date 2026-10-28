@@ -1,0 +1,31 @@
+services:
+  builder:
+    image: oven/bun:1-alpine
+    working_dir: /app
+    entrypoint: ["sh", "-lc"]
+    command: ["bun install --frozen-lockfile && STATIC=1 STATIC_BASE=/ bun run build:static"]
+    volumes:
+      - .:/app
+      - frontend-node-modules:/app/node_modules
+      - frontend-bun-cache:/root/.bun/install/cache
+      - frontend-dist:/app/dist
+
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    volumes:
+      - frontend-dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - aria-net
+
+volumes:
+  frontend-node-modules:
+  frontend-bun-cache:
+  frontend-dist:
+
+networks:
+  aria-net:
+    external: true
