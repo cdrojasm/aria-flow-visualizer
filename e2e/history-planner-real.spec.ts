@@ -81,7 +81,6 @@ function withLlmHistoryPlanner(segments: Json): Json {
           planner: "llm",
           max_delegations: 1,
           window_days: 0,
-          max_history_rows: 50,
           timeout_seconds: 25,
           allowed_columns: [],
         },

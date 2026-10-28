@@ -111,7 +111,6 @@ export type ApiDelegatedResearchSettings = {
     allowed_asset_types: string[];
   };
   history_pandas: ApiResearchAgentConfig & {
-    max_history_rows: number;
     window_days: number;
     max_analysis_operations: number;
     planner?: "llm" | "heuristic";

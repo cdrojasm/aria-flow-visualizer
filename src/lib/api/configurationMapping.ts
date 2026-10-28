@@ -50,7 +50,6 @@ function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearc
     },
     history_pandas: {
       ...base(research.historyPandas),
-      max_history_rows: research.historyPandas.maxHistoryRows,
       window_days: research.historyPandas.windowDays,
       max_analysis_operations: research.historyPandas.maxAnalysisOperations,
       planner: research.historyPandas.planner,
@@ -88,7 +87,6 @@ function researchFromApi(
     },
     historyPandas: {
       ...base(hp, fallback.historyPandas),
-      maxHistoryRows: hp?.max_history_rows ?? fallback.historyPandas.maxHistoryRows,
       windowDays: hp?.window_days ?? fallback.historyPandas.windowDays,
       maxAnalysisOperations:
         hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations,

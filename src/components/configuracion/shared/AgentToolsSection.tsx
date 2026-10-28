@@ -319,18 +319,6 @@ export function AgentToolsSection<T extends ToolPickerFields>({
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Máximo de transacciones" hint="Se analizan las más recientes.">
-                    <input
-                      type="number"
-                      min={1}
-                      value={history.maxHistoryRows}
-                      disabled={disabled}
-                      onChange={(e) =>
-                        patchHistory({ maxHistoryRows: Math.max(1, Number(e.target.value)) })
-                      }
-                      className={inputClass}
-                    />
-                  </Field>
                   <Field
                     label="Máx. rondas"
                     hint="Rondas de investigación mientras el paso siga inconcluso o cuestionado (máx. 5)."

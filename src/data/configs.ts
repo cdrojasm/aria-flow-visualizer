@@ -242,8 +242,8 @@ export type ResearchAgentConfig = {
 };
 // vectorStore: the agent calls it as a tool; maxDelegations = max
 // interactions per step. historyPandas ("Análisis de historial"): selector
-// = allowedColumns (vacío = todas) + windowDays (0 = sin límite) +
-// maxHistoryRows (las más recientes).
+// = allowedColumns (vacío = todas) + windowDays (0 = sin límite); sin tope
+// de filas: se analiza todo el historial seleccionado.
 // "llm" falls back to the fixed plan when the backend has no planner model.
 export type HistoryPlanner = "llm" | "heuristic";
 export type DelegatedResearchSettings = {
@@ -255,7 +255,6 @@ export type DelegatedResearchSettings = {
     allowedAssetTypes: string[];
   };
   historyPandas: ResearchAgentConfig & {
-    maxHistoryRows: number;
     windowDays: number;
     maxAnalysisOperations: number;
     planner: HistoryPlanner;
@@ -280,7 +279,6 @@ export const defaultDelegatedResearchSettings = (): DelegatedResearchSettings =>
     maxDelegations: 1,
     timeoutSeconds: 8,
     maxResultItems: 10,
-    maxHistoryRows: 50,
     windowDays: 30,
     maxAnalysisOperations: 4,
     planner: "llm",
