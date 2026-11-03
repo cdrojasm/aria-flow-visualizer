@@ -8,6 +8,7 @@ COPY . .
 RUN STATIC=1 STATIC_BASE=/ bun run build:static
 
 FROM nginx:alpine
+ENV TZ=America/Bogota
 COPY --from=builder /app/dist/client /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

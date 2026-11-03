@@ -1,39 +1,118 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  clearAccessToken,
+  clearUserDrafts,
+  getCurrentUser,
+  login,
+  logoutSession,
+  storeAccessToken,
+  type AuthUser,
+  type Role,
+} from "@/lib/api/auth.functions";
+import { ACCESS_TOKEN_KEY, SESSION_ENDED_EVENT } from "@/lib/api/client";
 
-export type Role = "admin" | "analyst" | "datascience";
-
-const STORAGE_KEY = "aria_role";
+export type { Role } from "@/lib/api/auth.functions";
 
 export const ROLE_LABELS: Record<Role, string> = {
-  admin: "Admin",
-  analyst: "Analista",
-  datascience: "Data Science",
+  manager: "Manager",
+  channel_manager: "Channel Manager",
+  release_manager: "Release Manager",
+  data_analyst: "Data Analyst",
+  fraud_analyst: "Fraud Analyst",
+  ops_analyst: "Ops Analyst",
+  fraud_reviewer: "Fraud Reviewer",
 };
 
 export const ROLE_NAV: Record<Role, string[]> = {
-  admin: ["/dashboard", "/cola", "/historico-fraude", "/monitor", "/testing", "/biblioteca", "/configuracion", "/modelos"],
-  analyst: ["/cola", "/dashboard"],
-  datascience: ["/historico-fraude", "/monitor", "/dashboard", "/modelos"],
+  manager: [
+    "/dashboard",
+    "/cola",
+    "/historico-fraude",
+    "/monitor",
+    "/configuracion",
+    "/backups",
+    "/biblioteca",
+  ],
+  release_manager: [
+    "/dashboard",
+    "/cola",
+    "/historico-fraude",
+    "/monitor",
+    "/configuracion",
+    "/testing",
+    "/biblioteca",
+  ],
+  channel_manager: [
+    "/dashboard",
+    "/cola",
+    "/historico-fraude",
+    "/monitor",
+    "/testing",
+    "/biblioteca",
+    "/configuracion",
+    "/modelos",
+  ],
+  data_analyst: ["/monitor", "/testing", "/biblioteca", "/modelos"],
+  fraud_analyst: ["/cola"],
+  ops_analyst: ["/dashboard", "/cola", "/monitor"],
+  // Fraud team: corrects fraud_label (ground truth) from the history only.
+  fraud_reviewer: ["/historico-fraude"],
 };
 
-function isRole(v: string | null): v is Role {
-  return v === "admin" || v === "analyst" || v === "datascience";
-}
-
-// undefined = not read from localStorage yet (avoids an SSR/client hydration mismatch);
-// null = read, nothing stored — caller should force a selection.
 export function useRole() {
-  const [role, setRoleState] = useState<Role | null | undefined>(undefined);
+  const queryClient = useQueryClient();
+  const [user, setUser] = useState<AuthUser | null | undefined>(undefined);
 
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    setRoleState(isRole(stored) ? stored : null);
+    if (!localStorage.getItem(ACCESS_TOKEN_KEY)) {
+      setUser(null);
+      return;
+    }
+    getCurrentUser()
+      .then(setUser)
+      .catch(() => {
+        // A 401 already ended the session (apiFetch drops the token). Any other
+        // failure — a request cancelled by a reload, a network blip — must not
+        // wipe a still-valid token, or reloading mid-request logs the user out.
+        setUser(null);
+      });
   }, []);
 
-  const setRole = useCallback((r: Role) => {
-    localStorage.setItem(STORAGE_KEY, r);
-    setRoleState(r);
+  // The session can end outside this component: a 401 from any API call
+  // (expired/revoked token) or a logout in another tab (the storage event
+  // only fires in the *other* tabs).
+  useEffect(() => {
+    const endSession = () => {
+      queryClient.clear();
+      setUser(null);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === ACCESS_TOKEN_KEY && !event.newValue) endSession();
+    };
+    window.addEventListener(SESSION_ENDED_EVENT, endSession);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(SESSION_ENDED_EVENT, endSession);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [queryClient]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const session = await login(email, password);
+    storeAccessToken(session.access_token);
+    setUser(session);
   }, []);
 
-  return { role, setRole };
+  const logout = useCallback(async () => {
+    // Best effort: even if the API is down the local session still ends;
+    // the token then just runs out at its exp.
+    await logoutSession().catch(() => undefined);
+    clearAccessToken();
+    clearUserDrafts();
+    queryClient.clear();
+    setUser(null);
+  }, [queryClient]);
+
+  return { user, role: user?.role, signIn, logout };
 }

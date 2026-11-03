@@ -10,9 +10,28 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test:web:unit": "vitest run",
+    "test:web:component": "vitest run src/test/biblioteca.vector-store.test.tsx",
+    "test:e2e": "ARIA_E2E_REAL=1 playwright test",
+    "test:e2e:real": "ARIA_E2E_REAL=1 playwright test e2e/alert-schema-real-api.spec.ts",
+    "test:e2e:observability:real": "ARIA_E2E_REAL=1 playwright test e2e/observability-real.spec.ts",
+    "test:e2e:auth:real": "ARIA_E2E_REAL=1 playwright test e2e/auth-real.spec.ts",
+    "test:e2e:agent:real": "ARIA_E2E_REAL=1 playwright test e2e/agent-assistant-base-real.spec.ts",
+    "test:e2e:agent:optimizer:real": "ARIA_E2E_REAL=1 playwright test e2e/agent-optimizer-real.spec.ts",
+    "test:e2e:configuration:real": "ARIA_E2E_REAL=1 playwright test e2e/configuration-deploy-real.spec.ts",
+    "test:e2e:configuration:graph:real": "ARIA_E2E_REAL=1 playwright test e2e/configuration-graph-real.spec.ts",
+    "test:e2e:datasets:real": "python3 scripts/prepare_e04_dataset_partitions.py --source \"${E2E_DATASET_SOURCE:-/Users/davidrojas/Downloads/training_dataset_xgboost.csv}\" --schema-sample \"${E2E_DATASET_SCHEMA_SAMPLE:-/Users/davidrojas/Downloads/dataset_ejemplo.csv}\" --output \"${E2E_DATASET_PARTITIONS_DIR:-/private/tmp/aria-e04-partitions}\" && ARIA_E2E_REAL=1 playwright test e2e/datasets-real.spec.ts",
+    "test:e2e:models:real": "docker compose up -d --build web && python3 scripts/prepare_e04_dataset_partitions.py --source \"${E2E_DATASET_SOURCE:-/Users/davidrojas/Downloads/training_dataset_xgboost.csv}\" --schema-sample \"${E2E_DATASET_SCHEMA_SAMPLE:-/Users/davidrojas/Downloads/dataset_ejemplo.csv}\" --output \"${E2E_DATASET_PARTITIONS_DIR:-/private/tmp/aria-e04-partitions}\" && ARIA_E2E_REAL=1 playwright test e2e/models-training-real.spec.ts",
+    "test:e2e:reports:real": "docker compose up -d --build web && ARIA_E2E_REAL=1 playwright test e2e/reports-real.spec.ts",
+    "test:e2e:backups:real": "docker compose up -d --build web && ARIA_E2E_REAL=1 playwright test e2e/backups-real.spec.ts",
+    "test:e2e:vector-store:real": "ARIA_E2E_REAL=1 playwright test e2e/vector-store-real.spec.ts",
+    "test:e2e:entities:advanced:real": "ARIA_E2E_REAL=1 playwright test e2e/entities-advanced-real.spec.ts",
+    "test:e2e:prod-smoke": "ARIA_E2E_REAL=1 playwright test e2e/prod-smoke-real.spec.ts e2e/prod-smoke-features-real.spec.ts",
+    "test:e2e:simulation": "ARIA_E2E_REAL=1 playwright test e2e/event-simulation-real.spec.ts"
   },
   "dependencies": {
+    "@gitgraph/react": "1.6.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -69,7 +88,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@lovable.dev/vite-tanstack-config": "^2.1.1",
+    "@playwright/test": "^1.63.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
@@ -80,10 +103,12 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
-    "nitro": "3.0.260429-beta",
+    "jsdom": "27.2.0",
+    "msw": "^2.15.0",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^5.0.1"
   }
 }

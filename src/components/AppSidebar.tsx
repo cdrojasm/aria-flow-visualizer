@@ -1,30 +1,60 @@
+import { useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, Inbox, Settings, GaugeCircle, FlaskConical, ChevronLeft, ChevronRight, ShieldCheck, History, Library, BrainCircuit } from "lucide-react";
+import {
+  LayoutDashboard,
+  Inbox,
+  Settings,
+  GaugeCircle,
+  FlaskConical,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  History,
+  Library,
+  BrainCircuit,
+  LogOut,
+  Archive,
+} from "lucide-react";
 import { ROLE_LABELS, ROLE_NAV, type Role } from "@/hooks/useRole";
+import type { AuthUser } from "@/lib/api/auth.functions";
+import { LogoutDialog } from "./LogoutDialog";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/cola", label: "In Progress", icon: Inbox },
+  { to: "/cola", label: "En proceso", icon: Inbox },
   { to: "/historico-fraude", label: "Histórico de Gestión de Fraude", icon: History },
   { to: "/monitor", label: "Monitor del Agente", icon: GaugeCircle },
   { to: "/testing", label: "Testing", icon: FlaskConical },
   { to: "/biblioteca", label: "Biblioteca", icon: Library },
   { to: "/modelos", label: "Modelos", icon: BrainCircuit },
   { to: "/configuracion", label: "Configuración", icon: Settings },
+  { to: "/backups", label: "Respaldos", icon: Archive },
 ];
 
-export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHealthy }: {
+export function AppSidebar({
+  collapsed,
+  onToggle,
+  role,
+  user,
+  onLogout,
+  apiHealthy,
+}: {
   collapsed: boolean;
   onToggle: () => void;
   role: Role | null | undefined;
-  onOpenRoleModal: () => void;
+  user: AuthUser | null | undefined;
+  onLogout: () => Promise<void>;
   apiHealthy: boolean;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : nav;
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  // Until the role is known nothing is painted, so no option appears and vanishes.
+  const visibleNav = role ? nav.filter((item) => ROLE_NAV[role].includes(item.to)) : [];
 
   return (
-    <aside className={`fixed inset-y-0 left-0 ${collapsed ? "w-14" : "w-[220px]"} bg-sidebar text-sidebar-foreground flex flex-col z-20 transition-all duration-200`}>
+    <aside
+      className={`fixed inset-y-0 left-0 ${collapsed ? "w-14" : "w-[220px]"} bg-sidebar text-sidebar-foreground flex flex-col z-20 transition-all duration-200`}
+    >
       <div className="h-16 flex items-center justify-between px-3">
         {!collapsed && (
           <span className="flex items-center gap-2 text-[18px] font-bold tracking-tight px-2">
@@ -39,9 +69,14 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
-      <nav className="flex-1 px-2 space-y-1">
+      <nav className="flex-1 px-2 space-y-1" aria-busy={!role}>
+        {!role &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-9 rounded-md bg-white/10 animate-pulse" aria-hidden="true" />
+          ))}
         {visibleNav.map((item) => {
-          const active = pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
+          const active =
+            pathname === item.to || (item.to !== "/dashboard" && pathname.startsWith(item.to));
           const Icon = item.icon;
           const itemClasses = `flex items-center gap-3 px-3 py-2 rounded-md text-[13px] transition-colors ${
             active ? "bg-sidebar-accent font-medium" : "hover:bg-white/10"
@@ -49,7 +84,11 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
 
           if (!apiHealthy) {
             return (
-              <span key={item.to} title="No disponible — servicio API caído" className={itemClasses}>
+              <span
+                key={item.to}
+                title="No disponible — servicio API caído"
+                className={itemClasses}
+              >
                 <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </span>
@@ -70,33 +109,55 @@ export function AppSidebar({ collapsed, onToggle, role, onOpenRoleModal, apiHeal
         })}
       </nav>
       <div className="px-3 py-4 border-t border-white/10">
-        <button
-          onClick={onOpenRoleModal}
-          title="Cambiar rol"
-          className={`w-full flex items-center rounded-md -mx-1 px-1 py-1 hover:bg-white/10 transition-colors ${collapsed ? "justify-center" : "gap-3"}`}
-        >
-          <div className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold">
-            MR
+        <div className={`flex items-center ${collapsed ? "flex-col gap-2" : "gap-3"}`}>
+          <div
+            className="h-9 w-9 shrink-0 rounded-full bg-white/15 flex items-center justify-center text-[12px] font-semibold"
+            title={collapsed ? user?.name : undefined}
+          >
+            {user?.name.slice(0, 2).toUpperCase() ?? "AR"}
           </div>
           {!collapsed && (
-            <div className="min-w-0 text-left">
-              <div className="text-[13px] font-medium truncate">María Rodríguez</div>
-              <div className="text-[11px] text-white/70 truncate">{role ? ROLE_LABELS[role] : "Supervisor"}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium truncate">
+                {user?.name ?? "Sesión requerida"}
+              </div>
+              <div className="text-[11px] text-white/70 truncate">
+                {role ? ROLE_LABELS[role] : "Sin sesión"}
+              </div>
             </div>
           )}
-        </button>
+          {user && (
+            <button
+              type="button"
+              onClick={() => setConfirmLogout(true)}
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+              className="shrink-0 p-1.5 rounded-md hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
         {!collapsed && (
           <div className="mt-3 flex items-center gap-2 text-[11px] uppercase tracking-wider text-white/80">
             <span className="relative flex h-2 w-2">
               {apiHealthy && (
                 <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-75 animate-ping" />
               )}
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${apiHealthy ? "bg-success" : "bg-danger"}`} />
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${apiHealthy ? "bg-success" : "bg-danger"}`}
+              />
             </span>
             ARIA Agente · {apiHealthy ? "Operativo" : "No disponible"}
           </div>
         )}
       </div>
+      <LogoutDialog
+        open={confirmLogout}
+        onOpenChange={setConfirmLogout}
+        user={user}
+        onLogout={onLogout}
+      />
     </aside>
   );
 }

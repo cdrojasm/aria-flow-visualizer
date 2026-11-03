@@ -12,15 +12,18 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TestingRouteImport } from './routes/testing'
 import { Route as MonitorRouteImport } from './routes/monitor'
 import { Route as ModelosRouteImport } from './routes/modelos'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as HistoricoFraudeRouteImport } from './routes/historico-fraude'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ColaRouteImport } from './routes/cola'
 import { Route as BibliotecaRouteImport } from './routes/biblioteca'
+import { Route as BackupsRouteImport } from './routes/backups'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TestingIndexRouteImport } from './routes/testing.index'
 import { Route as TestingRunIdRouteImport } from './routes/testing.$runId'
 import { Route as AlertaIdRouteImport } from './routes/alerta.$id'
+import { Route as TestingScenariosScenarioIdRouteImport } from './routes/testing.scenarios.$scenarioId'
 
 const TestingRoute = TestingRouteImport.update({
   id: '/testing',
@@ -35,6 +38,11 @@ const MonitorRoute = MonitorRouteImport.update({
 const ModelosRoute = ModelosRouteImport.update({
   id: '/modelos',
   path: '/modelos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoricoFraudeRoute = HistoricoFraudeRouteImport.update({
@@ -62,6 +70,11 @@ const BibliotecaRoute = BibliotecaRouteImport.update({
   path: '/biblioteca',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BackupsRoute = BackupsRouteImport.update({
+  id: '/backups',
+  path: '/backups',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -82,100 +95,126 @@ const AlertaIdRoute = AlertaIdRouteImport.update({
   path: '/alerta/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TestingScenariosScenarioIdRoute =
+  TestingScenariosScenarioIdRouteImport.update({
+    id: '/scenarios/$scenarioId',
+    path: '/scenarios/$scenarioId',
+    getParentRoute: () => TestingRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing/': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/backups': typeof BackupsRoute
   '/biblioteca': typeof BibliotecaRoute
   '/cola': typeof ColaRoute
   '/configuracion': typeof ConfiguracionRoute
   '/dashboard': typeof DashboardRoute
   '/historico-fraude': typeof HistoricoFraudeRoute
+  '/login': typeof LoginRoute
   '/modelos': typeof ModelosRoute
   '/monitor': typeof MonitorRoute
   '/testing': typeof TestingRouteWithChildren
   '/alerta/$id': typeof AlertaIdRoute
   '/testing/$runId': typeof TestingRunIdRoute
   '/testing/': typeof TestingIndexRoute
+  '/testing/scenarios/$scenarioId': typeof TestingScenariosScenarioIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/testing'
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing/'
+    | '/testing/scenarios/$scenarioId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing'
+    | '/testing/scenarios/$scenarioId'
   id:
     | '__root__'
     | '/'
+    | '/backups'
     | '/biblioteca'
     | '/cola'
     | '/configuracion'
     | '/dashboard'
     | '/historico-fraude'
+    | '/login'
     | '/modelos'
     | '/monitor'
     | '/testing'
     | '/alerta/$id'
     | '/testing/$runId'
     | '/testing/'
+    | '/testing/scenarios/$scenarioId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BackupsRoute: typeof BackupsRoute
   BibliotecaRoute: typeof BibliotecaRoute
   ColaRoute: typeof ColaRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   DashboardRoute: typeof DashboardRoute
   HistoricoFraudeRoute: typeof HistoricoFraudeRoute
+  LoginRoute: typeof LoginRoute
   ModelosRoute: typeof ModelosRoute
   MonitorRoute: typeof MonitorRoute
   TestingRoute: typeof TestingRouteWithChildren
@@ -203,6 +242,13 @@ declare module '@tanstack/react-router' {
       path: '/modelos'
       fullPath: '/modelos'
       preLoaderRoute: typeof ModelosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/historico-fraude': {
@@ -240,6 +286,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BibliotecaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/backups': {
+      id: '/backups'
+      path: '/backups'
+      fullPath: '/backups'
+      preLoaderRoute: typeof BackupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -268,17 +321,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlertaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/testing/scenarios/$scenarioId': {
+      id: '/testing/scenarios/$scenarioId'
+      path: '/scenarios/$scenarioId'
+      fullPath: '/testing/scenarios/$scenarioId'
+      preLoaderRoute: typeof TestingScenariosScenarioIdRouteImport
+      parentRoute: typeof TestingRoute
+    }
   }
 }
 
 interface TestingRouteChildren {
   TestingRunIdRoute: typeof TestingRunIdRoute
   TestingIndexRoute: typeof TestingIndexRoute
+  TestingScenariosScenarioIdRoute: typeof TestingScenariosScenarioIdRoute
 }
 
 const TestingRouteChildren: TestingRouteChildren = {
   TestingRunIdRoute: TestingRunIdRoute,
   TestingIndexRoute: TestingIndexRoute,
+  TestingScenariosScenarioIdRoute: TestingScenariosScenarioIdRoute,
 }
 
 const TestingRouteWithChildren =
@@ -286,11 +348,13 @@ const TestingRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BackupsRoute: BackupsRoute,
   BibliotecaRoute: BibliotecaRoute,
   ColaRoute: ColaRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   DashboardRoute: DashboardRoute,
   HistoricoFraudeRoute: HistoricoFraudeRoute,
+  LoginRoute: LoginRoute,
   ModelosRoute: ModelosRoute,
   MonitorRoute: MonitorRoute,
   TestingRoute: TestingRouteWithChildren,

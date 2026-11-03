@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#testing folders and files
+test-results/
+.e2e-alert-schema-checkpoint.json

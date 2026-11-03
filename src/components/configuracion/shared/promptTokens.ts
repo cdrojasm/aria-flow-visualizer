@@ -12,5 +12,12 @@ export function spliceToken(
   const endAt = selection?.end ?? value.length;
   const needsLeadingSpace = at > 0 && !/\s$/.test(value.slice(0, at));
   const insertText = needsLeadingSpace ? ` ${token}` : token;
-  return { next: value.slice(0, at) + insertText + value.slice(endAt), cursor: at + insertText.length };
+  return {
+    next: value.slice(0, at) + insertText + value.slice(endAt),
+    cursor: at + insertText.length,
+  };
+}
+
+export function variablesInPrompt(prompt: string): string[] {
+  return [...new Set([...prompt.matchAll(/\{([^{}\s]+)\}/g)].map((match) => match[1]))];
 }

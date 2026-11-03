@@ -1,11 +1,15 @@
 import type {
   ApiAgentSettings,
+  ApiDelegatedResearchSettings,
+  ApiResearchAgentConfig,
+  ApiToolPickerFields,
   ApiAnalystConfig,
   ApiClassificationConfig,
   ApiAdversarialConfig,
+  ApiDetectorConfig,
+  ApiDetectorAdversarialConfig,
   ApiDocumentationConfig,
-  ApiFieldCategorization,
-  ApiFieldCriterion,
+  ApiExecutorConfig,
   ApiFilterGroup,
   ApiMonitoringSettings,
   ApiProfilingConfig,
@@ -16,15 +20,114 @@ import type {
 } from "./configurations.functions";
 import {
   type ConfigSettings,
-  type FieldCategorization,
-  type FieldCriterion,
+  type DelegatedResearchSettings,
+  type ResearchAgentConfig,
+  type ToolPickerFields,
   type FilterGroup,
   type SegmentAgentConfig,
   type SegmentCode,
   type SegmentMonitoringConfig,
   type SegmentSettings,
+  defaultSegmentAgent,
   defaultSegments,
 } from "@/data/configs";
+
+function researchToApi(research: DelegatedResearchSettings): ApiDelegatedResearchSettings {
+  const base = (v: ResearchAgentConfig) => ({
+    enabled: v.enabled,
+    max_delegations: v.maxDelegations,
+    timeout_seconds: v.timeoutSeconds,
+    max_result_items: v.maxResultItems,
+  });
+  return {
+    vector_store: {
+      ...base(research.vectorStore),
+      vector_store_instance_id: research.vectorStore.vectorStoreInstanceId,
+      vector_store_generation: research.vectorStore.vectorStoreGeneration ?? null,
+      similarity_threshold: research.vectorStore.similarityThreshold,
+      max_documents_per_query: research.vectorStore.maxDocumentsPerQuery,
+      allowed_asset_types: research.vectorStore.allowedAssetTypes,
+    },
+    history_pandas: {
+      ...base(research.historyPandas),
+      window_days: research.historyPandas.windowDays,
+      max_analysis_operations: research.historyPandas.maxAnalysisOperations,
+      planner: research.historyPandas.planner,
+      allowed_columns: research.historyPandas.allowedColumns,
+      allowed_operations: research.historyPandas.allowedOperations,
+    },
+  };
+}
+
+function researchFromApi(
+  research: Partial<ApiDelegatedResearchSettings> | undefined,
+  fallback: DelegatedResearchSettings,
+): DelegatedResearchSettings {
+  if (!research) return fallback;
+  const base = (
+    v: Partial<ApiResearchAgentConfig> | undefined,
+    d: ResearchAgentConfig,
+  ): ResearchAgentConfig => ({
+    enabled: v?.enabled ?? d.enabled,
+    maxDelegations: v?.max_delegations ?? d.maxDelegations,
+    timeoutSeconds: v?.timeout_seconds ?? d.timeoutSeconds,
+    maxResultItems: v?.max_result_items ?? d.maxResultItems,
+  });
+  const vs = research.vector_store;
+  const hp = research.history_pandas;
+  return {
+    vectorStore: {
+      ...base(vs, fallback.vectorStore),
+      vectorStoreInstanceId: vs?.vector_store_instance_id ?? null,
+      vectorStoreGeneration: vs?.vector_store_generation ?? null,
+      similarityThreshold: vs?.similarity_threshold ?? fallback.vectorStore.similarityThreshold,
+      maxDocumentsPerQuery:
+        vs?.max_documents_per_query ?? fallback.vectorStore.maxDocumentsPerQuery,
+      allowedAssetTypes: vs?.allowed_asset_types ?? fallback.vectorStore.allowedAssetTypes,
+    },
+    historyPandas: {
+      ...base(hp, fallback.historyPandas),
+      windowDays: hp?.window_days ?? fallback.historyPandas.windowDays,
+      maxAnalysisOperations:
+        hp?.max_analysis_operations ?? fallback.historyPandas.maxAnalysisOperations,
+      planner: hp?.planner ?? fallback.historyPandas.planner,
+      allowedColumns: hp?.allowed_columns ?? fallback.historyPandas.allowedColumns,
+      allowedOperations: hp?.allowed_operations ?? fallback.historyPandas.allowedOperations,
+    },
+  };
+}
+
+// The shared "Herramientas del agente" block - same wire shape for
+// Detector, both Adversarials and Clasificación.
+function toolsToApi(t: ToolPickerFields): ApiToolPickerFields {
+  return {
+    watchlist_enabled: t.watchlistEnabled,
+    watchlist_ids: t.watchlistIds,
+    watchlist_compare_field: t.watchlistCompareField,
+    calculator_enabled: t.calculatorEnabled,
+    use_xgboost_model: t.useXgboostModel,
+    xgboost_model_id: t.xgboostModelId,
+    xgboost_fraud_threshold: t.xgboostFraudThreshold,
+    xgboost_uncertainty_threshold: t.xgboostUncertaintyThreshold,
+    xgboost_shap_enabled: t.xgboostShapEnabled,
+    delegated_research: researchToApi(t.delegatedResearch),
+  };
+}
+
+function toolsFromApi(t: Partial<ApiToolPickerFields>, d: ToolPickerFields): ToolPickerFields {
+  return {
+    watchlistEnabled: t.watchlist_enabled ?? d.watchlistEnabled,
+    watchlistIds: t.watchlist_ids ?? d.watchlistIds,
+    watchlistCompareField: t.watchlist_compare_field ?? d.watchlistCompareField,
+    calculatorEnabled: t.calculator_enabled ?? d.calculatorEnabled,
+    useXgboostModel: t.use_xgboost_model ?? d.useXgboostModel,
+    xgboostModelId: t.xgboost_model_id ?? d.xgboostModelId,
+    xgboostFraudThreshold: t.xgboost_fraud_threshold ?? d.xgboostFraudThreshold,
+    xgboostUncertaintyThreshold: t.xgboost_uncertainty_threshold ?? d.xgboostUncertaintyThreshold,
+    xgboostShapEnabled: t.xgboost_shap_enabled ?? d.xgboostShapEnabled,
+    delegatedResearch: researchFromApi(t.delegated_research, d.delegatedResearch),
+  };
+}
 
 // Pure, bijective(-ish) conversion between the frontend's flat camelCase
 // ConfigSettings (src/data/configs.ts) and the backend's nested snake_case
@@ -33,9 +136,6 @@ import {
 // calls this feeds. segmento (a per-item segment tag on taxonomies/modus
 // operandi/flags/example cases) has no frontend field yet; it round-trips
 // as "" since nothing in the UI sets it.
-
-const hourToClock = (hour: number): string => `${String(hour).padStart(2, "0")}:00`;
-const clockToHour = (clock: string): number => Number(clock.split(":")[0]) || 0;
 
 function filterGroupToApi(g: FilterGroup): ApiFilterGroup {
   return {
@@ -93,203 +193,213 @@ function monitoringFromApi(m: ApiMonitoringSettings): SegmentMonitoringConfig {
   };
 }
 
-function fieldCriterionToApi(c: FieldCriterion): ApiFieldCriterion {
-  return {
-    id: c.id,
-    mode: c.mode,
-    output: c.output,
-    min_value: c.minValue ?? null,
-    max_value: c.maxValue ?? null,
-    operator: c.operator ?? null,
-    numeric_value: c.numericValue ?? null,
-    text_value: c.textValue ?? null,
-    values: c.values,
-  };
-}
-function fieldCriterionFromApi(c: ApiFieldCriterion): FieldCriterion {
-  return {
-    id: c.id,
-    mode: c.mode,
-    output: c.output,
-    minValue: c.min_value ?? undefined,
-    maxValue: c.max_value ?? undefined,
-    operator: c.operator ?? undefined,
-    numericValue: c.numeric_value ?? undefined,
-    textValue: c.text_value ?? undefined,
-    values: c.values,
-  };
-}
-function fieldCategorizationToApi(fc: FieldCategorization): ApiFieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionToApi), output_variable: fc.outputVariable };
-}
-function fieldCategorizationFromApi(fc: ApiFieldCategorization): FieldCategorization {
-  return { field: fc.field, kind: fc.kind, criteria: fc.criteria.map(fieldCriterionFromApi), outputVariable: fc.output_variable };
-}
-
 function agentToApi(a: SegmentAgentConfig): ApiAgentSettings {
+  const deterministic = {
+    alert_filter: filterGroupToApi(a.deterministic.alertFilter),
+    field_enrichment: a.deterministic.fieldEnrichment,
+    rules: a.deterministic.rules.map((rule) => ({
+      id: rule.id,
+      variable: rule.variable,
+      comparison: rule.comparison,
+      values: rule.values,
+      score: rule.score,
+      decision: rule.decision,
+      aric_action: rule.aricAction,
+    })),
+  };
   const profiling: ApiProfilingConfig = {
-    field_categorizations: a.profiling.fieldCategorizations.map(fieldCategorizationToApi),
+    // fieldEnrichment is already a plain FeatureConfiguration (Recipe/
+    // RecipeStep) object - same wire shape backend and frontend share with
+    // modelos/, so it travels as-is, no per-item mapping needed.
+    field_enrichment: a.profiling.fieldEnrichment,
     strategies: a.profiling.strategies.map((s) => ({
       key: s.key,
       main_prompt: s.mainPrompt,
       main_prompt_vars: s.mainPromptVars,
       main_prompt_mode: s.mainPromptMode,
-      categorization_prompt: s.categorizationPrompt,
-      categorization_prompt_vars: s.categorizationPromptVars,
-      use_pandas_history_mcp: s.usePandasHistoryMcp,
+      // The pandas-history MCP control was retired from Perfilamiento.
+      // Always disable legacy saved values when the configuration is saved.
+      use_pandas_history_mcp: false,
     })),
   };
+  const detector: ApiDetectorConfig = {
+    ...toolsToApi(a.detector),
+    prompt: a.detector.prompt,
+    prompt_vars: a.detector.promptVars,
+    max_thought_iterations: a.detector.maxThoughtIterations,
+    output_labels: a.detector.outputLabels,
+  };
+  const detectorAdversarial: ApiDetectorAdversarialConfig = {
+    ...toolsToApi(a.detectorAdversarial),
+    prompt: a.detectorAdversarial.prompt,
+    prompt_vars: a.detectorAdversarial.promptVars,
+    max_cycles: a.detectorAdversarial.maxCycles,
+    feed_feedback_to_classification: a.detectorAdversarial.feedFeedbackToClassification,
+    max_thought_iterations: a.detectorAdversarial.maxThoughtIterations,
+  };
   const classification: ApiClassificationConfig = {
-    vector_store_tools: a.classification.vectorStoreTools,
-    built_in_tools: a.classification.builtInTools,
+    ...toolsToApi(a.classification),
     prompt: a.classification.prompt,
     prompt_vars: a.classification.promptVars,
+    max_thought_iterations: a.classification.maxThoughtIterations,
+    output_labels: a.classification.outputLabels,
   };
   const adversarial: ApiAdversarialConfig = {
+    ...toolsToApi(a.adversarial),
     prompt: a.adversarial.prompt,
     prompt_vars: a.adversarial.promptVars,
     max_cycles: a.adversarial.maxCycles,
     feed_feedback_to_classification: a.adversarial.feedFeedbackToClassification,
   };
-  const voicebot: ApiVoicebotConfig = {
-    base_prompt: a.analyst.voicebot.basePrompt,
-    base_prompt_vars: a.analyst.voicebot.basePromptVars,
-    category_prompts: a.analyst.voicebot.categoryPrompts.map((c) => ({
+  const analyst: ApiAnalystConfig = {
+    prompt: a.analyst.prompt,
+    prompt_vars: a.analyst.promptVars,
+  };
+  const voicebotCall: ApiVoicebotConfig = {
+    base_prompt: a.executor.voicebotCall.basePrompt,
+    base_prompt_vars: a.executor.voicebotCall.basePromptVars,
+    category_prompts: a.executor.voicebotCall.categoryPrompts.map((c) => ({
       id: c.id,
       taxonomy_id: c.taxonomyId,
       prompt: c.prompt,
     })),
   };
-  const analyst: ApiAnalystConfig = {
-    playbooks: a.analyst.playbooks.map((p) => ({
-      id: p.id,
-      name: p.name,
-      strategy: p.strategy,
-      resolution_tag: p.resolutionTag,
-      resolution_method_id: p.resolutionMethodId,
-    })),
-    voicebot,
+  const documentador: ApiDocumentationConfig = {
+    strategy: a.executor.documentador.strategy,
+    template: a.executor.documentador.template,
+    template_vars: a.executor.documentador.templateVars,
+    agent_prompt: a.executor.documentador.agentPrompt,
+    agent_prompt_vars: a.executor.documentador.agentPromptVars,
   };
-  const documentation: ApiDocumentationConfig = {
-    strategy: a.documentation.strategy,
-    template: a.documentation.template,
-    template_vars: a.documentation.templateVars,
-    agent_prompt: a.documentation.agentPrompt,
-    agent_prompt_vars: a.documentation.agentPromptVars,
+  const executor: ApiExecutorConfig = {
+    aric_marking: {
+      prompt: a.executor.aricMarking.prompt,
+      prompt_vars: a.executor.aricMarking.promptVars,
+    },
+    voicebot_call: voicebotCall,
+    documentador,
+    analyst_escalation: {
+      prompt: a.executor.analystEscalation.prompt,
+      prompt_vars: a.executor.analystEscalation.promptVars,
+    },
   };
   return {
+    deterministic,
     profiling,
+    rubrics: a.rubrics.map((rubric) => ({
+      id: rubric.id,
+      name: rubric.name,
+      conditions: rubric.conditions.map(({ id, variable, comparison, values, score }) => ({
+        id,
+        variable,
+        comparison,
+        values,
+        score,
+      })),
+    })),
+    detector,
+    detector_adversarial: detectorAdversarial,
     classification,
     adversarial,
     analyst,
-    documentation,
-    taxonomies: a.taxonomies.map((t) => ({ ...t, segmento: "" })),
-    modus_operandi: a.modusOperandi.map((m) => ({
-      id: m.id,
-      title: m.title,
-      narrative: m.narrative,
-      taxonomy_id: m.taxonomyId,
-      evolved_variables: m.evolvedVariables,
-      active: m.active,
-      segmento: "",
-    })),
-    flags: a.flags.map((f) => ({
-      id: f.id,
-      flag_type: f.flagType,
-      name: f.name,
-      description: f.description,
-      evolved_variables: f.evolvedVariables,
-      modus_operandi_ids: f.modusOperandiIds,
-      segmento: "",
-    })),
-    example_cases: a.similarCases.map((c) => ({
-      id: c.id,
-      text: c.text,
-      modus_operandi_id: c.modusOperandiId,
-      taxonomy_id: c.taxonomyId,
-      segmento: "",
-    })),
+    executor,
     active_fields: a.activeFields,
     active_model_id: a.activeModelId,
   };
 }
 
 function agentFromApi(a: ApiAgentSettings): SegmentAgentConfig {
+  // Backwards-compatible while a saved version predates the deterministic
+  // configuration contract.
+  const defaults = defaultSegmentAgent();
   return {
+    deterministic: a.deterministic
+      ? {
+          alertFilter: filterGroupFromApi(a.deterministic.alert_filter),
+          fieldEnrichment: a.deterministic.field_enrichment,
+          rules: a.deterministic.rules.map((rule) => ({
+            ...rule,
+            aricAction: rule.aric_action ?? "soft_block",
+          })),
+        }
+      : defaults.deterministic,
     profiling: {
-      fieldCategorizations: a.profiling.field_categorizations.map(fieldCategorizationFromApi),
+      fieldEnrichment: a.profiling.field_enrichment,
       strategies: a.profiling.strategies.map((s) => ({
         key: s.key,
         mainPrompt: s.main_prompt,
         mainPromptVars: s.main_prompt_vars,
         mainPromptMode: s.main_prompt_mode,
-        categorizationPrompt: s.categorization_prompt,
-        categorizationPromptVars: s.categorization_prompt_vars,
-        usePandasHistoryMcp: s.use_pandas_history_mcp,
+        usePandasHistoryMcp: false,
       })),
     },
+    rubrics: a.rubrics ?? [],
+    detector: a.detector
+      ? {
+          ...toolsFromApi(a.detector, defaults.detector),
+          prompt: a.detector.prompt,
+          promptVars: a.detector.prompt_vars,
+          maxThoughtIterations:
+            a.detector.max_thought_iterations ?? defaults.detector.maxThoughtIterations,
+          outputLabels: a.detector.output_labels ?? defaults.detector.outputLabels,
+        }
+      : defaults.detector,
+    detectorAdversarial: a.detector_adversarial
+      ? {
+          ...toolsFromApi(a.detector_adversarial, defaults.detectorAdversarial),
+          prompt: a.detector_adversarial.prompt,
+          promptVars: a.detector_adversarial.prompt_vars,
+          maxCycles: a.detector_adversarial.max_cycles,
+          feedFeedbackToClassification: a.detector_adversarial.feed_feedback_to_classification,
+          maxThoughtIterations: a.detector_adversarial.max_thought_iterations,
+        }
+      : defaults.detectorAdversarial,
     classification: {
-      vectorStoreTools: a.classification
-        .vector_store_tools as SegmentAgentConfig["classification"]["vectorStoreTools"],
-      builtInTools: a.classification
-        .built_in_tools as SegmentAgentConfig["classification"]["builtInTools"],
+      ...toolsFromApi(a.classification, defaults.classification),
       prompt: a.classification.prompt,
       promptVars: a.classification.prompt_vars,
+      maxThoughtIterations: a.classification.max_thought_iterations ?? 5,
+      outputLabels: a.classification.output_labels ?? defaults.classification.outputLabels,
     },
     adversarial: {
+      ...toolsFromApi(a.adversarial, defaults.adversarial),
       prompt: a.adversarial.prompt,
       promptVars: a.adversarial.prompt_vars,
       maxCycles: a.adversarial.max_cycles,
       feedFeedbackToClassification: a.adversarial.feed_feedback_to_classification,
     },
     analyst: {
-      playbooks: a.analyst.playbooks.map((p) => ({
-        id: p.id,
-        name: p.name,
-        strategy: p.strategy,
-        resolutionTag: p.resolution_tag,
-        resolutionMethodId: p.resolution_method_id ?? undefined,
-      })),
-      voicebot: {
-        basePrompt: a.analyst.voicebot.base_prompt,
-        basePromptVars: a.analyst.voicebot.base_prompt_vars,
-        categoryPrompts: a.analyst.voicebot.category_prompts.map((c) => ({
-          id: c.id,
-          taxonomyId: c.taxonomy_id,
-          prompt: c.prompt,
-        })),
-      },
+      prompt: a.analyst?.prompt ?? defaults.analyst.prompt,
+      promptVars: a.analyst?.prompt_vars ?? defaults.analyst.promptVars,
     },
-    documentation: {
-      strategy: a.documentation.strategy,
-      template: a.documentation.template,
-      templateVars: a.documentation.template_vars,
-      agentPrompt: a.documentation.agent_prompt,
-      agentPromptVars: a.documentation.agent_prompt_vars,
-    },
-    taxonomies: a.taxonomies.map(({ segmento: _segmento, ...t }) => t),
-    modusOperandi: a.modus_operandi.map((m) => ({
-      id: m.id,
-      title: m.title,
-      narrative: m.narrative,
-      taxonomyId: m.taxonomy_id,
-      evolvedVariables: m.evolved_variables,
-      active: m.active,
-    })),
-    flags: a.flags.map((f) => ({
-      id: f.id,
-      flagType: f.flag_type,
-      name: f.name,
-      description: f.description,
-      evolvedVariables: f.evolved_variables,
-      modusOperandiIds: f.modus_operandi_ids,
-    })),
-    similarCases: a.example_cases.map((c) => ({
-      id: c.id,
-      text: c.text,
-      modusOperandiId: c.modus_operandi_id,
-      taxonomyId: c.taxonomy_id,
-    })),
+    executor: a.executor
+      ? {
+          aricMarking: {
+            prompt: a.executor.aric_marking.prompt,
+            promptVars: a.executor.aric_marking.prompt_vars,
+          },
+          voicebotCall: {
+            basePrompt: a.executor.voicebot_call.base_prompt,
+            basePromptVars: a.executor.voicebot_call.base_prompt_vars,
+            categoryPrompts: a.executor.voicebot_call.category_prompts.map((c) => ({
+              id: c.id,
+              taxonomyId: c.taxonomy_id,
+              prompt: c.prompt,
+            })),
+          },
+          documentador: {
+            strategy: a.executor.documentador.strategy,
+            template: a.executor.documentador.template,
+            templateVars: a.executor.documentador.template_vars,
+            agentPrompt: a.executor.documentador.agent_prompt,
+            agentPromptVars: a.executor.documentador.agent_prompt_vars,
+          },
+          analystEscalation: {
+            prompt: a.executor.analyst_escalation.prompt,
+            promptVars: a.executor.analyst_escalation.prompt_vars,
+          },
+        }
+      : defaults.executor,
     activeFields: a.active_fields,
     activeModelId: a.active_model_id,
   };
@@ -321,56 +431,32 @@ export function toCreateConfigurationRequest(
     description: string;
     configurationId: string | null;
     basedOnVersion?: number | null;
+    parentRef?: { configuration_id: string; version: number } | null;
     createdBy?: string | null;
   },
 ): CreateConfigurationRequest {
   const segments: Record<string, ApiSegmentSettings> = {};
   for (const [code, segment] of Object.entries(settings.segments)) {
-    segments[code] = segmentToApi(segment);
+    segments[code] = segmentToApi({
+      ...segment,
+      agent: segment.agent,
+    });
   }
   return {
     name: opts.name,
     configuration_id: opts.configurationId,
     based_on_version: opts.basedOnVersion ?? null,
+    parent_ref: opts.parentRef ?? null,
     description: opts.description,
     general: {
-      agent_enabled: settings.agentEnabled,
       migration_window_enabled: settings.migrationWindowEnabled,
-      migration_window_hour: clockToHour(settings.migrationWindowHour),
-      analyst_escalation_enabled: settings.analystEscalationEnabled,
-      voicebot_escalation_enabled: settings.voicebotEscalationEnabled,
+      migration_window_datetime: settings.migrationWindowDatetime,
     },
     infra: {
       max_instances: settings.maxInstances,
       auto_scale: settings.autoScale,
       fraud_history_db_retention_days: settings.fraudHistoryDbRetentionDays,
       fraud_history_cold_storage_retention_months: settings.fraudHistoryColdStorageRetentionMonths,
-    },
-    ops: {
-      voicebot_max_concurrent_calls: settings.voicebotMaxConcurrentCalls,
-      analyst_capacity: {
-        profiles: settings.analystCapacity.profiles,
-        default_profile_id: settings.analystCapacity.defaultProfileId,
-        day_overrides: settings.analystCapacity.dayOverrides as Record<string, string>,
-      },
-      queue_max_lifetime_value: settings.queueMaxLifetimeValue,
-      queue_max_lifetime_unit: settings.queueMaxLifetimeUnit,
-      queue_discard_amount_threshold: settings.queueDiscardAmountThreshold,
-      queue_rule_filter_enabled: settings.queueRuleFilterEnabled,
-      queue_rule_filter_mode: settings.queueRuleFilterMode,
-      queue_allowed_triggered_rules: settings.queueAllowedTriggeredRules,
-      queue_discard_behavior: {
-        resolution_tag: settings.queueDiscardBehavior.resolutionTag,
-        resolution_method_id: settings.queueDiscardBehavior.resolutionMethodId ?? null,
-      },
-      voicebot_shortage_behavior: {
-        resolution_tag: settings.voicebotShortageBehavior.resolutionTag,
-        resolution_method_id: settings.voicebotShortageBehavior.resolutionMethodId ?? null,
-      },
-      analyst_shortage_behavior: {
-        resolution_tag: settings.analystShortageBehavior.resolutionTag,
-        resolution_method_id: settings.analystShortageBehavior.resolutionMethodId ?? null,
-      },
     },
     test: {
       max_test_instances: settings.maxTestInstances,
@@ -392,39 +478,13 @@ export function settingsFromConfigurationDetail(
     segments[code as SegmentCode] = segmentFromApi(segment);
   }
   return {
-    agentEnabled: detail.general.agent_enabled,
     migrationWindowEnabled: detail.general.migration_window_enabled,
-    migrationWindowHour: hourToClock(detail.general.migration_window_hour),
-    analystEscalationEnabled: detail.general.analyst_escalation_enabled,
-    voicebotEscalationEnabled: detail.general.voicebot_escalation_enabled,
+    migrationWindowDatetime: detail.general.migration_window_datetime,
     maxInstances: detail.infra.max_instances,
     autoScale: detail.infra.auto_scale,
     fraudHistoryDbRetentionDays: detail.infra.fraud_history_db_retention_days,
-    fraudHistoryColdStorageRetentionMonths: detail.infra.fraud_history_cold_storage_retention_months,
-    voicebotMaxConcurrentCalls: detail.ops.voicebot_max_concurrent_calls,
-    analystCapacity: {
-      profiles: detail.ops.analyst_capacity.profiles,
-      defaultProfileId: detail.ops.analyst_capacity.default_profile_id,
-      dayOverrides: detail.ops.analyst_capacity.day_overrides as Record<number, string>,
-    },
-    queueMaxLifetimeValue: detail.ops.queue_max_lifetime_value,
-    queueMaxLifetimeUnit: detail.ops.queue_max_lifetime_unit,
-    queueDiscardAmountThreshold: detail.ops.queue_discard_amount_threshold,
-    queueRuleFilterEnabled: detail.ops.queue_rule_filter_enabled,
-    queueRuleFilterMode: detail.ops.queue_rule_filter_mode,
-    queueAllowedTriggeredRules: detail.ops.queue_allowed_triggered_rules,
-    queueDiscardBehavior: {
-      resolutionTag: detail.ops.queue_discard_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.queue_discard_behavior.resolution_method_id,
-    },
-    voicebotShortageBehavior: {
-      resolutionTag: detail.ops.voicebot_shortage_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.voicebot_shortage_behavior.resolution_method_id,
-    },
-    analystShortageBehavior: {
-      resolutionTag: detail.ops.analyst_shortage_behavior.resolution_tag,
-      resolutionMethodId: detail.ops.analyst_shortage_behavior.resolution_method_id,
-    },
+    fraudHistoryColdStorageRetentionMonths:
+      detail.infra.fraud_history_cold_storage_retention_months,
     maxTestInstances: detail.test.max_test_instances,
     maxConcurrentExperiments: detail.test.max_concurrent_experiments,
     experimentTimeoutMinutes: detail.test.experiment_timeout_minutes,

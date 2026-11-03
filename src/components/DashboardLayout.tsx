@@ -1,48 +1,136 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { AlertTriangle } from "lucide-react";
+import { useCanGoBack, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { AppSidebar } from "./AppSidebar";
-import { RoleModal } from "./RoleModal";
-import { useRole } from "@/hooks/useRole";
+import { AgentPanel } from "./agent/AgentPanel";
+import { ROLE_NAV, useRole } from "@/hooks/useRole";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
-export function DashboardLayout({ children }: { children: ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const { role, setRole } = useRole();
-  const [switcherOpen, setSwitcherOpen] = useState(false);
+const SIDEBAR_COLLAPSED_KEY = "aria.sidebar.collapsed";
+
+// Last choice of the user; read synchronously before the first render so the
+// bar never flashes open before collapsing. Open is the default.
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Private window: the preference only lasts for this session.
+  }
+}
+
+export function DashboardLayout({
+  children,
+  bottomBar,
+}: {
+  children: ReactNode;
+  bottomBar?: ReactNode;
+}) {
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
+  const router = useRouter();
+  const navigate = useNavigate();
+  const canGoBack = useCanGoBack();
+  const { location } = useRouterState();
+  const pathname = location.pathname;
+  const { user, role, logout } = useRole();
   const { healthy: apiHealthy, checked: apiChecked } = useApiHealth();
 
-  const forced = role === null; // read from localStorage, nothing stored yet
-  const showModal = forced || switcherOpen;
+  useEffect(() => {
+    if (user !== null) return;
+
+    const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    navigate({
+      to: "/login",
+      search: { redirect },
+      replace: true,
+    });
+  }, [location.href, navigate, user]);
+
+  useEffect(() => {
+    if (!role) return;
+    // Detail routes that aren't nav items belong to the section they are
+    // opened from (/alerta/$id is an alert of the /cola queue).
+    const section = pathname.startsWith("/alerta/") ? "/cola" : pathname;
+    const allowed = ROLE_NAV[role].some(
+      (path) => section === path || section.startsWith(`${path}/`),
+    );
+    if (!allowed) navigate({ to: ROLE_NAV[role][0] as never, replace: true });
+  }, [navigate, pathname, role]);
+
+  // Never leave protected application content behind an authentication prompt.
+  // The effect above replaces this route with the standalone login page.
+  if (user === null) return null;
 
   return (
     <div className="min-h-screen bg-background">
       <AppSidebar
         collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
+        onToggle={() =>
+          setCollapsed((c) => {
+            writeSidebarCollapsed(!c);
+            return !c;
+          })
+        }
         role={role}
-        onOpenRoleModal={() => setSwitcherOpen(true)}
+        user={user}
+        onLogout={logout}
         apiHealthy={apiHealthy}
       />
-      <main className={`${collapsed ? "ml-14" : "ml-[220px]"} min-h-screen transition-all duration-200`}>
+      <main
+        className={`${collapsed ? "ml-14" : "ml-[220px]"} min-h-screen transition-all duration-200`}
+      >
         {apiChecked && !apiHealthy && (
           <div className="sticky top-0 z-30 flex items-center gap-2.5 bg-danger/10 border-b border-danger/30 px-6 py-2.5">
             <AlertTriangle className="h-4 w-4 text-danger shrink-0" />
             <p className="text-[13px] text-danger font-medium">
-              El servicio API no está disponible. ARIA no funciona sin el servicio principal — verifica el proveedor.
+              El servicio API no está disponible. ARIA no funciona sin el servicio principal —
+              verifica el proveedor.
             </p>
           </div>
         )}
-        {children}
+        <div className="px-8 pt-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (canGoBack) {
+                router.history.back();
+                return;
+              }
+
+              navigate({ to: "/dashboard", replace: true });
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium text-text-secondary transition-colors hover:bg-surface hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="Volver a la vista anterior"
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Volver
+          </button>
+        </div>
+        {bottomBar ? <div className="pb-64 sm:pb-44 lg:pb-32">{children}</div> : children}
+        {bottomBar && (
+          <div
+            className={`fixed bottom-0 right-0 z-30 border-t border-border bg-card shadow-[0_-4px_16px_rgba(0,0,0,0.06)] transition-[left] duration-200 ${collapsed ? "left-14" : "left-[220px]"}`}
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            role="region"
+            aria-label="Acciones de configuración"
+          >
+            {bottomBar}
+          </div>
+        )}
       </main>
-      {showModal && (
-        <RoleModal
-          current={role ?? null}
-          forced={forced}
-          onSelect={(r) => { setRole(r); setSwitcherOpen(false); }}
-          onClose={forced ? undefined : () => setSwitcherOpen(false)}
-        />
-      )}
+      <AgentPanel
+        permissions={user?.permissions ?? []}
+        role={user?.role}
+        hasBottomBar={Boolean(bottomBar)}
+      />
     </div>
   );
 }

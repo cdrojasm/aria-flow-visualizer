@@ -1,28 +1,14 @@
-import { apiFetch, API_BASE } from "./client";
+import { apiFetch } from "./client";
 
 // Client functions wrapping the backend's batch-test-run API
 // (../backend, base path /api/v0 — see its CLAUDE.md for the hexagonal
 // layout, not relevant here since we only call the HTTP surface).
+// Dataset CRUD (getDatasets/uploadDataset/getDatasetSummary/deleteDataset)
+// used to live here too - moved to datasets.functions.ts, the canonical
+// module for the full dataset API surface (see DATASETS_LIBRARY_DESIGN.md).
 
 export type TestRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED";
 export type StepStatus = "PENDING" | "DISPATCHED" | "RUNNING" | "SUCCEEDED" | "FAILED";
-
-export type DatasetRecord = { name: string; row_count: number };
-
-export type DatasetStatus = "PENDING" | "PROCESSING" | "READY" | "FAILED";
-
-export type FieldDistribution = { value: string; count: number; percentage: number };
-
-export type DatasetSummaryResponse = {
-  dataset_name: string;
-  status: DatasetStatus;
-  total_rows: number;
-  field_distributions: Record<string, FieldDistribution[]>;
-  available_fields: string[];
-  uploaded_at: string | null;
-  updated_at: string | null;
-  error: string | null;
-};
 
 // null = this run tested whatever configuration was active at dispatch
 // time (the only behavior before configuration_ref existed).
@@ -33,6 +19,8 @@ export type TestRunConfig = {
   model_overrides: Record<string, string>;
   max_feedback_iterations: number;
   configuration_ref: ConfigurationRef | null;
+  schema_version: number | null;
+  active_schema_version?: number | null;
 };
 
 export type TestRunResponse = {
@@ -129,42 +117,23 @@ export type TestCaseDetailResponse = {
   input_tokens: number;
   output_tokens: number;
   steps: WorkflowStepResponse[];
+  schema_comparison: {
+    active: {
+      schema_version: number;
+      input: Record<string, unknown>;
+      labels: Record<string, unknown>;
+      history_prev_alerta: Record<string, unknown>[];
+    };
+    candidate: {
+      schema_version: number;
+      input: Record<string, unknown>;
+      labels: Record<string, unknown>;
+      history_prev_alerta: Record<string, unknown>[];
+    };
+  } | null;
+  schema_version: number | null;
+  configuration_ref: ConfigurationRef | null;
 };
-
-export function getDatasets(): Promise<DatasetRecord[]> {
-  return apiFetch("/api/v0/datasets");
-}
-
-// FormData payload (the uploaded CSV file) - bypasses apiFetch's forced
-// JSON Content-Type so the browser's multipart boundary reaches the
-// backend intact.
-export async function uploadDataset({
-  data,
-}: {
-  data: FormData;
-}): Promise<{ name: string; status: DatasetStatus }> {
-  const res = await fetch(`${API_BASE}/api/v0/datasets`, { method: "POST", body: data });
-  if (!res.ok) {
-    throw new Error(`/api/v0/datasets -> ${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<{ name: string; status: DatasetStatus }>;
-}
-
-export function getDatasetSummary({
-  data,
-}: {
-  data: { name: string };
-}): Promise<DatasetSummaryResponse> {
-  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}/summary`);
-}
-
-export function deleteDataset({
-  data,
-}: {
-  data: { name: string };
-}): Promise<{ name: string; deleted: boolean }> {
-  return apiFetch(`/api/v0/datasets/${encodeURIComponent(data.name)}`, { method: "DELETE" });
-}
 
 export function listTestRuns({
   data,
@@ -207,6 +176,7 @@ export type StartTestRunRequest = {
     // instead of whatever is active at dispatch time - lets multiple test
     // runs each target a different configuration concurrently.
     configuration_ref?: { configuration_id: string; version: number } | null;
+    schema_version?: number | null;
   };
   // Omit both = every row. sample_size alone = stratified by the dataset's
   // own no-risk/risk-suspected/risk proportions. Both = stratified by these

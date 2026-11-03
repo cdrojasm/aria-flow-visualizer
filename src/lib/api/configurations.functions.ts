@@ -1,4 +1,5 @@
 import { apiFetch, API_BASE } from "./client";
+import type { FeatureConfiguration } from "./feature-recipes.functions";
 
 // Client functions wrapping the backend's configuration CRUD/versioning API
 // (../backend, base path /api/v0/configurations — see backend/CLAUDE.md).
@@ -16,39 +17,24 @@ export type ApiAnalystCapacity = {
   default_profile_id: string;
   day_overrides: Record<string, string>;
 };
-// Shared with ApiAnalystPlaybook.resolution_tag below - one catalog, two
-// consumers (see resolution_method_catalog_port.py on the backend).
-export type ApiResolutionTag = "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
+// Resolution-method catalog tag (see resolution_method_catalog_port.py on
+// the backend).
+export type ApiResolutionTag =
+  "scale_to_analyst" | "send_to_voicebot" | "handle_by_aria" | "block_soft" | "block_hard";
 export type ApiShortageBehavior = {
   resolution_tag: ApiResolutionTag;
   resolution_method_id: string | null;
 };
 
 export type ApiGeneralSettings = {
-  agent_enabled: boolean;
   migration_window_enabled: boolean;
-  migration_window_hour: number;
-  analyst_escalation_enabled: boolean;
-  voicebot_escalation_enabled: boolean;
+  migration_window_datetime: string;
 };
 export type ApiInfraSettings = {
   max_instances: number;
   auto_scale: boolean;
   fraud_history_db_retention_days: number;
   fraud_history_cold_storage_retention_months: number;
-};
-export type ApiOpsSettings = {
-  voicebot_max_concurrent_calls: number;
-  analyst_capacity: ApiAnalystCapacity;
-  queue_max_lifetime_value: number;
-  queue_max_lifetime_unit: "minutes" | "hours" | "days";
-  queue_discard_amount_threshold: number;
-  queue_rule_filter_enabled: boolean;
-  queue_rule_filter_mode: "belongs" | "not_belongs";
-  queue_allowed_triggered_rules: string[];
-  queue_discard_behavior: ApiShortageBehavior;
-  voicebot_shortage_behavior: ApiShortageBehavior;
-  analyst_shortage_behavior: ApiShortageBehavior;
 };
 export type ApiTestSettings = {
   max_test_instances: number;
@@ -73,72 +59,102 @@ export type ApiMonitoringSettings = {
   prompt_monitoreo_vars: string[];
 };
 
-export type ApiCriteriaMode =
-  | "intervalo"
-  | "comparativa"
-  | "igualdad"
-  | "no_igualdad"
-  | "pertenencia"
-  | "no_pertenencia";
-export type ApiComparisonOperator = ">" | ">=" | "<" | "<=";
-export type ApiFieldCriterion = {
-  id: string;
-  mode: ApiCriteriaMode;
-  output: string;
-  min_value: number | null;
-  max_value: number | null;
-  operator: ApiComparisonOperator | null;
-  numeric_value: number | null;
-  text_value: string | null;
-  values: string[];
-};
-export type ApiFieldCategorization = {
-  field: string;
-  kind: "cuantizable" | "categorico";
-  criteria: ApiFieldCriterion[];
-  output_variable: string;
-};
 export type ApiProfilingStrategy = {
   key: "usuario" | "transaccion" | "transaccional";
   main_prompt: string;
   main_prompt_vars: string[];
   main_prompt_mode: "fstring" | "llm";
-  categorization_prompt: string;
-  categorization_prompt_vars: string[];
   use_pandas_history_mcp: boolean;
 };
 export type ApiProfilingConfig = {
-  field_categorizations: ApiFieldCategorization[];
+  // Same wire shape as modelos/'s FeatureConfiguration - shared canonical
+  // type for "recipe" across the whole frontend, see feature-recipes.functions.
+  field_enrichment: FeatureConfiguration;
   strategies: ApiProfilingStrategy[];
 };
+export type ApiRuleCondition = {
+  id: string;
+  variable: string;
+  comparison: "gt" | "gte" | "lt" | "lte" | "eq" | "neq" | "between" | "in";
+  values: string[];
+  score: number;
+};
+export type ApiDeterministicRule = ApiRuleCondition & {
+  decision: "risk_suspected" | "risk";
+  aric_action: "soft_block" | "hard_block";
+};
+export type ApiDeterministicConfig = {
+  alert_filter: ApiFilterGroup;
+  field_enrichment: FeatureConfiguration;
+  rules: ApiDeterministicRule[];
+};
+export type ApiRubric = { id: string; name: string; conditions: ApiRuleCondition[] };
 
-export type ApiClassificationConfig = {
-  vector_store_tools: string[];
-  built_in_tools: string[];
+// Shared tool-picker fields (item 1/2/3 of the "reemplaza base de
+// conocimiento vector store" request - see ToolPickerFields in
+// @/data/configs and ClassificationConfig in the backend's
+// configuration_port.py, which this mirrors 1:1). Membership direction for
+// a selected watchlist isn't carried here - it's read off the watchlist
+// itself (its list_type).
+export type ApiResearchAgentConfig = {
+  enabled: boolean;
+  max_delegations: number;
+  timeout_seconds: number;
+  max_result_items: number;
+};
+export type ApiDelegatedResearchSettings = {
+  vector_store: ApiResearchAgentConfig & {
+    vector_store_instance_id: string | null;
+    vector_store_generation?: number | null;
+    similarity_threshold: number;
+    max_documents_per_query: number;
+    allowed_asset_types: string[];
+  };
+  history_pandas: ApiResearchAgentConfig & {
+    window_days: number;
+    max_analysis_operations: number;
+    planner?: "llm" | "heuristic";
+    allowed_columns: string[];
+    allowed_operations: string[];
+  };
+};
+// Backend AgentToolsConfigSchema - identical for the four ReAct steps.
+export type ApiToolPickerFields = {
+  watchlist_enabled: boolean;
+  watchlist_ids: string[];
+  watchlist_compare_field: string | null;
+  calculator_enabled: boolean;
+  use_xgboost_model: boolean;
+  xgboost_model_id: string | null;
+  xgboost_fraud_threshold: number;
+  xgboost_uncertainty_threshold: number;
+  xgboost_shap_enabled: boolean;
+  delegated_research: ApiDelegatedResearchSettings;
+};
+export type ApiClassificationConfig = ApiToolPickerFields & {
   prompt: string;
   prompt_vars: string[];
+  max_thought_iterations: number;
+  output_labels: string[];
 };
-export type ApiAdversarialConfig = {
+export type ApiAdversarialConfig = ApiToolPickerFields & {
   prompt: string;
   prompt_vars: string[];
   max_cycles: number;
   feed_feedback_to_classification: boolean;
 };
-
-export type ApiAnalystPlaybook = {
-  id: string;
-  name: string;
-  strategy: string;
-  resolution_tag: ApiResolutionTag;
-  resolution_method_id?: string | null;
+export type ApiDetectorConfig = ApiClassificationConfig;
+export type ApiDetectorAdversarialConfig = ApiAdversarialConfig & {
+  max_thought_iterations: number;
 };
+
 export type ApiVoicebotCategoryPrompt = { id: string; taxonomy_id: string; prompt: string };
 export type ApiVoicebotConfig = {
   base_prompt: string;
   base_prompt_vars: string[];
   category_prompts: ApiVoicebotCategoryPrompt[];
 };
-export type ApiAnalystConfig = { playbooks: ApiAnalystPlaybook[]; voicebot: ApiVoicebotConfig };
+export type ApiAnalystConfig = { prompt: string; prompt_vars: string[] };
 
 export type ApiDocumentationConfig = {
   strategy: "template" | "agent";
@@ -148,52 +164,24 @@ export type ApiDocumentationConfig = {
   agent_prompt_vars: string[];
 };
 
-export type ApiTaxonomy = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  variables: string[];
-  examples: string[];
-  active: boolean;
-  segmento: string;
-};
-export type ApiModusOperandi = {
-  id: string;
-  title: string;
-  narrative: string;
-  taxonomy_id: string;
-  evolved_variables: string[];
-  active: boolean;
-  segmento: string;
-};
-export type ApiFlag = {
-  id: string;
-  flag_type: "red" | "yellow";
-  name: string;
-  description: string;
-  evolved_variables: string[];
-  modus_operandi_ids: string[];
-  segmento: string;
-};
-export type ApiExampleCase = {
-  id: string;
-  text: string;
-  modus_operandi_id: string;
-  taxonomy_id: string;
-  segmento: string;
+export type ApiPromptField = { prompt: string; prompt_vars: string[] };
+export type ApiExecutorConfig = {
+  aric_marking: ApiPromptField;
+  voicebot_call: ApiVoicebotConfig;
+  documentador: ApiDocumentationConfig;
+  analyst_escalation: ApiPromptField;
 };
 
 export type ApiAgentSettings = {
+  deterministic: ApiDeterministicConfig;
   profiling: ApiProfilingConfig;
+  rubrics: ApiRubric[];
+  detector: ApiDetectorConfig;
+  detector_adversarial: ApiDetectorAdversarialConfig;
   classification: ApiClassificationConfig;
   adversarial: ApiAdversarialConfig;
   analyst: ApiAnalystConfig;
-  documentation: ApiDocumentationConfig;
-  taxonomies: ApiTaxonomy[];
-  modus_operandi: ApiModusOperandi[];
-  flags: ApiFlag[];
-  example_cases: ApiExampleCase[];
+  executor: ApiExecutorConfig;
   active_fields: string[];
   active_model_id: string | null;
 };
@@ -225,10 +213,10 @@ export type CreateConfigurationRequest = {
   // Optimistic-concurrency guard: the version this draft was loaded from.
   // Backend returns 409 if the lineage has since moved past it.
   based_on_version?: number | null;
+  parent_ref?: { configuration_id: string; version: number } | null;
   description?: string;
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
-  ops: ApiOpsSettings;
   test: ApiTestSettings;
   created_by?: string | null;
   segments: Record<string, ApiSegmentSettings>;
@@ -245,14 +233,22 @@ export type ConfigurationSummaryResponse = {
   // pointing at a version where this is false overwrites it in place
   // instead of minting a new version.
   ever_activated: boolean;
+  // Sticky - true after this version has completed a test run. The backend
+  // requires it before accepting a promotion request.
+  ever_tested: boolean;
   created_at: string;
   updated_at: string;
+  parent_ref: { configuration_id: string; version: number } | null;
+};
+
+export type ConfigurationGraphNodeResponse = ConfigurationSummaryResponse & {
+  // Message of the approved deploy request that promoted this version.
+  promotion_comment: string | null;
 };
 
 export type ConfigurationDetailResponse = ConfigurationSummaryResponse & {
   general: ApiGeneralSettings;
   infra: ApiInfraSettings;
-  ops: ApiOpsSettings;
   test: ApiTestSettings;
   segments: Record<string, ApiSegmentSettings>;
   created_by: string | null;
@@ -270,10 +266,39 @@ export type TestConfigurationResponse = {
   warnings: string[];
 };
 
+export type ConfigurationDeployRequest = {
+  id: string;
+  target_configuration_id: string;
+  target_version: number;
+  current_configuration_id: string | null;
+  current_version: number | null;
+  title: string;
+  message: string;
+  changes: ConfigurationChangeResponse[];
+  requested_by: string;
+  requested_at: string;
+  status: "pending" | "approved";
+  approved_by: string | null;
+  approved_at: string | null;
+};
+
+export type ConfigurationDeployRequestPreview = Pick<
+  ConfigurationDeployRequest,
+  | "target_configuration_id"
+  | "target_version"
+  | "current_configuration_id"
+  | "current_version"
+  | "changes"
+>;
+
 // --- Client functions -------------------------------------------------------
 
 export function listConfigurations(): Promise<ConfigurationSummaryResponse[]> {
   return apiFetch("/api/v0/configurations");
+}
+
+export function getConfigurationGraph(): Promise<ConfigurationGraphNodeResponse[]> {
+  return apiFetch("/api/v0/configurations/graph");
 }
 
 export async function getActiveConfiguration(): Promise<ConfigurationDetailResponse | null> {
@@ -337,5 +362,50 @@ export function activateConfiguration({
   return apiFetch(
     `/api/v0/configurations/${encodeURIComponent(data.configurationId)}/versions/${data.version}/activate`,
     { method: "POST" },
+  );
+}
+
+export function previewConfigurationDeployRequest({
+  data,
+}: {
+  data: { configurationId: string; version: number };
+}): Promise<ConfigurationDeployRequestPreview> {
+  const params = new URLSearchParams({
+    target_configuration_id: data.configurationId,
+    target_version: String(data.version),
+  });
+  return apiFetch(`/api/v0/configuration-deploy-requests/preview?${params}`);
+}
+
+export function createConfigurationDeployRequest({
+  data,
+}: {
+  data: { configurationId: string; version: number; title: string; message: string };
+}): Promise<ConfigurationDeployRequest> {
+  return apiFetch("/api/v0/configuration-deploy-requests", {
+    method: "POST",
+    body: JSON.stringify({
+      target_configuration_id: data.configurationId,
+      target_version: data.version,
+      title: data.title,
+      message: data.message,
+    }),
+  });
+}
+
+export function listConfigurationDeployRequests(): Promise<ConfigurationDeployRequest[]> {
+  return apiFetch("/api/v0/configuration-deploy-requests");
+}
+
+export function approveConfigurationDeployRequest({
+  data,
+}: {
+  data: { requestId: string };
+}): Promise<ConfigurationDeployRequest> {
+  return apiFetch(
+    `/api/v0/configuration-deploy-requests/${encodeURIComponent(data.requestId)}/approve`,
+    {
+      method: "POST",
+    },
   );
 }

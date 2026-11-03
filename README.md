@@ -1,5 +1,9 @@
 # Información del Stack __aria-agente-prevencion-fraude-frontend__
 
+## Tests
+
+La guía de pruebas de Vector Store está en [tests/README.md](tests/README.md).
+
 | **Campo**              | **Valor**                          |
 |------------------------|------------------------------------|
 | **Namespace**          | capf0000.co.dsg                          |
@@ -106,4 +110,3 @@ Creador - O020037
 [Maven-url]: https://maven.apache.org/
 [Angular.io]: https://img.shields.io/badge/Angular-DD0031?style=for-the-badge&logo=angular&logoColor=white
 [Angular-url]: https://angular.io/
-

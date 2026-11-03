@@ -42,11 +42,12 @@ export const PromptEditor = forwardRef<
   {
     value: string;
     onChange: (v: string) => void;
+    onBlur?: (v: string) => void;
     rows?: number;
     placeholder?: string;
     disabled?: boolean;
   }
->(function PromptEditor({ value, onChange, rows = 4, placeholder, disabled }, ref) {
+>(function PromptEditor({ value, onChange, onBlur, rows = 4, placeholder, disabled }, ref) {
   const preRef = useRef<HTMLPreElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Selection persists across blur (native textarea behavior) - clicking a
@@ -76,7 +77,8 @@ export const PromptEditor = forwardRef<
     }
   };
 
-  const sharedStyle = "w-full rounded-md border border-border px-3 py-2 text-[13px] font-sans leading-[1.5] whitespace-pre-wrap break-words";
+  const sharedStyle =
+    "w-full rounded-md border border-border px-3 py-2 text-[13px] font-sans leading-[1.5] whitespace-pre-wrap break-words";
 
   return (
     <div className="relative">
@@ -92,6 +94,7 @@ export const PromptEditor = forwardRef<
         ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onBlur?.(e.target.value)}
         onScroll={syncScroll}
         onSelect={captureSelection}
         onFocus={captureSelection}

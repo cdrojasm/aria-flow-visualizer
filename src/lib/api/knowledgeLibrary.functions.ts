@@ -1,13 +1,15 @@
 import { z } from "zod";
 
 import { apiFetch } from "./client";
+import type { ApiShortageBehavior } from "./configurations.functions";
 
 // Client functions wrapping the backend's knowledge-library API (4
 // resources: taxonomies, modus operandi, flags, similar cases) - global,
-// config-independent reference data a segment's "Importar de biblioteca"
-// picker snapshot-copies from. Mirrors marcacion.functions.ts's pattern,
+// config-independent reference data. Versioned frozen snapshots of this
+// live content back the "Vector Store" concept agents reference (see
+// data/vectorStoreVersions.ts). Mirrors marcacion.functions.ts's pattern,
 // grouped in one file since all 4 resources are always used together
-// (see biblioteca.tsx and SegmentKnowledgeBaseSection.tsx).
+// (see biblioteca.tsx).
 
 const flagType = z.enum(["red", "yellow"]);
 export type FlagTypeValue = z.infer<typeof flagType>;
@@ -24,6 +26,17 @@ export type TaxonomyLibraryEntry = {
   updated_at: string;
 };
 
+// How the analyst agent resolves an alert matching this modus operandi:
+// strategy, preferred resolution method, and what to fall back to when the
+// voicebot / analysts have no capacity (applied without LLM by the
+// executor). Mirrors backend's ModusOperandiPlaybook.
+export type ApiModusOperandiPlaybook = {
+  strategy: string;
+  resolution: ApiShortageBehavior;
+  if_no_voicebot: ApiShortageBehavior;
+  if_no_analyst: ApiShortageBehavior;
+};
+
 export type ModusOperandiLibraryEntry = {
   id: string;
   title: string;
@@ -33,6 +46,7 @@ export type ModusOperandiLibraryEntry = {
   active: boolean;
   created_at: string;
   updated_at: string;
+  playbook: ApiModusOperandiPlaybook | null;
 };
 
 export type FlagLibraryEntry = {
@@ -70,7 +84,13 @@ export function listTaxonomyLibraryEntries({
 export function createTaxonomyLibraryEntry({
   data,
 }: {
-  data: { code: string; name: string; description?: string; variables?: string[]; examples?: string[] };
+  data: {
+    code: string;
+    name: string;
+    description?: string;
+    variables?: string[];
+    examples?: string[];
+  };
 }): Promise<TaxonomyLibraryEntry> {
   return apiFetch("/api/v0/library/taxonomies", { method: "POST", body: JSON.stringify(data) });
 }
@@ -96,7 +116,9 @@ export function updateTaxonomyLibraryEntry({
 }
 
 export function deleteTaxonomyLibraryEntry({ data }: { data: { entryId: string } }): Promise<void> {
-  return apiFetch(`/api/v0/library/taxonomies/${encodeURIComponent(data.entryId)}`, { method: "DELETE" });
+  return apiFetch(`/api/v0/library/taxonomies/${encodeURIComponent(data.entryId)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- Modus operandi ---------------------------------------------------------
@@ -112,7 +134,12 @@ export function listModusOperandiLibraryEntries({
 export function createModusOperandiLibraryEntry({
   data,
 }: {
-  data: { title: string; narrative: string; taxonomyLibraryId: string; evolvedVariables?: string[] };
+  data: {
+    title: string;
+    narrative: string;
+    taxonomyLibraryId: string;
+    evolvedVariables?: string[];
+  };
 }): Promise<ModusOperandiLibraryEntry> {
   return apiFetch("/api/v0/library/modus-operandi", {
     method: "POST",
@@ -135,6 +162,7 @@ export function updateModusOperandiLibraryEntry({
     taxonomyLibraryId?: string;
     evolvedVariables?: string[];
     active?: boolean;
+    playbook?: ApiModusOperandiPlaybook;
   };
 }): Promise<ModusOperandiLibraryEntry> {
   return apiFetch(`/api/v0/library/modus-operandi/${encodeURIComponent(data.entryId)}`, {
@@ -145,6 +173,7 @@ export function updateModusOperandiLibraryEntry({
       taxonomy_library_id: data.taxonomyLibraryId,
       evolved_variables: data.evolvedVariables,
       active: data.active,
+      playbook: data.playbook,
     }),
   });
 }
@@ -219,7 +248,9 @@ export function updateFlagLibraryEntry({
 }
 
 export function deleteFlagLibraryEntry({ data }: { data: { entryId: string } }): Promise<void> {
-  return apiFetch(`/api/v0/library/flags/${encodeURIComponent(data.entryId)}`, { method: "DELETE" });
+  return apiFetch(`/api/v0/library/flags/${encodeURIComponent(data.entryId)}`, {
+    method: "DELETE",
+  });
 }
 
 // --- Similar cases ------------------------------------------------------------

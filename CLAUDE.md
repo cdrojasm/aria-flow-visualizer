@@ -6,6 +6,13 @@ functions. All data calls are plain browser `fetch`s from
 the backend API, proxied by nginx. Companion repo: `../backend`
 (aria-api), see its `CLAUDE.md` for the API side.
 
+## API requests
+
+Frontend API calls must use the same-origin `/api/...` path. Nginx proxies
+that path to the backend. Do not make browser or E2E API requests directly
+to `localhost` with a port or to `127.*`; use the configured frontend/API
+location and its `/api/...` proxy path.
+
 ## Always test a frontend change through the real nginx deploy
 
 Before reporting a frontend change done, deploy it and check it in the

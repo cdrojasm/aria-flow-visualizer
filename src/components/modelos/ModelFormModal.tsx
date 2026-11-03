@@ -1,17 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Trash2 } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Field } from "@/components/configuracion/shared/FormControls";
-import { getDatasets, getDatasetSummary } from "@/lib/api/testing.functions";
+import { getDatasets, getDatasetSummary } from "@/lib/api/datasets.functions";
 import {
   createModel,
   type FieldTransform,
@@ -27,8 +21,7 @@ const KIND_LABELS: Record<FieldTransformKind, string> = {
 };
 
 /* ─── Crear modelo (task 6) ──────────────────────────────
-   Field/transformation builder, same list-editable shape as
-   SegmentProfilingSection.tsx's FieldCategorizationTable: pick a dataset,
+   Field/transformation builder: pick a dataset,
    pick fields from its already-analyzed distribution (GET /datasets/{name}
    /summary, same call the testing page's dataset picker makes), propose a
    transformation kind per field. Kept intentionally generic - the backend
@@ -55,7 +48,11 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
   });
 
   const fields = useMemo(
-    () => [...(summaryQuery.data?.available_fields ?? Object.keys(summaryQuery.data?.field_distributions ?? {}))].sort(),
+    () =>
+      [
+        ...(summaryQuery.data?.available_fields ??
+          Object.keys(summaryQuery.data?.field_distributions ?? {})),
+      ].sort(),
     [summaryQuery.data],
   );
   const targetValues = useMemo(
@@ -113,244 +110,31 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
     transforms.length > 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Nuevo modelo</DialogTitle>
-          <DialogDescription>
-            Define el dataset, el target y las transformaciones de campos. El modelo se crea en
-            estado borrador — el entrenamiento se dispara aparte, desde la tabla.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          <Field
-            label="Tag"
-            hint="Identificador legible que tú eliges (el id interno se autogenera)."
-          >
-            <input
-              value={tag}
-              onChange={(e) => setTag(e.target.value)}
-              placeholder="Ej: xus-v1"
-              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
-            />
-          </Field>
-
-          <Field label="Descripción">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
-            />
-          </Field>
-
-          <Field label="Dataset">
-            <select
-              value={datasetName}
-              onChange={(e) => {
-                setDatasetName(e.target.value);
-                setTargetField("");
-                setPositiveLabels([]);
-                setTransforms([]);
-              }}
-              className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
-            >
-              <option value="">Selecciona un dataset</option>
-              {(datasetsQuery.data ?? []).map((d) => (
-                <option key={d.name} value={d.name}>
-                  {d.name} ({d.row_count} filas)
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          {datasetName && summaryQuery.isLoading && (
-            <p className="text-[12px] text-text-secondary">Cargando campos del dataset…</p>
-          )}
-
-          {datasetName && fields.length > 0 && (
-            <>
-              <Field
-                label="Campo objetivo (target)"
-                hint="Columna que el modelo aprende a predecir."
-              >
-                <select
-                  value={targetField}
-                  onChange={(e) => {
-                    setTargetField(e.target.value);
-                    setPositiveLabels([]);
-                  }}
-                  className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
-                >
-                  <option value="">Selecciona un campo</option>
-                  {fields.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-
-              {targetField && (
-                <Field
-                  label="Valores positivos"
-                  hint="Qué valores del target cuentan como clase positiva (ej: 'risk')."
-                >
-                  <div className="flex flex-wrap gap-1.5">
-                    {targetValues.map((v) => {
-                      const active = positiveLabels.includes(v);
-                      return (
-                        <button
-                          key={v}
-                          type="button"
-                          onClick={() =>
-                            setPositiveLabels(
-                              active
-                                ? positiveLabels.filter((p) => p !== v)
-                                : [...positiveLabels, v],
-                            )
-                          }
-                          className={`px-2.5 py-1 rounded-md text-[12px] border transition-colors ${
-                            active
-                              ? "bg-primary text-white border-primary"
-                              : "border-border text-text-secondary hover:text-text-primary"
-                          }`}
-                        >
-                          {v}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </Field>
-              )}
-
-              <Field
-                label="Transformaciones de campos"
-                hint="Elige cada campo a usar como feature y cómo transformarlo."
-              >
-                <div className="space-y-2">
-                  {transforms.map((t) => (
-                    <div
-                      key={t.field}
-                      className="rounded-md border border-border px-3 py-2 space-y-1.5"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] text-text-primary flex-1 font-mono">
-                          {t.field}
-                        </span>
-                        <select
-                          value={t.kind}
-                          onChange={(e) =>
-                            updateTransform(t.field, { kind: e.target.value as FieldTransformKind })
-                          }
-                          className="h-7 rounded border border-border px-2 text-[12px] bg-background"
-                        >
-                          {(Object.keys(KIND_LABELS) as FieldTransformKind[]).map((k) => (
-                            <option key={k} value={k}>
-                              {KIND_LABELS[k]}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => removeTransform(t.field)}
-                          className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      {t.kind === "date_derived" && (
-                        <div className="flex items-center gap-1.5 pl-1">
-                          <span className="text-[11px] text-text-secondary shrink-0">
-                            Fecha de referencia (opcional, para calcular días transcurridos):
-                          </span>
-                          <select
-                            value={t.reference_field ?? ""}
-                            onChange={(e) =>
-                              updateTransform(t.field, { reference_field: e.target.value || null })
-                            }
-                            className="h-7 rounded border border-border px-2 text-[12px] bg-background"
-                          >
-                            <option value="">Ninguna</option>
-                            {fields
-                              .filter((f) => f !== t.field)
-                              .map((f) => (
-                                <option key={f} value={f}>
-                                  {f}
-                                </option>
-                              ))}
-                          </select>
-                        </div>
-                      )}
-                      {t.kind === "rule_multihot" && (
-                        <div className="flex items-center gap-1.5 pl-1">
-                          <span className="text-[11px] text-text-secondary shrink-0">
-                            Top-N tokens más frecuentes:
-                          </span>
-                          <input
-                            type="number"
-                            min={1}
-                            max={200}
-                            value={t.top_n}
-                            onChange={(e) =>
-                              updateTransform(t.field, { top_n: Number(e.target.value) })
-                            }
-                            className="w-20 h-7 rounded border border-border px-2 text-[12px]"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={newField}
-                      onChange={(e) => setNewField(e.target.value)}
-                      className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
-                    >
-                      <option value="">Selecciona un campo…</option>
-                      {availableFields.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={newKind}
-                      onChange={(e) => setNewKind(e.target.value as FieldTransformKind)}
-                      className="h-8 rounded-md border border-border px-2 text-[12px] bg-background"
-                    >
-                      {(Object.keys(KIND_LABELS) as FieldTransformKind[]).map((k) => (
-                        <option key={k} value={k}>
-                          {KIND_LABELS[k]}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={addTransform}
-                      disabled={!newField}
-                      className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary disabled:opacity-50"
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Agregar
-                    </button>
-                  </div>
-                </div>
-              </Field>
-            </>
-          )}
-
-          {createMutation.isError && (
-            <p className="text-[12px] text-danger">
-              Error al crear el modelo: {(createMutation.error as Error).message}
-            </p>
-          )}
-        </div>
-
-        <DialogFooter>
+    <SideDrawer
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          reset();
+          onClose();
+        }
+      }}
+      dirty={tag.trim() !== "" || description.trim() !== "" || datasetName !== ""}
+      size="lg"
+      title="Nuevo modelo"
+      description={
+        <>
+          Define el dataset, el target y las transformaciones de campos. El modelo se crea en estado
+          borrador — el entrenamiento se dispara aparte, desde la tabla.
+        </>
+      }
+      footer={
+        <>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              reset();
+              onClose();
+            }}
             className="px-3 py-2 rounded-md text-[13px] text-text-secondary hover:text-text-primary"
           >
             Cancelar
@@ -363,8 +147,236 @@ export function ModelFormModal({ open, onClose }: { open: boolean; onClose: () =
           >
             {createMutation.isPending ? "Creando…" : "Crear modelo"}
           </button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <Field
+          label="Tag"
+          hint="Identificador legible que tú eliges (el id interno se autogenera)."
+        >
+          <input
+            value={tag}
+            onChange={(e) => setTag(e.target.value)}
+            placeholder="Ej: xus-v1"
+            className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary"
+          />
+        </Field>
+
+        <Field label="Descripción">
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full rounded-md border border-border px-3 py-2 text-[13px] focus:outline-none focus:border-primary resize-none"
+          />
+        </Field>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[12px] font-medium text-text-primary">Dataset</label>
+            <Link
+              to="/biblioteca"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+            >
+              Gestionar en Biblioteca <ExternalLink className="h-3 w-3" />
+            </Link>
+          </div>
+          <select
+            value={datasetName}
+            onChange={(e) => {
+              setDatasetName(e.target.value);
+              setTargetField("");
+              setPositiveLabels([]);
+              setTransforms([]);
+            }}
+            className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
+          >
+            <option value="">Selecciona un dataset</option>
+            {(datasetsQuery.data ?? []).map((d) => (
+              <option key={d.name} value={d.name}>
+                {d.name} ({d.row_count} filas)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {datasetName && summaryQuery.isLoading && (
+          <p className="text-[12px] text-text-secondary">Cargando campos del dataset…</p>
+        )}
+
+        {datasetName && fields.length > 0 && (
+          <>
+            <Field label="Campo objetivo (target)" hint="Columna que el modelo aprende a predecir.">
+              <select
+                value={targetField}
+                onChange={(e) => {
+                  setTargetField(e.target.value);
+                  setPositiveLabels([]);
+                }}
+                className="w-full h-9 rounded-md border border-border px-3 text-[13px] focus:outline-none focus:border-primary bg-background"
+              >
+                <option value="">Selecciona un campo</option>
+                {fields.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            {targetField && (
+              <Field
+                label="Valores positivos"
+                hint="Qué valores del target cuentan como clase positiva (ej: 'risk')."
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {targetValues.map((v) => {
+                    const active = positiveLabels.includes(v);
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() =>
+                          setPositiveLabels(
+                            active ? positiveLabels.filter((p) => p !== v) : [...positiveLabels, v],
+                          )
+                        }
+                        className={`px-2.5 py-1 rounded-md text-[12px] border transition-colors ${
+                          active
+                            ? "bg-primary text-white border-primary"
+                            : "border-border text-text-secondary hover:text-text-primary"
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
+
+            <Field
+              label="Transformaciones de campos"
+              hint="Elige cada campo a usar como feature y cómo transformarlo."
+            >
+              <div className="space-y-2">
+                {transforms.map((t) => (
+                  <div
+                    key={t.field}
+                    className="rounded-md border border-border px-3 py-2 space-y-1.5"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-text-primary flex-1 font-mono">
+                        {t.field}
+                      </span>
+                      <select
+                        value={t.kind}
+                        onChange={(e) =>
+                          updateTransform(t.field, { kind: e.target.value as FieldTransformKind })
+                        }
+                        className="h-7 rounded border border-border px-2 text-[12px] bg-background"
+                      >
+                        {(Object.keys(KIND_LABELS) as FieldTransformKind[]).map((k) => (
+                          <option key={k} value={k}>
+                            {KIND_LABELS[k]}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeTransform(t.field)}
+                        className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {t.kind === "date_derived" && (
+                      <div className="flex items-center gap-1.5 pl-1">
+                        <span className="text-[11px] text-text-secondary shrink-0">
+                          Fecha de referencia (opcional, para calcular días transcurridos):
+                        </span>
+                        <select
+                          value={t.reference_field ?? ""}
+                          onChange={(e) =>
+                            updateTransform(t.field, { reference_field: e.target.value || null })
+                          }
+                          className="h-7 rounded border border-border px-2 text-[12px] bg-background"
+                        >
+                          <option value="">Ninguna</option>
+                          {fields
+                            .filter((f) => f !== t.field)
+                            .map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
+                    {t.kind === "rule_multihot" && (
+                      <div className="flex items-center gap-1.5 pl-1">
+                        <span className="text-[11px] text-text-secondary shrink-0">
+                          Top-N tokens más frecuentes:
+                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={200}
+                          value={t.top_n}
+                          onChange={(e) =>
+                            updateTransform(t.field, { top_n: Number(e.target.value) })
+                          }
+                          className="w-20 h-7 rounded border border-border px-2 text-[12px]"
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center gap-2">
+                  <select
+                    value={newField}
+                    onChange={(e) => setNewField(e.target.value)}
+                    className="flex-1 h-8 rounded-md border border-border px-2 text-[12px] bg-background"
+                  >
+                    <option value="">Selecciona un campo…</option>
+                    {availableFields.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={newKind}
+                    onChange={(e) => setNewKind(e.target.value as FieldTransformKind)}
+                    className="h-8 rounded-md border border-border px-2 text-[12px] bg-background"
+                  >
+                    {(Object.keys(KIND_LABELS) as FieldTransformKind[]).map((k) => (
+                      <option key={k} value={k}>
+                        {KIND_LABELS[k]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={addTransform}
+                    disabled={!newField}
+                    className="flex items-center gap-1 px-2.5 h-8 rounded-md border border-border text-[12px] text-text-secondary hover:text-text-primary disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Agregar
+                  </button>
+                </div>
+              </div>
+            </Field>
+          </>
+        )}
+
+        {createMutation.isError && (
+          <p className="text-[12px] text-danger">
+            Error al crear el modelo: {(createMutation.error as Error).message}
+          </p>
+        )}
+      </div>
+    </SideDrawer>
   );
 }

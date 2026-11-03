@@ -1,0 +1,6 @@
+eventid,eventtype,channel,integrationpoint,amount_value,fecha_transaccion,customerid,tipo,marcacion_final,biocatch_score,reviewstatus_first,deviceid,transactionid,triggered_rules,device_ipaddress_encrypted,counterpartyentityid_encrypted,biocatch_isMobileRat,biocatch_isEmulator,biocatch_isRat,biocatch_isBot
+e2e-alert-0001,paymentRT,OM,patchPaymentRequest,2500.0,2026-10-12 16:25:56.000,e2e-customer-0001,NoFraude,no-risk,0.01,no-risk,e2e-device-0001,e2e-tx-0001,none,e2e-ip-0001,e2e-payee-0001,false,false,false,false
+e2e-alert-0002,paymentRT,OM,patchPaymentRequest,3200.0,2026-10-12 16:10:18.000,e2e-customer-0002,NoFraude,no-risk,0.02,no-risk,e2e-device-0002,e2e-tx-0002,none,e2e-ip-0002,e2e-payee-0002,false,false,false,false
+e2e-alert-0003,paymentRT,OM,patchPaymentRequest,4100.0,2026-10-12 16:32:54.000,e2e-customer-0003,NoFraude,no-risk,0.01,no-risk,e2e-device-0003,e2e-tx-0003,none,e2e-ip-0003,e2e-payee-0003,false,false,false,false
+e2e-alert-0004,paymentRT,OM,patchPaymentRequest,5500.0,2026-10-12 13:42:51.000,e2e-customer-0004,NoFraude,no-risk,0.03,no-risk,e2e-device-0004,e2e-tx-0004,none,e2e-ip-0004,e2e-payee-0004,false,false,false,false
+e2e-alert-0005,paymentRT,OM,patchPaymentRequest,8100.0,2026-10-12 14:19:03.000,e2e-customer-0005,NoFraude,no-risk,0.02,no-risk,e2e-device-0005,e2e-tx-0005,none,e2e-ip-0005,e2e-payee-0005,false,false,false,false

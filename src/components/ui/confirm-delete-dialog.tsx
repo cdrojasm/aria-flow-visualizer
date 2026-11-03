@@ -16,6 +16,11 @@ interface ConfirmDeleteDialogProps {
   consequence: string;
   onConfirm: () => void;
   pending?: boolean;
+  // Shown below the consequence text when a previous confirm attempt
+  // failed - the dialog stays open (onOpenChange isn't called on error) so
+  // the user can see why and retry, instead of it silently going back to
+  // idle with no explanation.
+  error?: string;
 }
 
 export function ConfirmDeleteDialog({
@@ -25,6 +30,7 @@ export function ConfirmDeleteDialog({
   consequence,
   onConfirm,
   pending,
+  error,
 }: ConfirmDeleteDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -33,6 +39,7 @@ export function ConfirmDeleteDialog({
           <AlertDialogTitle>Eliminar {itemName}</AlertDialogTitle>
           <AlertDialogDescription>{consequence}</AlertDialogDescription>
         </AlertDialogHeader>
+        {error && <p className="text-[12px] text-danger">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
           <AlertDialogAction

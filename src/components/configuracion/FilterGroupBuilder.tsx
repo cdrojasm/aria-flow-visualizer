@@ -12,6 +12,7 @@ import {
   type TagCategory,
 } from "@/data/configs";
 import { TagMultiSelect } from "./TagMultiSelect";
+import { createId } from "@/lib/createId";
 
 const CATEGORY_OPTIONS: TagCategory[] = ["integration_point", "triggered_rule", "event_type"];
 
@@ -38,7 +39,7 @@ export function FilterGroupBuilder({
       ...value,
       conditions: [
         ...value.conditions,
-        { id: crypto.randomUUID(), category: "event_type", operator: "in", values: [] },
+        { id: createId(), category: "event_type", operator: "in", values: [] },
       ],
     });
 

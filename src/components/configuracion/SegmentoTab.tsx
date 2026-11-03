@@ -29,11 +29,21 @@ export function SegmentoTab({
   onChange,
   channels,
   disabled,
+  channelsOnly = false,
+  allowChannelManagement = false,
+  allowProcessingToggle = true,
 }: {
   value: Record<SegmentCode, SegmentSettings>;
   onChange: (segments: Record<SegmentCode, SegmentSettings>) => void;
   channels: { code: string; name: string }[];
   disabled?: boolean;
+  /** General configuration owns channel availability; routing rules belong
+   * exclusively to the channel-manager segment-configuration workspace. */
+  channelsOnly?: boolean;
+  /** Only Manager and Release Manager own membership of a configuration. */
+  allowChannelManagement?: boolean;
+  /** Only Manager and Release Manager can enable processing for a channel. */
+  allowProcessingToggle?: boolean;
 }) {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [removingCode, setRemovingCode] = useState<string | null>(null);
@@ -83,14 +93,16 @@ export function SegmentoTab({
         <Link to="/biblioteca" className="text-primary underline">
           Biblioteca → Canales
         </Link>
-        . Los valores de punto de integración, regla disparada y tipo de evento en{" "}
-        <Link to="/biblioteca" className="text-primary underline">
-          Biblioteca → Catálogos de eventos
-        </Link>
-        .
+        {channelsOnly
+          ? ". Aquí solo se habilita o deshabilita el procesamiento por canal."
+          : <>. Los valores de punto de integración, regla disparada y tipo de evento en{" "}
+              <Link to="/biblioteca" className="text-primary underline">
+                Biblioteca → Catálogos de eventos
+              </Link>
+              .</>}
       </p>
 
-      {!disabled && availableToAdd.length > 0 && (
+      {!disabled && allowChannelManagement && availableToAdd.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 bg-card rounded-xl border border-border p-4">
           <span className="text-[11px] font-medium text-text-secondary">Agregar canal a esta configuración:</span>
           {availableToAdd.map((channel) => (
@@ -109,20 +121,24 @@ export function SegmentoTab({
       {orderedCodes.map((code) => (
         <section
           key={code}
-          draggable={!disabled}
-          onDragStart={() => setDraggedCode(code)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={() => reorder(code)}
+          draggable={!disabled && !channelsOnly && allowChannelManagement}
+          onDragStart={() => !channelsOnly && setDraggedCode(code)}
+          onDragOver={(e) => !channelsOnly && e.preventDefault()}
+          onDrop={() => !channelsOnly && reorder(code)}
           onDragEnd={() => setDraggedCode(null)}
           className={`bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] ${draggedCode === code ? "opacity-50" : ""}`}
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
             <div className="flex items-center gap-3">
-              {!disabled && <GripVertical className="h-4 w-4 text-text-secondary cursor-grab shrink-0" />}
+              {!disabled && !channelsOnly && allowChannelManagement && <GripVertical className="h-4 w-4 text-text-secondary cursor-grab shrink-0" />}
               <div>
                 <h2 className="text-[14px] font-semibold text-text-primary">{channelLabels[code] ?? code}</h2>
                 <p className="text-[12px] text-text-secondary mt-0.5">
-                  Enciende el procesamiento de este segmento y define, con condiciones AND/OR, qué eventos maneja.
+                  {channelsOnly
+                    ? "Habilita o deshabilita el procesamiento para este canal."
+                    : allowProcessingToggle
+                      ? "Enciende el procesamiento de este segmento y define, con condiciones AND/OR, qué eventos maneja."
+                      : "Define, con condiciones AND/OR, qué eventos maneja. El procesamiento lo habilita o deshabilita un Manager o Release Manager."}
                 </p>
               </div>
             </div>
@@ -130,9 +146,15 @@ export function SegmentoTab({
               <Switch
                 checked={value[code].enabled}
                 onCheckedChange={(enabled) => updateSegment(code, { enabled })}
-                disabled={disabled}
+                disabled={disabled || !allowProcessingToggle}
+                aria-label={`Procesamiento para ${channelLabels[code] ?? code}`}
+                title={
+                  !allowProcessingToggle
+                    ? "Sólo un Manager o Release Manager puede habilitar o deshabilitar el procesamiento."
+                    : undefined
+                }
               />
-              {!disabled && (
+              {!disabled && !channelsOnly && allowChannelManagement && (
                 <button
                   type="button"
                   title="Quitar canal de esta configuración"
@@ -144,18 +166,22 @@ export function SegmentoTab({
               )}
             </div>
           </div>
-          <div className="p-6">
-            <FilterGroupBuilder
-              value={value[code].filter}
-              onChange={(filter) => updateSegment(code, { filter })}
-              disabled={disabled}
-            />
-          </div>
+          {!channelsOnly && (
+            <div className="p-6">
+              <FilterGroupBuilder
+                value={value[code].filter}
+                onChange={(filter) => updateSegment(code, { filter })}
+                disabled={disabled}
+              />
+            </div>
+          )}
         </section>
       ))}
       {orderedCodes.length === 0 && (
         <p className="text-[13px] text-text-secondary text-center py-8">
-          Sin canales activos en Biblioteca — agrega uno para configurar segmentos.
+          {channelsOnly
+            ? "No hay canales disponibles para habilitar. Agrégalos en Biblioteca."
+            : "Sin canales activos en Biblioteca — agrega uno para configurar segmentos."}
         </p>
       )}
 

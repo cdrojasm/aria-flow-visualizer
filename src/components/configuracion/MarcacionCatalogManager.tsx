@@ -2,15 +2,9 @@ import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
 import { ConfirmDeleteDialog } from "@/components/ui/confirm-delete-dialog";
 import {
   createMarcacionCategory,
@@ -105,16 +99,19 @@ export function MarcacionCatalogManager({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Gestionar categorías de marcación</DialogTitle>
-          <DialogDescription>
-            Razones de marcación que ARIA puede asignar cuando resuelve una alerta directamente. Cada una
-            mapea a una etiqueta de riesgo general.
-          </DialogDescription>
-        </DialogHeader>
-
+    <>
+      <SideDrawer
+        open={open}
+        onOpenChange={onOpenChange}
+        size="md"
+        title="Gestionar categorías de marcación"
+        description={
+          <>
+            Razones de marcación que ARIA puede asignar cuando resuelve una alerta directamente.
+            Cada una mapea a una etiqueta de riesgo general.
+          </>
+        }
+      >
         <div className="flex items-center gap-2">
           <Input
             value={newValue}
@@ -143,69 +140,78 @@ export function MarcacionCatalogManager({
           </Button>
         </div>
 
-        {error && <p className="text-[12px] text-danger">{error}</p>}
-
-        <div className="max-h-80 overflow-y-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Valor</TableHead>
-                <TableHead className="w-40">Riesgo</TableHead>
-                <TableHead className="w-24">Estado</TableHead>
-                <TableHead className="w-10" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {categories.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className={`text-[13px] ${c.active ? "" : "text-text-secondary line-through"}`}>
+        <DataTable<MarcacionCategoryResponse>
+          storageKey="configuration.marcacion-categories"
+          columns={
+            [
+              {
+                key: "value",
+                label: "Valor",
+                render: (c) => (
+                  <span className={c.active ? "" : "text-text-secondary line-through"}>
                     {c.value}
-                  </TableCell>
-                  <TableCell>
-                    <select
-                      value={c.risk_label}
-                      onChange={(e) => handleRiskLabelChange(c, e.target.value as RiskLabel)}
-                      className="h-8 w-full rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
-                    >
-                      {RISK_LABEL_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(c)}
-                      className="text-[11px] font-medium text-primary hover:underline"
-                    >
-                      {c.active ? "Desactivar" : "Activar"}
-                    </button>
-                  </TableCell>
-                  <TableCell>
-                    <button
-                      type="button"
-                      onClick={() => setDeleting(c)}
-                      className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loading && categories.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-[12px] text-text-secondary py-6">
-                    Sin categorías de marcación.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </DialogContent>
-
+                  </span>
+                ),
+                sortValue: (c) => c.value,
+                searchValue: (c) => c.value,
+              },
+              {
+                key: "risk",
+                label: "Riesgo",
+                minWidth: 180,
+                render: (c) => (
+                  <select
+                    value={c.risk_label}
+                    onChange={(e) => handleRiskLabelChange(c, e.target.value as RiskLabel)}
+                    className="h-8 w-full rounded-md border border-border px-2 text-[12px] focus:outline-none focus:border-primary bg-background"
+                  >
+                    {RISK_LABEL_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ),
+                sortValue: (c) => c.risk_label,
+                searchValue: (c) =>
+                  RISK_LABEL_OPTIONS.find((o) => o.value === c.risk_label)?.label ?? c.risk_label,
+              },
+              {
+                key: "active",
+                label: "Estado",
+                render: (c) => (
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(c)}
+                    className="text-[11px] font-medium text-primary hover:underline"
+                  >
+                    {c.active ? "Desactivar" : "Activar"}
+                  </button>
+                ),
+                sortValue: (c) => Number(c.active),
+                searchValue: (c) => (c.active ? "Activo" : "Inactivo"),
+              },
+            ] as DataTableColumn<MarcacionCategoryResponse>[]
+          }
+          rows={categories}
+          rowKey={(c) => c.id}
+          isLoading={loading}
+          error={error ?? undefined}
+          actions={(c) => (
+            <button
+              type="button"
+              onClick={() => setDeleting(c)}
+              aria-label={`Eliminar categoría ${c.value}`}
+              className="p-1 rounded hover:bg-danger/10 text-text-secondary hover:text-danger"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          emptyLabel="Sin categorías de marcación."
+          pageSize={10}
+          itemLabel="categoría"
+        />
+      </SideDrawer>
       <ConfirmDeleteDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
@@ -214,6 +220,6 @@ export function MarcacionCatalogManager({
         pending={deletePending}
         onConfirm={() => deleting && handleDelete(deleting)}
       />
-    </Dialog>
+    </>
   );
 }

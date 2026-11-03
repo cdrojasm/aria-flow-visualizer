@@ -1,7 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
+import { ActionButton, DataTable, TruncText } from "@/components/ui/DataTable";
+import { SideDrawer } from "@/components/ui/side-drawer";
 import {
   addWatchlistElements,
   importWatchlistElements,
@@ -123,26 +125,16 @@ export function WatchlistElementsModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
+    <SideDrawer
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={watchlist.name}
+      description={`${watchlist.element_count.toLocaleString("es-CO")} elementos`}
+      size="xl"
+      bare
+      dirty={!!newValue.trim()}
     >
-      <div
-        className="bg-card rounded-xl border border-border w-full max-w-lg shadow-xl max-h-[85vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <div>
-            <h3 className="text-[14px] font-semibold text-text-primary">{watchlist.name}</h3>
-            <p className="text-[11px] text-text-secondary mt-0.5">
-              {watchlist.element_count.toLocaleString("es-CO")} elementos
-            </p>
-          </div>
-          <button onClick={onClose} className="text-text-secondary hover:text-text-primary">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="px-5 py-4 border-b border-border space-y-3">
           <div className="flex gap-2">
             <input
@@ -190,47 +182,50 @@ export function WatchlistElementsModal({
           {error && <p className="text-[11px] text-danger">{error}</p>}
         </div>
 
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full text-[13px]">
-            <tbody>
-              {values.map((value) => (
-                <tr key={value} className="border-b border-border last:border-0 hover:bg-surface">
-                  <td className="px-5 py-2 font-mono text-[12px] text-text-primary break-all">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <DataTable
+            storageKey="biblioteca-lista-elementos"
+            itemLabel="elemento"
+            rows={values}
+            rowKey={(value) => value}
+            isLoading={loading && values.length === 0}
+            emptyLabel="Sin elementos en esta lista."
+            searchPlaceholder="Buscar en lo cargado…"
+            columns={[
+              {
+                key: "value",
+                label: "Valor",
+                minWidth: 220,
+                sortValue: (value) => value,
+                searchValue: (value) => value,
+                render: (value) => (
+                  <TruncText maxWidth={420} className="font-mono text-[12px] text-text-primary">
                     {value}
-                  </td>
-                  <td className="px-3 py-2 w-10">
-                    <button
-                      onClick={() => handleRemove(value)}
-                      disabled={removingValue === value}
-                      className="p-1.5 rounded hover:bg-danger/10 text-text-secondary hover:text-danger disabled:opacity-50"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {values.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={2} className="px-5 py-8 text-center text-text-secondary">
-                    Sin elementos en esta lista.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          {cursor && (
-            <div className="p-3 flex justify-center">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                className="px-4 py-1.5 rounded-md text-[12px] border border-border hover:bg-surface disabled:opacity-50"
+                  </TruncText>
+                ),
+              },
+            ]}
+            actionsWidth={90}
+            actions={(value) => (
+              <ActionButton
+                tone="danger"
+                icon={<Trash2 className="h-3 w-3" />}
+                disabled={removingValue === value}
+                onClick={() => handleRemove(value)}
               >
-                {loading ? "Cargando…" : "Cargar más"}
-              </button>
-            </div>
-          )}
+                Quitar
+              </ActionButton>
+            )}
+            footerExtra={
+              cursor && (
+                <ActionButton onClick={loadMore} disabled={loading}>
+                  {loading ? "Cargando…" : "Cargar más"}
+                </ActionButton>
+              )
+            }
+          />
         </div>
       </div>
-    </div>
+    </SideDrawer>
   );
 }
