@@ -283,6 +283,10 @@ test.describe("drawer lateral único", () => {
     page,
     request,
   }) => {
+    // This flow creates and removes a taxonomy with its knowledge-graph
+    // descendants through the real API. Keep enough time for OpenSearch on
+    // the shared local stack, while retaining Playwright's action assertions.
+    test.setTimeout(90_000);
     const suffix = Date.now().toString();
     const auth = { Authorization: `Bearer ${token}` };
     let taxonomyId: string | undefined;
