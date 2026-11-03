@@ -1,4 +1,4 @@
-.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced test-e2e-agent test-e2e-agent-optimizer test-e2e-capability-help
+.PHONY: help build build-static deploy refresh-github-token run down logs shell test-web-prepare test-web-component-vector-store test-e2e-vector-store test-e2e-entities-advanced test-e2e-agent test-e2e-agent-optimizer test-e2e-capability-help test-e2e-prod-smoke
 
 .DEFAULT_GOAL := help
 
@@ -100,3 +100,7 @@ test-e2e-capability-help: ## Run contextual capability help E2E through nginx wi
 
 shell: ## Shell into running app container
 	docker compose exec web sh
+
+test-e2e-prod-smoke: ## Smoke E2E against a deployed env over HTTP only (no docker). Needs ARIA_E2E_BASE_URL and E2E_<ROLE>_EMAIL/PASSWORD
+	@test -n "$$ARIA_E2E_BASE_URL" || { echo "Define ARIA_E2E_BASE_URL (p.ej. https://aria.example.com)"; exit 1; }
+	E2E_PLAYWRIGHT_WORKERS=1 npm run test:e2e:prod-smoke
