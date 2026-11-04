@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
 import { useRole } from "@/hooks/useRole";
+import { isOidcEnabled } from "@/lib/api/auth.functions";
 
 const FALLBACK_REDIRECT = "/dashboard";
 
@@ -26,7 +27,12 @@ function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [oidcEnabled, setOidcEnabled] = useState(false);
   const destination = safeRedirect(redirect);
+
+  useEffect(() => {
+    isOidcEnabled().then(setOidcEnabled).catch(() => setOidcEnabled(false));
+  }, []);
 
   useEffect(() => {
     if (user) navigate({ to: destination as never, replace: true });
@@ -90,6 +96,11 @@ function LoginPage() {
         >
           {loading ? "Ingresando…" : "Ingresar"}
         </button>
+        {oidcEnabled && (
+          <a href="/api/v0/auth/oidc/start" className="mt-3 block w-full rounded-md border border-border px-4 py-2 text-center text-sm font-medium">
+            Ingresar con Nauthilus
+          </a>
+        )}
       </form>
     </main>
   );

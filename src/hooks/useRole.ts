@@ -66,7 +66,7 @@ export function useRole() {
 
   useEffect(() => {
     if (!localStorage.getItem(ACCESS_TOKEN_KEY)) {
-      setUser(null);
+      getCurrentUser().then(setUser).catch(() => setUser(null));
       return;
     }
     getCurrentUser()

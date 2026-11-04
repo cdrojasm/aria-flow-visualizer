@@ -26,6 +26,11 @@ export async function login(email: string, password: string): Promise<LoginRespo
   });
 }
 
+export async function isOidcEnabled(): Promise<boolean> {
+  const result = await apiFetch<{ enabled: boolean }>("/api/v0/auth/oidc/enabled");
+  return result.enabled;
+}
+
 export async function getCurrentUser(): Promise<AuthUser> {
   return apiFetch("/api/v0/auth/me");
 }
