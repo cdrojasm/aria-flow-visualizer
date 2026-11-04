@@ -1,0 +1,1386 @@
+{
+ "login": {
+  "route": "/login",
+  "dims": {
+   "w": 1600,
+   "h": 1000
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 608,
+    "y": 353,
+    "w": 384,
+    "h": 294,
+    "title": "Acceso a ARIA",
+    "t2": "Correo",
+    "tag": "FORM"
+   }
+  ],
+  "requests": []
+ },
+ "dashboard": {
+  "route": "/dashboard",
+  "dims": {
+   "w": 1600,
+   "h": 1512
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 151,
+    "w": 1316,
+    "h": 57,
+    "title": "FILTROS",
+    "t2": "Todos los segmentos",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 313,
+    "w": 1316,
+    "h": 210,
+    "title": "Indicadores generales",
+    "t2": "0",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 376,
+    "w": 307,
+    "h": 126,
+    "title": "0",
+    "t2": "Alertas procesadas",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 596,
+    "y": 376,
+    "w": 307,
+    "h": 126,
+    "title": "sin datos",
+    "t2": "En maduración",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 918,
+    "y": 376,
+    "w": 307,
+    "h": 126,
+    "title": "sin datos",
+    "t2": "En maduración",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 1241,
+    "y": 376,
+    "w": 307,
+    "h": 126,
+    "title": "sin datos",
+    "t2": "SLA cumplido (<5 min)",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 547,
+    "w": 1316,
+    "h": 308,
+    "title": "Distribución de alertas",
+    "t2": "Tiempo real",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 707,
+    "w": 242,
+    "h": 92,
+    "title": "655",
+    "t2": "Total alertas vivas",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 531,
+    "y": 707,
+    "w": 242,
+    "h": 92,
+    "title": "1",
+    "t2": "En cola sin procesar",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 789,
+    "y": 707,
+    "w": 242,
+    "h": 92,
+    "title": "1",
+    "t2": "En proceso por ARIA",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 1047,
+    "y": 707,
+    "w": 242,
+    "h": 92,
+    "title": "653",
+    "t2": "Referidas a analista",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 1305,
+    "y": 707,
+    "w": 242,
+    "h": 92,
+    "title": "0",
+    "t2": "En llamada con Voicebot",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 878,
+    "w": 1316,
+    "h": 382,
+    "title": "Tiempos de resolución · Horario diario",
+    "t2": "00h",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 1284,
+    "w": 1316,
+    "h": 204,
+    "title": "Revisión del equipo de fraude",
+    "t2": "En maduración",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 1347,
+    "w": 307,
+    "h": 82,
+    "title": "0",
+    "t2": "Alertas revisadas",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 596,
+    "y": 1347,
+    "w": 307,
+    "h": 82,
+    "title": "0",
+    "t2": "Revisadas con cambio",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 918,
+    "y": 1347,
+    "w": 307,
+    "h": 82,
+    "title": "0",
+    "t2": "Revisadas confirmadas",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 1241,
+    "y": 1347,
+    "w": 307,
+    "h": 82,
+    "title": "$ 0",
+    "t2": "Monto en falsos positivos",
+    "tag": "DIV"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "true"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings/history",
+    "query": {
+     "limit": "500"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/overview",
+    "query": {
+     "from": "2026-11-02T04:22:34.589Z",
+     "to": "2026-11-03T04:22:34.589Z"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/live",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operations/capacity",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/version-events",
+    "query": {
+     "from": "2026-11-02T04:22:34.589Z",
+     "to": "2026-11-03T04:22:34.589Z"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "cola": {
+  "route": "/cola",
+  "dims": {
+   "w": 1600,
+   "h": 1301
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 151,
+    "w": 1316,
+    "h": 52,
+    "title": "FILTROS",
+    "t2": "Todos los canales",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 292,
+    "w": 1316,
+    "h": 985,
+    "title": "Pending Alerts for Analyst",
+    "t2": "4 / 4 analistas libres",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 449,
+    "w": 1524,
+    "h": 774,
+    "title": "ACCIONES",
+    "t2": "ID ALERTA",
+    "tag": "TABLE"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "true"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/analyst-queue",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/analyst-queue/in-process",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/active",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operations/capacity",
+    "query": {},
+    "n": 1
+   }
+  ]
+ },
+ "alerta-detalle": {
+  "route": "/alerta/38cd4846-5e6e-4800-9202-f174d268aafd",
+  "dims": {
+   "w": 1600,
+   "h": 1000
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 225,
+    "w": 800,
+    "h": 390,
+    "title": "Perfilamiento del agente",
+    "t2": "PERFILAMIENTO USUARIO",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 278,
+    "y": 284,
+    "w": 748,
+    "h": 101,
+    "title": "PERFILAMIENTO USUARIO",
+    "t2": "El cliente está identificado como Mock Customer (documento DOC-e2e-customer-9876",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 278,
+    "y": 397,
+    "w": 748,
+    "h": 101,
+    "title": "PERFILAMIENTO TRANSACCIÓN",
+    "t2": "Esta es una transacción de tipo OM por 12345.67 vía e2e-entrypoint. No se detect",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 278,
+    "y": 510,
+    "w": 748,
+    "h": 80,
+    "title": "PERFIL TRANSACCIONAL (HISTÓRICO)",
+    "t2": "No hay historial de transacciones disponible para este cliente.",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 1072,
+    "y": 225,
+    "w": 360,
+    "h": 144,
+    "title": "DECISIÓN DEL AGENTE: —",
+    "t2": "El agente aún no decide.",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 639,
+    "w": 582,
+    "h": 220,
+    "title": "CLASIFICACIÓN",
+    "t2": "Fraude",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 850,
+    "y": 639,
+    "w": 582,
+    "h": 220,
+    "title": "DATOS TRANSACCIÓN",
+    "t2": "Evento",
+    "tag": "SECTION"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/analyst-queue/38cd4846-5e6e-4800-9202-f174d268aafd",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/versions/1",
+    "query": {},
+    "n": 2
+   }
+  ]
+ },
+ "historico-fraude": {
+  "route": "/historico-fraude",
+  "dims": {
+   "w": 1600,
+   "h": 1479
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 151,
+    "w": 1316,
+    "h": 95,
+    "title": "FILTROS",
+    "t2": "Todos los segmentos",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 269,
+    "w": 1316,
+    "h": 1186,
+    "title": "Alertas del rango · más recientes primero",
+    "t2": "Columnas",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 401,
+    "w": 1956,
+    "h": 1014,
+    "title": "ACCIONES",
+    "t2": "MARCA / RESULTADO",
+    "tag": "TABLE"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "true"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings/history",
+    "query": {
+     "limit": "500"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alerts/history",
+    "query": {
+     "from": "2026-11-02T04:22:53.166Z",
+     "to": "2026-11-03T04:22:53.166Z",
+     "limit": "50"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alerts/history",
+    "query": {
+     "from": "2026-10-04T04:22:53.219Z",
+     "to": "2026-11-03T04:22:53.219Z",
+     "limit": "50"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/overview",
+    "query": {
+     "from": "2026-10-04T04:22:53.219Z",
+     "to": "2026-11-03T04:22:53.219Z"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "monitor": {
+  "route": "/monitor",
+  "dims": {
+   "w": 1600,
+   "h": 1000
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 159,
+    "w": 1316,
+    "h": 57,
+    "title": "FILTROS",
+    "t2": "Todos los segmentos",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 379,
+    "w": 250,
+    "h": 134,
+    "title": "FRAUDE NO DETECTADO",
+    "t2": "sin datos",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 518,
+    "y": 379,
+    "w": 250,
+    "h": 134,
+    "title": "FALSOS POSITIVOS",
+    "t2": "sin datos",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 785,
+    "y": 379,
+    "w": 250,
+    "h": 134,
+    "title": "ERRORES DE EJECUCIÓN",
+    "t2": "sin datos",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 1051,
+    "y": 379,
+    "w": 250,
+    "h": 134,
+    "title": "ERRORES LLM",
+    "t2": "sin datos",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 1318,
+    "y": 379,
+    "w": 250,
+    "h": 134,
+    "title": "DISPONIBILIDAD",
+    "t2": "sin datos",
+    "tag": "DIV"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "true"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings/history",
+    "query": {
+     "limit": "500"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/agent",
+    "query": {
+     "from": "2026-11-02T04:23:01.866Z",
+     "to": "2026-11-03T04:23:01.866Z"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/technical",
+    "query": {
+     "from": "2026-11-02T04:23:01.866Z",
+     "to": "2026-11-03T04:23:01.866Z"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/metrics/overview",
+    "query": {
+     "from": "2026-11-02T04:23:01.866Z",
+     "to": "2026-11-03T04:23:01.866Z"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "configuracion": {
+  "route": "/configuracion",
+  "dims": {
+   "w": 1600,
+   "h": 1706
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 133,
+    "w": 1216,
+    "h": 191,
+    "title": "CONFIGURACIONES",
+    "t2": "Ver ciclo de versionado",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 210,
+    "w": 579,
+    "h": 94,
+    "title": "CONFIGURACIÓN",
+    "t2": "E2E Deployment Candidate",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 868,
+    "y": 210,
+    "w": 579,
+    "h": 75,
+    "title": "VERSIÓN",
+    "t2": "Cambios sin guardar",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 348,
+    "w": 1216,
+    "h": 641,
+    "title": "GRAFO DE VERSIONES",
+    "t2": "Historial de solo lectura: la configuración seleccionada con su origen y sus ram",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 450,
+    "w": 1174,
+    "h": 448,
+    "title": "E2E Deployment Candidate v1",
+    "t2": "E2E Deployment Candidate v2",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 273,
+    "y": 910,
+    "w": 1174,
+    "h": 58,
+    "title": "E2E Deployment Candidate · v207 · Probada",
+    "t2": "Deriva de E2E Deployment Candidate v206",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 1112,
+    "w": 1216,
+    "h": 209,
+    "title": "Canales digitales",
+    "t2": "Define, con condiciones AND/OR, qué eventos maneja. El procesamiento lo habilita",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 1345,
+    "w": 1216,
+    "h": 209,
+    "title": "Tarjetas",
+    "t2": "Define, con condiciones AND/OR, qué eventos maneja. El procesamiento lo habilita",
+    "tag": "SECTION"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/graph",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/active",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/test-runs",
+    "query": {
+     "order": "desc"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "true"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/0d8919b7-476e-4d8f-bbf5-1888a97c966f/versions/207",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/0d8919b7-476e-4d8f-bbf5-1888a97c966f",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "biblioteca": {
+  "route": "/biblioteca",
+  "dims": {
+   "w": 1600,
+   "h": 2174
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 248,
+    "y": 242,
+    "w": 718,
+    "h": 46,
+    "title": "Vector store",
+    "t2": "Taxonomías de fraude",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 320,
+    "w": 1216,
+    "h": 1831,
+    "title": "Instancias de Vector store",
+    "t2": "Cada versión es una instancia auditable. Agregar o retirar un documento sólo mod",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 395,
+    "w": 260,
+    "h": 1755,
+    "title": "VERSIONES",
+    "t2": "v1 · E03 1791984740412-581ob",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 1,
+    "x": 537,
+    "y": 586,
+    "w": 906,
+    "h": 114,
+    "title": "Generaciones",
+    "t2": "Construir prepara documentos para consultar y probar. Producción cambia únicamen",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 537,
+    "y": 720,
+    "w": 906,
+    "h": 117,
+    "title": "Probar búsqueda",
+    "t2": "Consulta la generación seleccionada de v1 · E03 1791984740412-581ob.",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 537,
+    "y": 856,
+    "w": 906,
+    "h": 367,
+    "title": "Agregar documento",
+    "t2": "Filtra por tipo y usa texto o una expresión regular para buscar por nombre.",
+    "tag": "DIV"
+   },
+   {
+    "depth": 1,
+    "x": 537,
+    "y": 1287,
+    "w": 906,
+    "h": 439,
+    "title": "Documentos incluidos en la instancia",
+    "t2": "JERARQUÍA\tTIPO\tDETALLE / DOCUMENTOS ANIDADOS\tVERSIÓN",
+    "tag": "DIV"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/library/taxonomies",
+    "query": {
+     "active_only": "false"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/library/modus-operandi",
+    "query": {
+     "active_only": "false"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/library/flags",
+    "query": {
+     "active_only": "false"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/library/similar-cases",
+    "query": {
+     "active_only": "false"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/vector-store-instances",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/library/channels",
+    "query": {
+     "active_only": "false"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/vector-store-instances/vector-store-v1/generations",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/vector-store-instances/vector-store-v1/documents",
+    "query": {},
+    "n": 1
+   }
+  ]
+ },
+ "testing": {
+  "route": "/testing",
+  "dims": {
+   "w": 1600,
+   "h": 1363
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 126,
+    "w": 1216,
+    "h": 1024,
+    "title": "Últimas pruebas",
+    "t2": "Ejecuta el pipeline de 7 pasos sobre un dataset controlado y revisa el detalle p",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 320,
+    "w": 1231,
+    "h": 776,
+    "title": "ACCIONES",
+    "t2": "FECHA",
+    "tag": "TABLE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 1173,
+    "w": 1216,
+    "h": 166,
+    "title": "Escenarios de simulación",
+    "t2": "Generadores de eventos sintéticos lanzados desde \"Nueva prueba\" → Generador.",
+    "tag": "SECTION"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/test-runs",
+    "query": {
+     "order": "desc"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/scenarios",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "testing-run": {
+  "route": "/testing/7d35b3b7-3e77-4ddb-b456-7fdd7c0976c1",
+  "dims": {
+   "w": 1600,
+   "h": 3421
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 298,
+    "w": 389,
+    "h": 140,
+    "title": "CASO",
+    "t2": "ESTADO",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 348,
+    "w": 387,
+    "h": 59,
+    "title": "CASO",
+    "t2": "ESTADO",
+    "tag": "TABLE"
+   },
+   {
+    "depth": 0,
+    "x": 661,
+    "y": 333,
+    "w": 907,
+    "h": 108,
+    "title": "N° de Intentos",
+    "t2": "1",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 661,
+    "y": 2760,
+    "w": 355,
+    "h": 132,
+    "title": "DESENLACE ESPERADO",
+    "t2": "Etiquetas de evaluación; no se envían al agente.",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 661,
+    "y": 2914,
+    "w": 907,
+    "h": 67,
+    "title": "Falló en Detector adversarial",
+    "t2": "Se agotaron las revisiones del adversarial; el caso se escaló al analista.",
+    "tag": "DIV"
+   },
+   {
+    "depth": 0,
+    "x": 661,
+    "y": 3007,
+    "w": 907,
+    "h": 96,
+    "title": "Comparación de pre-proceso",
+    "t2": "Activo v72 · Candidato v72",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 661,
+    "y": 3117,
+    "w": 907,
+    "h": 301,
+    "title": "Detección, revisión y clasificación",
+    "t2": "El primer adversarial decide si dejar pasar, escalar a una persona o gestionar c",
+    "tag": "DIV"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/test-runs/7d35b3b7-3e77-4ddb-b456-7fdd7c0976c1",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/test-runs/7d35b3b7-3e77-4ddb-b456-7fdd7c0976c1/cases/32fc8484-1b41-4a6e-8398-2de24c0ce628",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/active",
+    "query": {},
+    "n": 1
+   }
+  ]
+ },
+ "testing-escenario": {
+  "route": "/testing/scenarios/41fbc431-2693-48f3-808e-fbf1952f324f",
+  "dims": {
+   "w": 1600,
+   "h": 3115
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 152,
+    "w": 936,
+    "h": 151,
+    "title": "Destino",
+    "t2": "Pipeline en vivo",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 326,
+    "w": 936,
+    "h": 154,
+    "title": "CURVA DE LLEGADA",
+    "t2": "Desde (s)\tHasta (s)\tEventos / min",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 277,
+    "y": 402,
+    "w": 886,
+    "h": 53,
+    "title": "Desde (s)\tHasta (s)\tEventos / min",
+    "t2": "0\t300\t5",
+    "tag": "TABLE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 504,
+    "w": 936,
+    "h": 2587,
+    "title": "CAMPOS GENERADOS",
+    "t2": "biocatch_screenBroadcast",
+    "tag": "SECTION"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/scenarios/41fbc431-2693-48f3-808e-fbf1952f324f",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/scenarios/41fbc431-2693-48f3-808e-fbf1952f324f/status",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "modelos": {
+  "route": "/modelos",
+  "dims": {
+   "w": 1600,
+   "h": 1525
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 252,
+    "y": 183,
+    "w": 1216,
+    "h": 1190,
+    "title": "Modelos",
+    "t2": "Crea y entrena una única vez modelos XGBoost sobre datasets del sistema. El serv",
+    "tag": "SECTION"
+   },
+   {
+    "depth": 1,
+    "x": 253,
+    "y": 335,
+    "w": 1214,
+    "h": 984,
+    "title": "ACCIONES",
+    "t2": "TAG",
+    "tag": "TABLE"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/models",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/async-operations",
+    "query": {},
+    "n": 1
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    },
+    "n": 1
+   }
+  ]
+ },
+ "backups": {
+  "route": "/backups",
+  "dims": {
+   "w": 1600,
+   "h": 6042
+  },
+  "regions": [
+   {
+    "depth": 0,
+    "x": 0,
+    "y": 0,
+    "w": 220,
+    "h": 1000,
+    "title": "ARIA",
+    "t2": "Dashboard",
+    "tag": "ASIDE"
+   },
+   {
+    "depth": 0,
+    "x": 392,
+    "y": 149,
+    "w": 1036,
+    "h": 5869,
+    "title": "Historial",
+    "t2": "Las solicitudes y resultados quedan registrados aquí.",
+    "tag": "SECTION"
+   }
+  ],
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/backups",
+    "query": {},
+    "n": 1
+   }
+  ]
+ }
+}
