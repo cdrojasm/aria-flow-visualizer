@@ -1,0 +1,479 @@
+{
+ "tab-dashboard-0-tiempo-real": {
+  "ok": true,
+  "tab": "Tiempo real",
+  "prefix": "dashboard",
+  "requests": []
+ },
+ "tab-dashboard-1-historico": {
+  "ok": true,
+  "tab": "Histórico",
+  "prefix": "dashboard",
+  "requests": []
+ },
+ "tab-dashboard-2-por-dimension": {
+  "ok": true,
+  "tab": "Por dimensión",
+  "prefix": "dashboard",
+  "requests": []
+ },
+ "tab-cola-0-pending-alerts-for-analyst": {
+  "ok": true,
+  "tab": "Pending Alerts for Analyst",
+  "prefix": "cola",
+  "requests": []
+ },
+ "tab-cola-1-alertas-en-proceso": {
+  "ok": true,
+  "tab": "Alertas en proceso",
+  "prefix": "cola",
+  "requests": []
+ },
+ "tab-monitor-0-indicadores-generales": {
+  "ok": true,
+  "tab": "Indicadores generales",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-1-indicadores-de-area": {
+  "ok": true,
+  "tab": "Indicadores de área",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-2-analistas-y-otros-canales": {
+  "ok": true,
+  "tab": "Analistas y otros canales",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-3-explicabilidad": {
+  "ok": true,
+  "tab": "Explicabilidad",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-4-indicadores-tecnicos": {
+  "ok": true,
+  "tab": "Indicadores técnicos",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-5-recomendaciones": {
+  "ok": true,
+  "tab": "% Recomendaciones",
+  "prefix": "monitor",
+  "requests": []
+ },
+ "tab-monitor-6-optimizador": {
+  "ok": true,
+  "tab": "Optimizador",
+  "prefix": "monitor",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/optimizer-status",
+    "query": {}
+   }
+  ]
+ },
+ "tab-configuracion-cm-0-segmento": {
+  "ok": true,
+  "tab": "Segmento",
+  "prefix": "configuracion-cm",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-configuracion-cm-1-agente": {
+  "ok": true,
+  "tab": "Agente",
+  "prefix": "configuracion-cm",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/variable-catalog",
+    "query": {
+     "active_only": "true"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/active",
+    "query": {}
+   }
+  ]
+ },
+ "tab-configuracion-cm-2-evaluacion": {
+  "ok": true,
+  "tab": "Evaluación",
+  "prefix": "configuracion-cm",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/variable-catalog",
+    "query": {
+     "active_only": "true"
+    }
+   }
+  ]
+ },
+ "tab-configuracion-cm-3-optimizador": {
+  "ok": true,
+  "tab": "Optimizador",
+  "prefix": "configuracion-cm",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/failure-catalog",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/{id}",
+    "query": {}
+   }
+  ]
+ },
+ "tab-configuracion-mgr-0-general": {
+  "ok": true,
+  "tab": "General",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-configuracion-mgr-1-infraestructura": {
+  "ok": true,
+  "tab": "Infraestructura",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/active",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configuration-deploy-requests",
+    "query": {}
+   }
+  ]
+ },
+ "tab-configuracion-mgr-2-operacion-inmediata": {
+  "ok": true,
+  "tab": "Operación (inmediata)",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operations/capacity",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/operational-settings/history",
+    "query": {
+     "limit": "10"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/resolution-method-catalog",
+    "query": {
+     "active_only": "true"
+    }
+   }
+  ]
+ },
+ "tab-configuracion-mgr-3-asistente-y-optimizador": {
+  "ok": true,
+  "tab": "Asistente y optimizador",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/assistant-optimizer-settings",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/assistant-optimizer-settings/changes",
+    "query": {
+     "limit": "10"
+    }
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/assistant-optimizer-settings/sampler/fields",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/assistant-optimizer-settings/sampler/schema-configuration",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/{id}",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-configuracion-mgr-4-test": {
+  "ok": true,
+  "tab": "Test",
+  "prefix": "configuracion-mgr",
+  "requests": []
+ },
+ "tab-configuracion-mgr-5-segmento": {
+  "ok": true,
+  "tab": "Segmento",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/configurations/active",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/configuration-deploy-requests",
+    "query": {}
+   }
+  ]
+ },
+ "tab-configuracion-mgr-6-esquema": {
+  "ok": true,
+  "tab": "Esquema",
+  "prefix": "configuracion-mgr",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/active",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/versions",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/suggestions",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/presence",
+    "query": {}
+   }
+  ]
+ },
+ "tab-biblioteca-0-base-de-conocimiento": {
+  "ok": true,
+  "tab": "Base de conocimiento",
+  "prefix": "biblioteca",
+  "requests": []
+ },
+ "tab-biblioteca-1-catalogos-de-eventos": {
+  "ok": true,
+  "tab": "Catálogos de eventos",
+  "prefix": "biblioteca",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/tag-catalog",
+    "query": {
+     "category": "integration_point",
+     "active_only": "false"
+    }
+   }
+  ]
+ },
+ "tab-biblioteca-2-canales": {
+  "ok": true,
+  "tab": "Canales",
+  "prefix": "biblioteca",
+  "requests": []
+ },
+ "tab-biblioteca-3-listas-negras-blancas": {
+  "ok": true,
+  "tab": "Listas negras/blancas",
+  "prefix": "biblioteca",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/watchlists",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-biblioteca-4-datasets": {
+  "ok": true,
+  "tab": "Datasets",
+  "prefix": "biblioteca",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/datasets",
+    "query": {}
+   }
+  ]
+ },
+ "tab-biblioteca-conocimiento-0-vector-store": {
+  "ok": true,
+  "tab": "Vector store",
+  "prefix": "biblioteca-conocimiento",
+  "requests": []
+ },
+ "tab-biblioteca-conocimiento-1-taxonomias-de-fraude": {
+  "ok": true,
+  "tab": "Taxonomías de fraude",
+  "prefix": "biblioteca-conocimiento",
+  "requests": []
+ },
+ "tab-biblioteca-conocimiento-2-modus-operandi": {
+  "ok": true,
+  "tab": "Modus operandi",
+  "prefix": "biblioteca-conocimiento",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-biblioteca-conocimiento-3-yellow-flags": {
+  "ok": true,
+  "tab": "Yellow flags",
+  "prefix": "biblioteca-conocimiento",
+  "requests": []
+ },
+ "tab-biblioteca-conocimiento-4-red-flags": {
+  "ok": true,
+  "tab": "Red flags",
+  "prefix": "biblioteca-conocimiento",
+  "requests": []
+ },
+ "tab-biblioteca-conocimiento-5-casos-similares": {
+  "ok": true,
+  "tab": "Casos similares",
+  "prefix": "biblioteca-conocimiento",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/agent/sessions",
+    "query": {
+     "limit": "50"
+    }
+   }
+  ]
+ },
+ "tab-modelos-0-catalogo-y-resultados": {
+  "ok": true,
+  "tab": "Catálogo y resultados",
+  "prefix": "modelos",
+  "requests": []
+ },
+ "tab-modelos-1-operaciones": {
+  "ok": true,
+  "tab": "Operaciones",
+  "prefix": "modelos",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/async-operations",
+    "query": {}
+   },
+   {
+    "method": "GET",
+    "path": "/api/v0/models",
+    "query": {}
+   }
+  ]
+ },
+ "tab-alerta-0-resumen": {
+  "ok": true,
+  "tab": "Resumen",
+  "prefix": "alerta",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/versions/1",
+    "query": {}
+   }
+  ]
+ },
+ "tab-alerta-1-razonamiento-del-agente": {
+  "ok": true,
+  "tab": "Razonamiento del agente",
+  "prefix": "alerta",
+  "requests": []
+ },
+ "tab-alerta-2-data-alerta": {
+  "ok": true,
+  "tab": "Data alerta",
+  "prefix": "alerta",
+  "requests": [
+   {
+    "method": "GET",
+    "path": "/api/v0/alert-schema/versions/1",
+    "query": {}
+   }
+  ]
+ },
+ "tab-alerta-3-usuario": {
+  "ok": true,
+  "tab": "Usuario",
+  "prefix": "alerta",
+  "requests": []
+ },
+ "tab-alerta-4-historial": {
+  "ok": true,
+  "tab": "Historial",
+  "prefix": "alerta",
+  "requests": []
+ }
+}

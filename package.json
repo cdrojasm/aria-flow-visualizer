@@ -27,6 +27,7 @@
     "test:e2e:backups:real": "docker compose up -d --build web && ARIA_E2E_REAL=1 playwright test e2e/backups-real.spec.ts",
     "test:e2e:vector-store:real": "ARIA_E2E_REAL=1 playwright test e2e/vector-store-real.spec.ts",
     "test:e2e:entities:advanced:real": "ARIA_E2E_REAL=1 playwright test e2e/entities-advanced-real.spec.ts",
+    "test:e2e:prod-smoke": "ARIA_E2E_REAL=1 playwright test e2e/prod-smoke-real.spec.ts e2e/prod-smoke-features-real.spec.ts",
     "test:e2e:simulation": "ARIA_E2E_REAL=1 playwright test e2e/event-simulation-real.spec.ts"
   },
   "dependencies": {
