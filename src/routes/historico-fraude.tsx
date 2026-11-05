@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { ChevronRight, History, Loader2, ShieldCheck } from "lucide-react";
+import { Archive, ChevronRight, History, Loader2, ShieldCheck } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import {
   ActionButton,
@@ -14,6 +14,7 @@ import { MetricsFilterBar } from "@/components/MetricsFilterBar";
 import { FilterBar, PageHeader } from "@/components/PageHeader";
 import { ErrorBox, RangeControl } from "@/components/metrics/MetricsShared";
 import { initialRange, type RangeState } from "@/lib/api/metricsMapping";
+import { FraudArchiveDrawer } from "@/components/fraude/FraudArchive";
 import { FraudReviewDialog, FraudReviewTrailDialog } from "@/components/fraude/FraudReview";
 import { useFraudReviewImport } from "@/hooks/useFraudReviewImport";
 import { MARK_BADGES, MARK_LABELS } from "@/lib/fraudLabels";
@@ -239,6 +240,8 @@ function HistoricoFraudePage() {
   const { user } = useRole();
   const permissions = user?.permissions ?? [];
   const canReview = permissions.includes("fraud_review");
+  const canReadArchive = permissions.includes("fraud_archive");
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const queryClient = useQueryClient();
   const [range, setRange] = useState<RangeState>(() => initialRange());
   const [filters, setFilters] = useState<FilterSelection>({});
@@ -290,13 +293,23 @@ function HistoricoFraudePage() {
         <PageHeader
           title="Histórico de Gestión de Fraude"
           actions={
-            canReview && (
-              <>
-                {importer.input}
-                {importer.templateButton}
-                {importer.trigger}
-              </>
-            )
+            <>
+              {canReadArchive && (
+                <ActionButton
+                  icon={<Archive className="h-3 w-3" />}
+                  onClick={() => setArchiveOpen(true)}
+                >
+                  Archivo
+                </ActionButton>
+              )}
+              {canReview && (
+                <>
+                  {importer.input}
+                  {importer.templateButton}
+                  {importer.trigger}
+                </>
+              )}
+            </>
           }
         />
         <FilterBar
@@ -339,7 +352,11 @@ function HistoricoFraudePage() {
           searchPlaceholder="Buscar en lo cargado por alerta, evento o cliente…"
           isLoading={history.isLoading}
           emptyLabel="No hay alertas en el rango con esos filtros."
-          noMatchLabel="Ninguna alerta cargada coincide con la búsqueda."
+          noMatchLabel={
+            canReadArchive
+              ? "Ninguna alerta cargada coincide con la búsqueda. Si es de hace más de un año, búscala en «Archivo»."
+              : "Ninguna alerta cargada coincide con la búsqueda."
+          }
           actionsWidth={230}
           actions={(item) => (
             <>
@@ -399,6 +416,13 @@ function HistoricoFraudePage() {
         onReviewed={onReviewed}
       />
       <FraudReviewTrailDialog item={auditing} onClose={() => setAuditing(null)} />
+      {canReadArchive && (
+        <FraudArchiveDrawer
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          canHold={permissions.includes("legal_hold")}
+        />
+      )}
     </DashboardLayout>
   );
 }
