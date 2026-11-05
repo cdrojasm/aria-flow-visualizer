@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { captureTurn, type ChatMessage } from "./agent-chat-helpers";
 
 // The assistant lives on four views (/biblioteca, /modelos, /testing,
 // /configuracion). On each one we ask how-to, cross-view, concept and
@@ -105,14 +106,11 @@ async function ask(page: Page, question: string): Promise<{ sentPath: string; an
   const sent = page.waitForRequest(
     (request) => request.url().includes("/messages") && request.method() === "POST",
   );
-  const reply = page.waitForResponse(
-    (response) => response.url().includes("/messages") && response.request().method() === "POST",
-  );
-  await composer.fill(question);
-  await composer.press("Enter");
+  const { reply: answer } = await captureTurn<Answer & ChatMessage>(page, async () => {
+    await composer.fill(question);
+    await composer.press("Enter");
+  });
   const body = (await sent).postDataJSON() as { page_path: string };
-  const turn = await (await reply).json();
-  const answer = turn.assistant_message as Answer;
   expect(answer.content.trim().length).toBeGreaterThan(20);
   // Tool-call protocol must never leak into what the user reads.
   expect(answer.content).not.toContain('"tool_call"');

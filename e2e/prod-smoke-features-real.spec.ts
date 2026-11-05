@@ -19,6 +19,21 @@ const ADMINS = ["CHANNEL_MANAGER", "MANAGER", "DATA_ANALYST"]; // library + conf
 const BUILDERS = ["CHANNEL_MANAGER", "DATA_ANALYST", "RELEASE_MANAGER"]; // testing permission
 const ALL_ROLES = ["MANAGER", "CHANNEL_MANAGER", "RELEASE_MANAGER", "DATA_ANALYST", "OPS_ANALYST", "FRAUD_ANALYST", "FRAUD_REVIEWER"];
 
+/** The chat answers 202; the worker writes the reply, which shows up in the message list. */
+async function awaitAssistantReply(s: Session, base: string, clientMessageId: string) {
+  const key = `${clientMessageId}:assistant`;
+  const reply = await poll(
+    `respuesta del asistente ${key}`,
+    async () =>
+      (await s.json<Array<{ client_message_id: string; content: string; error_code?: string | null }>>(`${base}/messages`)).find(
+        (message) => message.client_message_id === key,
+      ),
+    { timeoutMs: 120_000, everyMs: 1_500 },
+  );
+  expect(reply.error_code ?? null, "el worker del asistente no debe fallar").toBeNull();
+  return reply;
+}
+
 async function withSession(
   playwright: PlaywrightWorkerArgs["playwright"],
   baseURL: string | undefined,
@@ -281,8 +296,9 @@ test("FEATURE asistente: sesión, chat, borradores de taxonomía y canal con apr
 
     const send = async (content: string) => {
       const id = crypto.randomUUID();
-      const turn = await ok<{ assistant_message: { content: string } }>(await s.post(`${base}/messages`, { client_message_id: id, content, page_path: "/biblioteca" }), "enviar mensaje");
-      expect(turn.assistant_message.content.length).toBeGreaterThan(0);
+      await ok(await s.post(`${base}/messages`, { client_message_id: id, content, page_path: "/biblioteca" }), "enviar mensaje");
+      const reply = await awaitAssistantReply(s, base, id);
+      expect(reply.content.length).toBeGreaterThan(0);
       return id;
     };
 
@@ -550,6 +566,7 @@ async function assistantHarness(s: Session) {
     const id = crypto.randomUUID();
     const t0 = Date.now();
     await ok(await s.post(`${base}/messages`, { client_message_id: id, content, page_path: "/biblioteca" }), "mensaje");
+    await awaitAssistantReply(s, base, id);
     console.log(`[asistente] mensaje ${Math.round((Date.now() - t0) / 1000)}s`);
     return id;
   };

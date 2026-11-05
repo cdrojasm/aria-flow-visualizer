@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { captureTurn, type ChatMessage } from "./agent-chat-helpers";
 
 // Role coverage for the assistant, complementing agent-assistant-views-real
 // (channel_manager and manager). The assistant needs the "configuration"
@@ -72,13 +73,10 @@ async function startChat(page: Page) {
 async function ask(page: Page, question: string): Promise<Answer> {
   const composer = page.getByLabel("Mensaje para ARIA");
   await expect(composer).toBeEnabled();
-  const reply = page.waitForResponse(
-    (response) => response.url().includes("/messages") && response.request().method() === "POST",
-  );
-  await composer.fill(question);
-  await composer.press("Enter");
-  const turn = await (await reply).json();
-  const answer = turn.assistant_message as Answer;
+  const { reply: answer } = await captureTurn<Answer & ChatMessage>(page, async () => {
+    await composer.fill(question);
+    await composer.press("Enter");
+  });
   expect(answer.content.trim().length).toBeGreaterThan(20);
   expect(answer.content).not.toContain('"tool_call"');
   return answer;
