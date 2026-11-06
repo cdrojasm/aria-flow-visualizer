@@ -31,6 +31,7 @@ import {
 } from "@/components/metrics/MetricsShared";
 import { initialRange, type RangeState } from "@/lib/api/metricsMapping";
 import { useRole } from "@/hooks/useRole";
+import { ReasoningEvaluationsDrawer } from "@/components/metrics/ReasoningEvaluationsDrawer";
 import { OptimizerMonitorPanel } from "@/components/optimizer/OptimizerMonitorPanel";
 import {
   getAgentMetrics,
@@ -117,6 +118,7 @@ function mergeWarnings(...lists: (ApiMetricsWarning[] | undefined)[]): ApiMetric
 
 function MonitorPage() {
   const { user } = useRole();
+  const [evaluationsOpen, setEvaluationsOpen] = useState(false);
   const [range, setRange] = useState<RangeState>(() => initialRange());
   const [tab, setTab] = useState<MonitorTab>(readMonitorTab);
   const changeTab = (value: string) => {
@@ -376,6 +378,13 @@ function MonitorPage() {
                         : ""}
                     </span>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setEvaluationsOpen(true)}
+                    className="ml-auto text-[12px] font-medium text-primary underline"
+                  >
+                    Ver alertas evaluadas
+                  </button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <ExplainCard
@@ -490,6 +499,7 @@ function MonitorPage() {
           </Tabs>
         </div>
       </div>
+      <ReasoningEvaluationsDrawer open={evaluationsOpen} onOpenChange={setEvaluationsOpen} />
     </DashboardLayout>
   );
 }
