@@ -972,7 +972,10 @@ function AlertaDetailPage() {
             {tab === "resumen" && <ResumenTab detail={detail} schema={schema} />}
             {tab === "razonamiento" && <RazonamientoTab detail={detail} schema={schema} />}
             {tab === "calidad" && canReadQuality && (
-              <ReasoningEvaluationTab alertId={detail.alert_id} />
+              <ReasoningEvaluationTab
+                alertId={detail.alert_id}
+                canRequest={Boolean(user?.permissions.includes("configuration"))}
+              />
             )}
             {tab === "data" && (
               <div className="max-w-[860px]">

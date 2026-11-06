@@ -55,11 +55,56 @@ test("evaluador real: estados sin veredicto, rango y permisos", async ({ request
   expect(view.ok(), await view.text()).toBeTruthy();
   const body = (await view.json()) as { alert_id: string; state: string; evaluation: unknown };
   expect(body.alert_id).toBe(alertId);
-  expect(["pending", "not_sampled", "evaluated", "invalid", "not_applicable"]).toContain(
-    body.state,
-  );
-  if (body.state === "pending" || body.state === "not_sampled") {
+  expect([
+    "not_sampled",
+    "queued",
+    "running",
+    "evaluated",
+    "invalid",
+    "failed",
+    "not_applicable",
+  ]).toContain(body.state);
+  if (body.state === "not_sampled") {
     expect(body.evaluation).toBeNull();
+  }
+
+  // The default criteria are published, with the question the judge asks.
+  const catalog = await request.get(api("/metrics/reasoning-evaluation-criteria"), { headers });
+  expect(catalog.ok(), await catalog.text()).toBeTruthy();
+  const criteria = (await catalog.json()) as Array<{ key: string; question: string }>;
+  expect(criteria.map((c) => c.key)).toEqual([
+    "hallucination",
+    "data_use_correct",
+    "clarity",
+    "step_consistency",
+    "evidence_citation",
+    "model_alignment",
+  ]);
+  expect(criteria.every((c) => c.question.length > 20)).toBe(true);
+
+  // Asking for an evaluation now only opens the evaluator's job (202): the alert
+  // is untouched and asking twice does not queue it twice.
+  if (body.state === "not_sampled") {
+    // The alert may not have a workflow run yet right after intake (409 until it does).
+    let first = await request.post(api(`/alerts/${alertId}/reasoning-evaluation`), { headers });
+    for (let attempt = 0; first.status() === 409 && attempt < 30; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      first = await request.post(api(`/alerts/${alertId}/reasoning-evaluation`), { headers });
+    }
+    expect(first.status(), await first.text()).toBe(202);
+    const queued = (await first.json()) as {
+      state: string;
+      job: { requested_by: string; queued_at: string };
+    };
+    expect(["queued", "running", "evaluated", "invalid", "failed"]).toContain(queued.state);
+    expect(queued.job.requested_by).toBe("manual");
+    const second = await request.post(api(`/alerts/${alertId}/reasoning-evaluation`), {
+      headers,
+    });
+    expect(second.status()).toBe(202);
+    expect(((await second.json()) as { job: { queued_at: string } }).job.queued_at).toBe(
+      queued.job.queued_at,
+    );
   }
 
   const unknown = await request.get(api(`/alerts/${crypto.randomUUID()}/reasoning-evaluation`), {
@@ -99,6 +144,10 @@ test("evaluador real: estados sin veredicto, rango y permisos", async ({ request
       { headers: other.headers },
     );
     expect(listing.status()).toBe(403);
+    const ask = await request.post(api(`/alerts/${alertId}/reasoning-evaluation`), {
+      headers: other.headers,
+    });
+    expect(ask.status()).toBe(403);
   }
 });
 
@@ -143,6 +192,11 @@ test("evaluador real UI: del monitor a la justificación por paso de una alerta 
   await expect(page.getByText("Veredicto del evaluador")).toBeVisible();
   await expect(page.getByText(target.rationale)).toBeVisible();
   await expect(page.getByText("Por paso")).toBeVisible();
+  // Explainability criteria and how long the evaluator took.
+  await expect(page.getByRole("heading", { name: "Explicabilidad" })).toBeVisible();
+  await expect(page.getByText("Coherencia entre pasos")).toBeVisible();
+  await expect(page.getByText("No se pudo decidir")).toBeVisible();
+  await expect(page.getByTestId("evaluation-timings")).toContainText("tardó");
   await expect(page.getByText("Detector", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText(/prompt v2/)).toBeVisible();
+  await expect(page.getByText(/prompt v3/)).toBeVisible();
 });
