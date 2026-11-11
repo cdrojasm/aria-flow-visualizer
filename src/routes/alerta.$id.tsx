@@ -1,3 +1,4 @@
+import { StepLlmBadge } from "@/components/llm/StepLlmBadge";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -402,6 +403,7 @@ function RazonamientoTab({
                         {step.attempt > 1 ? ` (intento ${step.attempt})` : ""}
                       </span>
                       <span className="text-[11px] text-text-secondary">· {duration(step)}</span>
+                      <StepLlmBadge output={step.output} />
                     </div>
                     <ChevronDown
                       className={`h-4 w-4 text-text-secondary transition-transform ${isOpen ? "rotate-180" : ""}`}

@@ -1,3 +1,4 @@
+import { LlmSelectionTable } from "@/components/llm/LlmSelectionTable";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { SideDrawer } from "@/components/ui/side-drawer";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -2107,6 +2108,26 @@ function ConfiguracionPage() {
                       )}
                     </Field>
                   )}
+                </div>
+              </section>
+
+              {/* Modelo LLM por elemento */}
+              <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+                <div className="px-6 py-4 border-b border-border">
+                  <h2 className="text-[14px] font-semibold text-text-primary">
+                    Modelo de lenguaje por elemento
+                  </h2>
+                  <p className="text-[12px] text-text-secondary mt-0.5">
+                    Cada elemento que usa un LLM puede elegir un modelo del catálogo. Si no eliges
+                    uno, usa su modelo por defecto. Si un modelo falla, la ejecución falla: no hay
+                    reintento con otro modelo. El cambio rige cuando se activa esta versión.
+                  </p>
+                </div>
+                <div className="p-6">
+                  <LlmSelectionTable
+                    value={settings.llmSelection}
+                    onChange={(llmSelection) => patchSettings("general", { llmSelection })}
+                  />
                 </div>
               </section>
             </div>

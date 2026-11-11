@@ -1,3 +1,4 @@
+import { StepLlmBadge } from "@/components/llm/StepLlmBadge";
 import { useState } from "react";
 
 import type { TestCaseDetailResponse, WorkflowStepResponse } from "@/lib/api/testing.functions";
@@ -72,6 +73,7 @@ export function CaseStepData({
         </div>
         <div className="pb-1.5 flex items-center gap-3 text-[11px] text-text-secondary">
           {step.attempt > 1 && <span>Intento {step.attempt}</span>}
+          <StepLlmBadge output={step.output} />
           {hasTokens && (
             <span>
               Tokens{" "}

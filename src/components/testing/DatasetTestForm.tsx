@@ -20,6 +20,8 @@ import { getDatasets, uploadDataset } from "@/lib/api/datasets.functions";
 import { listConfigurations, listConfigurationVersions } from "@/lib/api/configurations.functions";
 import { listAlertSchemaVersions, type AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
 import { downloadSampleDatasetCsv } from "@/lib/sampleDataset";
+import { LlmSelectionTable } from "@/components/llm/LlmSelectionTable";
+import type { LlmSelection } from "@/lib/api/llmCatalog.functions";
 import { DatasetDetailModal } from "./DatasetDetailModal";
 
 /* ─── Dataset strategy, extracted verbatim out of NewTestRunModal.tsx
@@ -65,6 +67,10 @@ export function DatasetTestForm({
   // max_feedback_iterations is intentos - 1; default 2 matches the
   // backend's own default of 1 (alert_dtos.py, schemas.py, test_run_port.py).
   const [maxAttempts, setMaxAttempts] = useState("2");
+  // Optional per-step LLM choice for this run (catalog names); an empty entry
+  // keeps whatever the tested configuration selects.
+  const [modelOverrides, setModelOverrides] = useState<LlmSelection>({});
+  const [showModelOverrides, setShowModelOverrides] = useState(false);
   const [selectedConfigurationId, setSelectedConfigurationId] = useState<string | null>(null);
   // null = latest version of the selected lineage (default). Set when the
   // user expands a lineage's version history and picks an older one.
@@ -171,6 +177,11 @@ export function DatasetTestForm({
           name: runName.trim() || `Prueba ${new Date().toLocaleString()}`,
           dataset_name: selectedDataset!,
           config: {
+            model_overrides: Object.fromEntries(
+              Object.entries(modelOverrides).filter(
+                (entry): entry is [string, string] => !!entry[1],
+              ),
+            ),
             max_feedback_iterations: Math.max(0, parsedMaxAttempts - 1),
             configuration_ref: selectedConfiguration
               ? {
@@ -340,6 +351,36 @@ export function DatasetTestForm({
               escalar a un analista.
             </p>
           </div>
+        </div>
+
+        {/* Per-step LLM override: catalog names only, same selectors as the
+          configuration's "General" tab. */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowModelOverrides((open) => !open)}
+            aria-expanded={showModelOverrides}
+            data-testid="toggle-model-overrides"
+            className="flex items-center gap-1 text-[11px] text-text-secondary hover:text-text-primary"
+          >
+            {showModelOverrides ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
+            Modelo de lenguaje por etapa (opcional)
+          </button>
+          {showModelOverrides && (
+            <div className="mt-2">
+              <LlmSelectionTable
+                group="workflow"
+                value={modelOverrides}
+                onChange={setModelOverrides}
+                defaultLabel="Según la configuración"
+                testIdPrefix="run-llm-select"
+              />
+            </div>
+          )}
         </div>
 
         {/* Configuration selector - which stored ConfigurationRecord

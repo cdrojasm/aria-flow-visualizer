@@ -599,6 +599,8 @@ export type AgentConfig = {
 export type ConfigSettings = {
   migrationWindowEnabled: boolean;
   migrationWindowDatetime: string;
+  // element -> LLM catalog name; null/absent = the element's default model.
+  llmSelection: Record<string, string | null>;
   maxInstances: number;
   autoScale: boolean;
   fraudHistoryDbRetentionDays: number;
@@ -806,6 +808,7 @@ export const defaultAnalystCapacity = (): AnalystCapacity => ({
 export const defaultSettings = (): ConfigSettings => ({
   migrationWindowEnabled: false,
   migrationWindowDatetime: "2000-01-01T02:00",
+  llmSelection: {},
   maxInstances: 8,
   autoScale: true,
   fraudHistoryDbRetentionDays: 90,
