@@ -147,7 +147,7 @@ test("modelo LLM por elemento: catálogo, configuración, prueba y deployment ef
   expect(invalid.status(), await invalid.text()).toBe(422);
 
   // 3. UI: elegir modelos en Configuración > General y crear la versión.
-  await authenticatePage(page, channelToken);
+  await authenticatePage(page, managerToken);
   await openConfiguration(page, configName);
   await page.getByRole("button", { name: /Crear nueva versión basada en/ }).click();
   await page.getByRole("button", { name: "General", exact: true }).click();
