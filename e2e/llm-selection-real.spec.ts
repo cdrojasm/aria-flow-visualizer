@@ -16,7 +16,7 @@ const managerEmail = process.env.E2E_MANAGER_EMAIL;
 const managerPassword = process.env.E2E_MANAGER_PASSWORD;
 const channelManagerEmail = process.env.E2E_CHANNEL_MANAGER_EMAIL;
 const channelManagerPassword = process.env.E2E_CHANNEL_MANAGER_PASSWORD;
-const workflowTimeoutMs = Number(process.env.E2E_WORKFLOW_TIMEOUT ?? "540") * 1000;
+const workflowTimeoutMs = Number(process.env.E2E_WORKFLOW_TIMEOUT ?? "300") * 1000;
 const FIXTURE = resolve(process.cwd(), "e2e/fixtures/muestra_total_aria_head5.csv");
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -159,8 +159,10 @@ test("modelo LLM por elemento: catálogo, configuración, prueba y deployment ef
   await page.getByTestId("llm-select-detector").selectOption("GPT-5 mini");
   await page.getByTestId("llm-select-judge").selectOption("GPT-5.2");
   await page.getByRole("button", { name: "Crear versión", exact: true }).click();
-  const confirm = page.getByRole("button", { name: /^(Confirmar|Guardar|Crear versión)$/ }).last();
-  if (await confirm.isVisible().catch(() => false)) await confirm.click();
+  await expect(page.getByText("General › llm selection › detector")).toBeVisible();
+  await expect(page.getByText("General › llm selection › judge")).toBeVisible();
+  await page.getByRole("textbox", { name: "Escribe CONFIRMAR para guardar" }).fill("CONFIRMAR");
+  await page.getByRole("button", { name: "Confirmar y guardar", exact: true }).click();
 
   await expect
     .poll(
@@ -224,11 +226,20 @@ test("modelo LLM por elemento: catálogo, configuración, prueba y deployment ef
       .toBe("READY");
 
     const testerPage = await page.context().newPage();
-    await authenticatePage(testerPage, managerToken);
+    testerPage.setDefaultTimeout(30_000);
+    // Testing no está en la navegación del rol manager: lo opera el channel manager.
+    await authenticatePage(testerPage, channelToken);
     await testerPage.goto(
       `/testing?configurationId=${encodeURIComponent(seed.configuration_id)}&version=${savedVersion}`,
     );
-    await testerPage.getByText(datasetName, { exact: true }).first().click();
+    const drawer = testerPage.getByTestId("side-drawer");
+    await expect(drawer).toBeVisible({ timeout: 20_000 });
+    await testerPage.getByPlaceholder("Ej: Regresión semanal").fill(`E2E llm ${datasetName}`);
+    await drawer
+      .locator("select")
+      .filter({ has: testerPage.locator(`option[value="${datasetName}"]`) })
+      .selectOption(datasetName);
+    await testerPage.getByPlaceholder("Todas las filas").fill("1");
     await testerPage.getByTestId("toggle-model-overrides").click();
     // Los pasos del workflow se listan; el resto de componentes no aplica a una prueba.
     await expect(testerPage.getByTestId("run-llm-select-profiling")).toBeVisible();
@@ -281,11 +292,12 @@ test("modelo LLM por elemento: catálogo, configuración, prueba y deployment ef
       deployment: alterno!.deployment,
       source: "configuration",
     });
-    expect(llmOf("classification")).toMatchObject({ name: null, source: "default" });
+    expect(llmOf("detector_adversarial")).toMatchObject({ name: null, source: "default" });
 
     // 6. El detalle de la alerta muestra el modelo de cada paso.
     await authenticatePage(page, managerToken);
     await page.goto(`/alerta/${detail.alert_id}`);
+    await page.getByRole("button", { name: "Razonamiento del agente" }).click();
     const badges = page.getByTestId("step-llm");
     await expect(badges.first()).toBeVisible({ timeout: 30_000 });
     await expect(badges.filter({ hasText: "GPT-5.2" }).first()).toBeVisible();
