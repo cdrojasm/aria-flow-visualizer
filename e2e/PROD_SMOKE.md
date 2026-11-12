@@ -7,14 +7,26 @@ Inicia sesión con cada rol, recorre las pantallas, ejecuta las acciones que cad
 ## Ejecutar
 
 ```bash
-export ARIA_E2E_BASE_URL=https://<url-del-despliegue>
-export E2E_MANAGER_EMAIL=...          E2E_MANAGER_PASSWORD=...
-export E2E_CHANNEL_MANAGER_EMAIL=...  E2E_CHANNEL_MANAGER_PASSWORD=...
-# también: RELEASE_MANAGER, DATA_ANALYST, FRAUD_ANALYST, OPS_ANALYST, FRAUD_REVIEWER
-cd frontend_mockup && make test-e2e-prod-smoke
+cd frontend_mockup
+make test-e2e-prod-smoke
 ```
 
-Los roles sin credenciales se saltan; los tests que dependen de ellos también.
+Para incluir el test real de entrenamiento XGBoost en la suite, habilita su flag:
+
+```bash
+E2E_ALLOW_TRAINING=1 make test-e2e-prod-smoke
+```
+
+El test de entrenamiento aparece como `skipped` cuando la flag no está activa; así no se reporta
+como exitoso sin haber entrenado. Con la flag activa crea un dataset de 200 filas, entrena y puntúa
+un modelo pequeño, comprueba sus métricas y borra el modelo y el dataset al terminar. No activa el
+modelo.
+
+El comando carga los siete roles desde `.env.e2e.prod` (o desde la ruta indicada en
+`E2E_ENV_FILE`), valida que estén completos y comprueba los logins antes de ejecutar Playwright.
+Si falta una variable o falla un login, no inicia la suite. El archivo local está ignorado por Git;
+créalo con permisos restringidos (`chmod 600 .env.e2e.prod`). También puedes definir allí
+`ARIA_E2E_BASE_URL`; si falta, el comando la solicita antes de validar las credenciales.
 
 ## Qué cubre
 
@@ -33,7 +45,7 @@ test falla y lista qué borrar a mano.
 |---|---|---|
 | `E2E_SKIP_LLM=1` | *Salta* el asistente | Cada mensaje/borrador consume LLM real. |
 | `E2E_ALLOW_OPTIMIZER_RUN=1` | Inicia y pausa una sesión del optimizador | Gasta presupuesto de LLM. |
-| `E2E_ALLOW_TRAINING=1` | Crea, entrena, puntúa y borra un modelo pequeño (nunca lo activa) | Usa el worker de entrenamiento. |
+| `E2E_ALLOW_TRAINING=1` | Ejecuta el test explícito de creación de dataset, entrenamiento, métricas y puntaje; luego borra los recursos | Usa el worker de entrenamiento. |
 | `E2E_ALLOW_RESIDUE=1` | Crea una instancia de vector store y su generación | La API no permite borrar instancias: queda una `SMOKE-…`. |
 | `E2E_ALLOW_SETTINGS_WRITE=1` | Reescribe ajustes operativos con los mismos valores | Deja registro en el historial de cambios. |
 | `E2E_ALLOW_BACKUP=1` | Crea un respaldo | La API no permite borrarlo. |

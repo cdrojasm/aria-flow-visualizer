@@ -176,7 +176,7 @@ for (const role of ROLES) {
   test(`SMOKE API ${role.key}: acciones permitidas, denegadas y objetos de prueba`, async ({ playwright, baseURL }) => {
     test.skip(!creds(role.key), `Sin credenciales E2E_${role.key}_EMAIL/PASSWORD`);
     const perms = new Set(PERMISSIONS[role.key]);
-    const api = await playwright.request.newContext({ baseURL });
+    const api = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1" });
     const cleanups: Array<() => Promise<void>> = [];
     const remove = (label: string, path: string, token: string) =>
       cleanups.push(async () => {
@@ -353,7 +353,7 @@ for (const role of ROLES) {
 test("SMOKE UI: lo creado por un rol de biblioteca se ve en Biblioteca", async ({ playwright, baseURL, page }) => {
   const key = ["CHANNEL_MANAGER", "DATA_ANALYST"].find((k) => creds(k));
   test.skip(!key, "Sin rol con acceso UI a Biblioteca");
-  const api = await playwright.request.newContext({ baseURL });
+  const api = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1" });
   const token = await login(api, key!);
   const name = `${RUN_ID}-UI taxonomía`;
   const taxonomy = await ok<{ id: string }>(
@@ -380,7 +380,7 @@ test("SMOKE UI: lo creado por un rol de biblioteca se ve en Biblioteca", async (
 test.afterAll(async ({ playwright, baseURL }) => {
   const key = SWEEP_KEYS.find((k) => creds(k));
   if (!key) return;
-  const api = await playwright.request.newContext({ baseURL });
+  const api = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1" });
   const errors: string[] = [];
   try {
     const auth = bearer(await login(api, key));

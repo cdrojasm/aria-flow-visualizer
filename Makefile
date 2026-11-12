@@ -118,6 +118,5 @@ local-run: local-build ## Build changed frontend code and serve the shared dist 
 local-down: ## Stop the local nginx frontend
 	$(CONTAINER_CMD) compose -f docker-compose.local.yml down
 
-test-e2e-prod-smoke: ## Smoke E2E against a deployed env over HTTP only (no docker). Needs ARIA_E2E_BASE_URL and E2E_<ROLE>_EMAIL/PASSWORD
-	@test -n "$$ARIA_E2E_BASE_URL" || { echo "Define ARIA_E2E_BASE_URL (p.ej. https://aria.example.com)"; exit 1; }
-	E2E_PLAYWRIGHT_WORKERS=1 npm run test:e2e:prod-smoke
+test-e2e-prod-smoke: ## Pide credenciales por rol y ejecuta una vez el smoke E2E contra el entorno desplegado
+	@bash scripts/test-e2e-prod-smoke.sh

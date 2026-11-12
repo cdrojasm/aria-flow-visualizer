@@ -58,7 +58,10 @@ export class Session {
   ) {}
 
   static async open(playwright: PlaywrightWorkerArgs["playwright"], baseURL: string | undefined, role: string) {
-    const api = await playwright.request.newContext({ baseURL });
+    const api = await playwright.request.newContext({
+      baseURL,
+      ignoreHTTPSErrors: process.env.E2E_IGNORE_HTTPS_ERRORS === "1",
+    });
     return new Session(api, await login(api, role), role);
   }
 

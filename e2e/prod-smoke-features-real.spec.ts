@@ -199,7 +199,7 @@ test("FEATURE datasets y escenarios: dataset vacío, filas, análisis, splits, s
 });
 
 // ------------------------------------------------------------------ models
-test("FEATURE modelos: lecturas, plantillas y (opt-in) entrenar/puntuar/borrar", async ({ playwright, baseURL }) => {
+test("FEATURE modelos: lecturas y plantillas", async ({ playwright, baseURL }) => {
   await withSession(playwright, baseURL, ["CHANNEL_MANAGER", "DATA_ANALYST"], async (s) => {
     for (const p of ["/models", "/models/feature-templates", "/models/features/operations"]) {
       expect((await s.get(p)).status(), p).toBeLessThan(300);
@@ -209,7 +209,12 @@ test("FEATURE modelos: lecturas, plantillas y (opt-in) entrenar/puntuar/borrar",
     const templates = await s.json<Array<{ id: string }>>("/models/feature-templates");
     expect(templates.some((x) => x.id === t.id)).toBeTruthy();
 
-    if (!flag("E2E_ALLOW_TRAINING")) return;
+  });
+});
+
+test("FEATURE entrenamiento XGBoost: crear dataset, entrenar, puntuar y borrar", async ({ playwright, baseURL }) => {
+  test.skip(!flag("E2E_ALLOW_TRAINING"), "Activa E2E_ALLOW_TRAINING=1 para usar el worker de entrenamiento.");
+  await withSession(playwright, baseURL, ["CHANNEL_MANAGER", "DATA_ANALYST"], async (s) => {
     const ds = `${DS_RUN}_model`;
     await ok(await s.post("/datasets/empty", { name: ds, fields: ["x1", "x2", "label"] }), "dataset de entrenamiento");
     s.deleteLater("dataset modelo", `/datasets/${ds}`);
@@ -230,13 +235,19 @@ test("FEATURE modelos: lecturas, plantillas y (opt-in) entrenar/puntuar/borrar",
     );
     s.deleteLater("modelo", `/models/${model.id}`);
     await ok(await s.post(`/models/${model.id}/train`), "entrenar");
-    await poll("modelo READY", async () => {
-      const m = await s.json<{ status: string; error?: string }>(`/models/${model.id}`);
+    const trained = await poll<{ metrics?: Record<string, number>; id: string }>("modelo READY", async () => {
+      const m = await s.json<{ status: string; error?: string; id: string; metrics?: Record<string, number> }>(`/models/${model.id}`);
       if (m.status === "FAILED") throw new Error(`modelo FAILED: ${m.error}`);
       return m.status === "READY" ? m : undefined;
     }, { timeoutMs: 200_000, everyMs: 5_000 });
-    await ok(await s.post(`/models/${model.id}/score`, { row: { x1: "3", x2: "5" } }), "puntuar");
-    // Never activate: that would change what production scores with.
+    expect(trained.metrics?.n_samples, "el modelo debe incluir métricas del entrenamiento").toBe(200);
+    const score = await ok<{ model_id: string; score: number; predicted_positive: boolean }>(
+      await s.post(`/models/${model.id}/score`, { row: { x1: "3", x2: "5" } }), "puntuar",
+    );
+    expect(score.model_id).toBe(model.id);
+    expect(Number.isFinite(score.score)).toBeTruthy();
+    expect(typeof score.predicted_positive).toBe("boolean");
+    // Never activate: this test exercises training without changing the active model.
   });
 });
 
@@ -348,8 +359,40 @@ test("FEATURE asistente UI: el botón abre el chat", async ({ playwright, baseUR
 });
 
 // ------------------------------------------------------------------ optimizer
+test("FEATURE optimizador: autorización por rol", async ({ playwright, baseURL }) => {
+  const roles = ["MANAGER", "CHANNEL_MANAGER"].filter((role) => creds(role));
+  test.skip(roles.length === 0, "Configura credenciales de CHANNEL_MANAGER o MANAGER");
+
+  for (const role of roles) {
+    const s = await Session.open(playwright, baseURL, role);
+    try {
+      const response = await s.post("/agent/sessions", { mode: "optimization", scope: ["configuration"] });
+      if (role === "CHANNEL_MANAGER") {
+        const limits = await s.json<{ enabled: boolean }>("/agent/optimizer-launch-limits");
+        const objective = await s.get("/agent/objectives/active");
+        expect([200, 404], `objetivo activo: ${await objective.text()}`).toContain(objective.status());
+        if (!limits.enabled || objective.status() === 404) {
+          const body = await response.text();
+          expect(response.status(), `precondición de optimización no satisfecha: ${body}`).toBe(409);
+          expect(JSON.parse(body)).toMatchObject({ detail: { code: "SESSION_POLICY" } });
+          continue;
+        }
+        const session = await ok<{ session_id: string }>(response, "CHANNEL_MANAGER crea sesión de optimización");
+        const cancelled = await s.post(`/agent/sessions/${session.session_id}/cancel`);
+        expect(cancelled.status(), `cancelar sesión CHANNEL_MANAGER: ${await cancelled.text()}`).toBeLessThan(300);
+      } else {
+        const body = await response.text();
+        expect(response.status(), `MANAGER no puede crear sesión: ${body}`).toBe(403);
+        expect(JSON.parse(body)).toMatchObject({ detail: { code: "ROLE_NOT_ALLOWED" } });
+      }
+    } finally {
+      await s.close();
+    }
+  }
+});
+
 test("FEATURE optimizador: estado, límites, catálogo, objetivos, sesión crear/leer/cancelar", async ({ playwright, baseURL, page }) => {
-  await withSession(playwright, baseURL, ["CHANNEL_MANAGER", "MANAGER"], async (s) => {
+  await withSession(playwright, baseURL, ["CHANNEL_MANAGER"], async (s) => {
     for (const p of [
       "/agent/optimizer-status", "/agent/optimizer-launch-limits", "/agent/failure-catalog", "/agent/memory",
       "/agent/objectives", "/agent/objectives/active", "/agent/sessions?limit=5",
@@ -357,6 +400,16 @@ test("FEATURE optimizador: estado, límites, catálogo, objetivos, sesión crear
       const r = await s.get(p);
       expect([200, 404], `${p}: ${r.status()} ${await r.text()}`).toContain(r.status());
     }
+    const limits = await s.json<{ enabled: boolean }>("/agent/optimizer-launch-limits");
+    const objective = await s.get("/agent/objectives/active");
+    expect([200, 404], `objetivo activo: ${await objective.text()}`).toContain(objective.status());
+    test.skip(
+      !limits.enabled || objective.status() === 404,
+      !limits.enabled
+        ? "El optimizador está deshabilitado; se validaron sus endpoints de lectura."
+        : "No hay objetivo global activo; se validaron los endpoints de lectura, pero no se puede crear una sesión.",
+    );
+
     const session = await ok<{ session_id: string; status: string }>(
       await s.post("/agent/sessions", { mode: "optimization", scope: ["configuration"] }),
       "crear sesión de optimización",
