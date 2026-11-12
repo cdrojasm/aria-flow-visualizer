@@ -175,6 +175,8 @@ export type AgentMessage = {
   // project-map nodes the answer was grounded on.
   references?: AgentMessageReference[];
   context_used?: AgentMessageReference[];
+  // Set when the worker could not answer; content is then empty.
+  error_code?: string | null;
 };
 
 export type AgentMessageReference = {

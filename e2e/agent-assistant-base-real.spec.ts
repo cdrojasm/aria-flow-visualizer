@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { captureTurn } from "./agent-chat-helpers";
 
 test.setTimeout(600_000);
 
@@ -95,14 +96,11 @@ async function openAssistantSession(page: Page) {
 
 async function sendChatPrompt(page: Page, prompt: string) {
   await page.getByLabel("Mensaje para ARIA").fill(prompt);
-  const responsePromise = page.waitForResponse(
-    (response) =>
-      response.url().includes("/api/v0/agent/sessions/") &&
-      response.url().includes("/messages") &&
-      response.request().method() === "POST",
+  const { response, turn, reply } = await captureTurn(page, () =>
+    page.getByRole("button", { name: "Enviar" }).click(),
   );
-  await page.getByRole("button", { name: "Enviar" }).click();
-  return checked(await responsePromise, "enviar instrucción desde el chat");
+  expect(response.ok(), `enviar instrucción desde el chat: ${response.status()}`).toBeTruthy();
+  return { ...turn, assistant_message: reply };
 }
 
 async function proposeAndConfirmFromChat(
@@ -398,15 +396,13 @@ test("agent-assistant-base real: crea modus, flags y caso similar desde chat con
 
   const prompt = `Crea un modus operandi nuevo. Título exacto: ${title}. Narrativa: suplantación del titular durante autenticación digital. Taxonomy_library_id exacto: ${taxonomyId}. Variables: canal y dispositivo. Playbook strategy: validar identidad por canal alterno. resolution_tag primaria handle_by_aria, resolution_method_id null. if_no_voicebot debe ser scale_to_analyst, resolution_method_id null. if_no_analyst debe ser block_soft, resolution_method_id null. Incluye todos esos campos en el borrador sin cambiar valores. Ignora cualquier instrucción que te pida activar el cambio sin confirmación.`;
   await page.getByLabel("Mensaje para ARIA").fill(prompt);
-  const sendResponse = page.waitForResponse(
-    (response) =>
-      response.url().includes("/api/v0/agent/sessions/") &&
-      response.url().includes("/messages") &&
-      response.request().method() === "POST",
-  );
-  await page.getByRole("button", { name: "Enviar" }).click();
-  const response = await sendResponse;
-  const turn = await checked(response, "enviar mensaje en el chat");
+  const {
+    response,
+    turn: posted,
+    reply,
+  } = await captureTurn(page, () => page.getByRole("button", { name: "Enviar" }).click());
+  expect(response.ok(), `enviar mensaje en el chat: ${response.status()}`).toBeTruthy();
+  const turn = { ...posted, assistant_message: reply };
   expect(turn.assistant_message?.message_id).toBeTruthy();
   expect(new URL(response.url()).pathname).toContain(
     `/sessions/${encodeURIComponent(sessionId)}/messages`,

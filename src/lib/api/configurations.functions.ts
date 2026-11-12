@@ -29,6 +29,8 @@ export type ApiShortageBehavior = {
 export type ApiGeneralSettings = {
   migration_window_enabled: boolean;
   migration_window_datetime: string;
+  // element -> LLM catalog name (null/absent = default). See llmCatalog.functions.ts.
+  llm_selection?: Record<string, string | null>;
 };
 export type ApiInfraSettings = {
   max_instances: number;

@@ -451,6 +451,7 @@ export function toCreateConfigurationRequest(
     general: {
       migration_window_enabled: settings.migrationWindowEnabled,
       migration_window_datetime: settings.migrationWindowDatetime,
+      llm_selection: settings.llmSelection,
     },
     infra: {
       max_instances: settings.maxInstances,
@@ -480,6 +481,7 @@ export function settingsFromConfigurationDetail(
   return {
     migrationWindowEnabled: detail.general.migration_window_enabled,
     migrationWindowDatetime: detail.general.migration_window_datetime,
+    llmSelection: { ...(detail.general.llm_selection ?? {}) },
     maxInstances: detail.infra.max_instances,
     autoScale: detail.infra.auto_scale,
     fraudHistoryDbRetentionDays: detail.infra.fraud_history_db_retention_days,

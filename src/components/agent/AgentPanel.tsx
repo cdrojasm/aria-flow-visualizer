@@ -163,6 +163,8 @@ export function AgentPanel({
   const [sessionId, setSessionId] = useState("");
   const [composer, setComposer] = useState("");
   const [pending, setPending] = useState<PendingMessage[]>([]);
+  // Turns the API stored (202) whose reply the worker has not written yet.
+  const [awaiting, setAwaiting] = useState<string[]>([]);
   const [lastUserMessage, setLastUserMessage] = useState<AgentMessage | null>(null);
   const [lastUserMessageSource, setLastUserMessageSource] = useState("");
   const [draft, setDraft] = useState<AgentLibraryDraft | null>(null);
@@ -215,9 +217,16 @@ export function AgentPanel({
       return [...merged.values()].sort((left, right) => left.seq - right.seq);
     },
     enabled: open && Boolean(activeSessionId),
-    refetchInterval: 3_000,
+    refetchInterval: awaiting.length > 0 ? 1_500 : 3_000,
   });
   const messages = messagesQuery.data;
+  const unanswered = useMemo(() => {
+    const answered = new Set((messages ?? []).map((message) => message.client_message_id));
+    return awaiting.filter((id) => !answered.has(`${id}:assistant`));
+  }, [awaiting, messages]);
+  useEffect(() => {
+    if (unanswered.length !== awaiting.length) setAwaiting(unanswered);
+  }, [unanswered, awaiting.length]);
   const insightsQuery = useQuery({
     queryKey: ["agentInsights", activeSessionId],
     queryFn: () => listAgentInsights(activeSessionId),
@@ -300,6 +309,9 @@ export function AgentPanel({
       setLastUserMessage(turn.user_message);
       setLastUserMessageSource(variables.content);
       setPending((items) => items.filter((item) => item.id !== variables.id));
+      if (!turn.assistant_message) {
+        setAwaiting((ids) => (ids.includes(variables.id) ? ids : [...ids, variables.id]));
+      }
       queryClient.setQueryData<AgentMessage[]>(
         ["agentMessages", activeSessionId],
         (current = []) => {
@@ -338,6 +350,14 @@ export function AgentPanel({
         items.map((item) => (item.id === id ? { ...item, failed: false } : item)),
       );
     }
+    sendMutation.mutate({ id, content });
+  };
+
+  // A turn that ended in error is closed for good, so a retry is a new message.
+  const resendAsNewMessage = (content: string) => {
+    if (!activeSessionId || sendMutation.isPending) return;
+    const id = newClientMessageId();
+    setPending((items) => [...items, { id, content, failed: false }]);
     sendMutation.mutate({ id, content });
   };
 
@@ -656,7 +676,9 @@ export function AgentPanel({
                       {message.role === "user" ? "Tú" : "ARIA"}
                     </span>
                     <span className="whitespace-pre-wrap break-words">
-                      {message.role === "user" ? (
+                      {message.error_code ? (
+                        "No pude responder esta vez."
+                      ) : message.role === "user" ? (
                         message.content
                       ) : (
                         <BoldText text={message.content} />
@@ -672,6 +694,25 @@ export function AgentPanel({
                               pending.find((item) => item.id === message.client_message_id),
                             )
                           }
+                          className="inline-flex items-center gap-1 underline"
+                        >
+                          <RefreshCw className="h-3 w-3" /> Reintentar
+                        </button>
+                      </div>
+                    )}
+                    {message.error_code && (
+                      <div className="mt-1 flex items-center justify-between gap-2 border-t border-border pt-1 text-xs">
+                        <span>El asistente no está disponible ahora.</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const original = displayedMessages.find(
+                              (item) =>
+                                item.client_message_id ===
+                                message.client_message_id.replace(/:assistant$/, ""),
+                            );
+                            if (original) resendAsNewMessage(original.content);
+                          }}
                           className="inline-flex items-center gap-1 underline"
                         >
                           <RefreshCw className="h-3 w-3" /> Reintentar
@@ -787,6 +828,11 @@ export function AgentPanel({
               >
                 Abrir propuesta de {draftTitle(draftKind, draftItem.draft)}
               </button>
+            )}
+            {unanswered.length > 0 && (
+              <div role="status" className="text-[11px] text-text-secondary">
+                ARIA está escribiendo…
+              </div>
             )}
             {pending.some((item) => !item.failed) && (
               <div className="text-right text-[11px] text-text-secondary">Enviando…</div>

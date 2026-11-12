@@ -1,3 +1,4 @@
+import { StepLlmBadge } from "@/components/llm/StepLlmBadge";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -26,6 +27,7 @@ import {
 } from "@/lib/api/alertSchema.functions";
 import { AlertSchemaView, type CanonicalAlertData } from "@/components/alert/AlertSchemaView";
 import { AlertFlowDiagrams } from "@/components/alert/AlertFlowDiagrams";
+import { ReasoningEvaluationTab } from "@/components/alert/ReasoningEvaluationTab";
 import { getDatasets } from "@/lib/api/datasets.functions";
 import { useRole } from "@/hooks/useRole";
 import {
@@ -51,7 +53,7 @@ export const Route = createFileRoute("/alerta/$id")({
   component: AlertaDetailPage,
 });
 
-type AlertTab = "resumen" | "razonamiento" | "data" | "usuario" | "historial" | "raw";
+type AlertTab = "resumen" | "razonamiento" | "calidad" | "data" | "usuario" | "historial" | "raw";
 
 const TABS: { id: AlertTab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
@@ -401,6 +403,7 @@ function RazonamientoTab({
                         {step.attempt > 1 ? ` (intento ${step.attempt})` : ""}
                       </span>
                       <span className="text-[11px] text-text-secondary">· {duration(step)}</span>
+                      <StepLlmBadge output={step.output} />
                     </div>
                     <ChevronDown
                       className={`h-4 w-4 text-text-secondary transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -861,7 +864,8 @@ function AlertaDetailPage() {
         : getAlertSchemaVersion(schemaVersion),
     enabled: Boolean(detailQuery.data),
   });
-  const { role } = useRole();
+  const { role, user } = useRole();
+  const canReadQuality = Boolean(user?.permissions.includes("monitor"));
   const canReadRaw = role === "manager" || role === "release_manager";
   const rawQuery = useQuery({
     queryKey: ["alertRaw", id],
@@ -949,6 +953,9 @@ function AlertaDetailPage() {
             <div className="flex gap-1 border-b border-border mb-6">
               {[
                 ...TABS,
+                ...(canReadQuality
+                  ? [{ id: "calidad" as const, label: "Evaluación de calidad" }]
+                  : []),
                 ...(canReadRaw ? [{ id: "raw" as const, label: "Evento original (ARIC)" }] : []),
               ].map((t) => (
                 <button
@@ -966,6 +973,12 @@ function AlertaDetailPage() {
             </div>
             {tab === "resumen" && <ResumenTab detail={detail} schema={schema} />}
             {tab === "razonamiento" && <RazonamientoTab detail={detail} schema={schema} />}
+            {tab === "calidad" && canReadQuality && (
+              <ReasoningEvaluationTab
+                alertId={detail.alert_id}
+                canRequest={Boolean(user?.permissions.includes("configuration"))}
+              />
+            )}
             {tab === "data" && (
               <div className="max-w-[860px]">
                 <AlertSchemaView

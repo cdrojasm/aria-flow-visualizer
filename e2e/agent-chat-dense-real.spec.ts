@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { captureTurn, type ChatMessage } from "./agent-chat-helpers";
 
 // Dense assistant chat on the real stack (no API mocking): insights live in the
 // message feed (no fixed block under it), the composer stays small, and the
@@ -163,15 +164,12 @@ async function ask(page: Page, question: string) {
   await expect(page.getByLabel("Conversación")).toHaveValue(sessionId);
   const composer = page.getByLabel("Mensaje para ARIA");
   await composer.fill(question);
-  const reply = page.waitForResponse(
-    (response) => response.url().includes("/messages") && response.request().method() === "POST",
-  );
-  await composer.press("Enter");
-  const turn = await (await reply).json();
-  return turn.assistant_message as {
+  type Reply = ChatMessage & {
     references: { id: string; kind: string; label: string; path?: string }[];
     context_used: { id: string; kind: string; label: string }[];
   };
+  const { reply } = await captureTurn<Reply>(page, () => composer.press("Enter"));
+  return reply;
 }
 
 test("answers about another view carry a chip that navigates there", async ({ page }) => {
