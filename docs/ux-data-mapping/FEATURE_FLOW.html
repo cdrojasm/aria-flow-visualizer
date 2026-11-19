@@ -4,98 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ARIA Feature Flow</title>
-<style>
-/* Layout: sticky role tabs, then one horizontally scrolling storyboard per role (screenshot cards joined by labeled click arrows). */
-:root{
-  --bg:#f4f6fa; --surface:#ffffff; --fg:#0c1b33; --muted:#51607a; --line:#d5dceb;
-  --accent:#1464a5; --accent-soft:#e1edf8; --ok:#1b7f55; --warn:#a86400;
-  --display:'Segoe UI','Helvetica Neue',Arial,sans-serif; --body:system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;
-}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0a1220; --surface:#121d31; --fg:#e8eef9; --muted:#9aa9c3; --line:#24334e;
-  --accent:#5db0f0; --accent-soft:#16304d; --ok:#4cc592; --warn:#e9a74a; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0a1220; --surface:#121d31; --fg:#e8eef9; --muted:#9aa9c3; --line:#24334e;
-  --accent:#5db0f0; --accent-soft:#16304d; --ok:#4cc592; --warn:#e9a74a; color-scheme:dark}
-*{box-sizing:border-box}
-body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.5;
-  padding-block:0 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.wrap{max-width:1280px;margin:0 auto}
-header{padding-block:32px 8px}
-h1{font-family:var(--display);font-size:clamp(28px,4vw,42px);line-height:1.1;margin:0 0 8px;text-wrap:balance}
-h2{font-family:var(--display);font-size:22px;margin:0 0 4px;text-wrap:balance}
-p.lead{color:var(--muted);max-width:68ch;margin:0}
-section{margin-top:40px}
-.note{color:var(--muted);font-size:13px;max-width:70ch;margin:0 0 16px}
-.box{background:var(--surface);border:1px solid var(--line);border-radius:8px}
-.scroll{overflow-x:auto}
-/* matrix */
-table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
-th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:center}
-th:first-child,td:first-child{text-align:left}
-thead th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
-td.y{color:var(--accent);font-size:16px;line-height:1}
-td.home{color:var(--ok);font-size:16px;line-height:1}
-code{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--muted)}
-.legend{display:flex;gap:16px;flex-wrap:wrap;padding:10px 12px;font-size:12px;color:var(--muted)}
-/* graph */
-figure{margin:0}
-figure svg{display:block;min-width:900px;width:100%;height:auto}
-figcaption{padding:10px 12px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
-svg text{font-family:var(--body);font-size:12px;fill:currentColor}
-svg .n rect{fill:var(--surface);stroke:var(--accent);stroke-width:1.5}
-svg .n text{font-weight:600}
-svg .n small{font-size:10px}
-svg .e{stroke:var(--accent);stroke-width:1.5;fill:none}
-svg .el{fill:var(--muted);font-size:11px}
-/* role tabs */
-.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;border-bottom:1px solid var(--line);
-  display:flex;gap:6px;flex-wrap:wrap;margin-top:40px}
-.tabs button{font:inherit;font-weight:500;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
-.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
-.tabs button:focus-visible,.shot:focus-visible,.thumb:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.rolehead{padding-block:20px 12px;display:flex;flex-direction:column;gap:6px}
-.pill{display:inline-block;font-size:12px;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:2px 10px;font-weight:600;width:fit-content}
-/* storyboard */
-.flow{display:flex;align-items:flex-start;overflow-x:auto;padding:4px 2px 20px;gap:0;scroll-snap-type:x proximity}
-.step{flex:0 0 300px;scroll-snap-align:start;display:flex;flex-direction:column;gap:8px}
-.card{padding:10px;display:flex;flex-direction:column;gap:8px}
-.shot{display:block;width:100%;aspect-ratio:16/10;border:1px solid var(--line);border-radius:4px;overflow:hidden;padding:0;background:var(--bg);cursor:zoom-in}
-.shot img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
-.card h3{margin:0;font-family:var(--display);font-size:16px}
-.card .idx{color:var(--accent);margin-right:6px}
-.card p{margin:0;font-size:12.5px;color:var(--muted)}
-.thumbs{display:flex;flex-wrap:wrap;gap:6px}
-.thumb{width:calc(33.333% - 4px);border:1px solid var(--line);border-radius:4px;background:var(--bg);padding:0;cursor:zoom-in;overflow:hidden;font:inherit;color:var(--muted);text-align:left}
-.thumb img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top}
-.thumb span{display:block;font-size:10px;line-height:1.25;padding:3px 4px}
-.thumbs-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
-.edge{flex:0 0 130px;align-self:flex-start;margin-top:70px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:0 4px;color:var(--accent)}
-.edge span{font-size:11.5px;line-height:1.3;text-align:center;color:var(--fg);font-weight:500}
-.edge svg{width:100%;height:12px}
-/* lightbox */
-#lb{position:fixed;inset:0;z-index:20;background:rgba(5,10,20,.85);display:none;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
-#lb.open{display:flex}
-#lb .bar{color:#fff;display:flex;justify-content:space-between;gap:12px;margin-bottom:10px;font-weight:500}
-#lb button{font:inherit;background:#fff;color:#0c1b33;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
-#lb .pane{overflow:auto;flex:1;min-height:0}
-#lb img{display:block;margin:0 auto;max-width:100%;height:auto;background:#fff}
-@media (max-width:600px){.step{flex-basis:260px}.thumb{width:calc(50% - 3px)}}
-@media (prefers-reduced-motion:no-preference){.shot img{transition:transform .2s}.shot:hover img{transform:scale(1.02)}}
-</style>
+<link rel="stylesheet" href="feature-flow/style.css">
 </head>
 <body>
-
-
 <div class="wrap">
-<header>
+<header class="top">
   <h1>ARIA · Feature Flow</h1>
-  <p class="lead">Qué ve cada rol al entrar, a qué vista va con cada botón y cómo se ve cada pantalla. Capturas y rutas del UX Data Mapping (Playwright sobre la app local, 2026-11-02); roles y menú de <code>ROLE_NAV</code>.</p>
+  <p class="lead">Qué hace cada rol en cada caso de uso, qué responde ARIA en cada paso y qué pasa cuando algo falla. Los mensajes entre comillas son los textos reales de la aplicación o del servidor. Pensado como base para el manual de usuario.</p>
 </header>
 
 <section>
   <h2>Quién entra a qué</h2>
-  <p class="note">El punto verde es la pantalla donde cae cada rol al iniciar sesión. Si un rol abre una ruta que no tiene, el layout lo lleva a su primera ruta.</p>
+  <p class="note">El punto verde es la pantalla donde cae cada rol al iniciar sesión. Si un rol abre una ruta que no tiene, la aplicación lo lleva a su primera ruta.</p>
   <div class="box">
     <div class="scroll"><table id="matrix"></table></div>
     <div class="legend"><span><b style="color:var(--ok)">●</b> pantalla de aterrizaje</span><span><b style="color:var(--accent)">●</b> acceso desde el menú lateral</span><span>El detalle de alerta hereda el acceso de En proceso.</span></div>
@@ -104,7 +24,7 @@ svg .el{fill:var(--muted);font-size:11px}
 
 <section>
   <h2>Saltos entre vistas</h2>
-  <p class="note">Solo los botones y enlaces que cambian de vista dentro de la app. Todo lo demás se alcanza con el menú lateral, según el rol.</p>
+  <p class="note">Solo los botones y enlaces que cambian de vista. Todo lo demás se alcanza con el menú lateral, según el rol.</p>
   <figure class="box">
     <div class="scroll">
     <svg viewBox="0 0 980 390" role="img" aria-label="Grafo de navegación: En proceso, Histórico y Monitor abren el Detalle de alerta, que vuelve a En proceso; Testing abre Detalle de prueba y Escenario; Configuración y Modelos enlazan a Biblioteca.">
@@ -148,97 +68,23 @@ svg .el{fill:var(--muted);font-size:11px}
   <div class="pane"><img id="lbi" alt=""></div>
 </div>
 
-<script>
-const ROLE_NAV={
- manager:["dashboard","cola","historico","monitor","configuracion","backups","biblioteca"],
- release_manager:["dashboard","cola","historico","monitor","configuracion","testing","biblioteca"],
- channel_manager:["dashboard","cola","historico","monitor","testing","biblioteca","configuracion","modelos"],
- data_analyst:["monitor","testing","biblioteca","modelos"],
- fraud_analyst:["cola"], ops_analyst:["dashboard","cola","monitor"], fraud_reviewer:["historico"]};
-const VIEWS={dashboard:["Dashboard","/dashboard"],cola:["En proceso","/cola"],historico:["Histórico de Gestión de Fraude","/historico-fraude"],monitor:["Monitor del Agente","/monitor"],configuracion:["Configuración","/configuracion"],testing:["Testing","/testing"],biblioteca:["Biblioteca","/biblioteca"],modelos:["Modelos","/modelos"],backups:["Respaldos","/backups"]};
-const LABEL={manager:"Manager",release_manager:"Release Manager",channel_manager:"Channel Manager",data_analyst:"Data Analyst",fraud_analyst:"Fraud Analyst",ops_analyst:"Ops Analyst",fraud_reviewer:"Fraud Reviewer"};
-const LAND={manager:"dashboard",release_manager:"dashboard",channel_manager:"dashboard",ops_analyst:"dashboard",data_analyst:"monitor",fraud_analyst:"cola",fraud_reviewer:"historico"};
-const T=(img,label)=>({img,label});
-const CFG_MGR=[T("tab-configuracion-mgr-0-general","General"),T("tab-configuracion-mgr-1-infraestructura","Infraestructura"),T("tab-configuracion-mgr-2-operacion-inmediata","Operación inmediata"),T("tab-configuracion-mgr-3-asistente-y-optimizador","Asistente y optimizador"),T("tab-configuracion-mgr-4-test","Test"),T("tab-configuracion-mgr-5-segmento","Segmento"),T("tab-configuracion-mgr-6-esquema","Esquema")];
-const CFG_CM=[T("tab-configuracion-cm-0-segmento","Segmento"),T("tab-configuracion-cm-1-agente","Agente"),T("tab-configuracion-cm-2-evaluacion","Evaluación"),T("tab-configuracion-cm-3-optimizador","Optimizador")];
-const N={
- login:{t:"Acceso",r:"/login",img:"login",d:"Correo y contraseña. Con sesión activa redirige al destino pedido o a la primera ruta del rol."},
- dashboard:{t:"Dashboard",r:"/dashboard",img:"dashboard",d:"Indicadores generales, SLA y filtros por segmento.",tabs:[T("tab-dashboard-0-tiempo-real","Tiempo real"),T("tab-dashboard-1-historico","Histórico"),T("tab-dashboard-2-por-dimension","Por dimensión")]},
- cola:{t:"En proceso",r:"/cola",img:"cola",d:"Alertas pendientes para analista y alertas en proceso. Cada fila trae su botón de acción.",tabs:[T("tab-cola-0-pending-alerts-for-analyst","Pendientes"),T("tab-cola-1-alertas-en-proceso","En proceso")]},
- alerta:{t:"Detalle de alerta",r:"/alerta/$id",img:"alerta-detalle",d:"Resumen, decisión del agente y acciones de la alerta.",tabs:[T("alerta-tab-data","Data"),T("alerta-tab-usuario","Usuario"),T("alerta-tab-razonamiento","Razonamiento"),T("alerta-tab-historial","Historial")]},
- historico:{t:"Histórico de Gestión de Fraude",r:"/historico-fraude",img:"historico-fraude",d:"Alertas cerradas con Auditoría y Ver. El equipo de fraude corrige aquí el fraud_label."},
- monitor:{t:"Monitor del Agente",r:"/monitor",img:"monitor",d:"Salud y calidad del agente por pestañas.",tabs:[T("tab-monitor-0-indicadores-generales","Generales"),T("tab-monitor-1-indicadores-de-area","De área"),T("tab-monitor-2-analistas-y-otros-canales","Analistas y canales"),T("tab-monitor-3-explicabilidad","Explicabilidad"),T("tab-monitor-4-indicadores-tecnicos","Técnicos"),T("tab-monitor-5-recomendaciones","Recomendaciones"),T("tab-monitor-6-optimizador","Optimizador")]},
- configuracion:{t:"Configuración",r:"/configuracion",img:"configuracion",d:"Parámetros del agente, segmento, esquema y operación.",tabs:null},
- testing:{t:"Testing",r:"/testing",img:"testing",d:"Corridas de prueba, datasets y escenarios de simulación."},
- run:{t:"Detalle de prueba",r:"/testing/$runId",img:"testing-run",d:"Resultado de una corrida; Volver a Testing regresa a la lista."},
- escenario:{t:"Escenario de simulación",r:"/testing/scenarios/$scenarioId",img:"testing-escenario",d:"Estado en vivo de un generador de eventos sintéticos."},
- biblioteca:{t:"Biblioteca",r:"/biblioteca",img:"biblioteca",d:"Conocimiento, catálogos, canales, listas y datasets.",tabs:[T("tab-biblioteca-0-base-de-conocimiento","Base de conocimiento"),T("tab-biblioteca-1-catalogos-de-eventos","Catálogos"),T("tab-biblioteca-2-canales","Canales"),T("tab-biblioteca-3-listas-negras-blancas","Listas"),T("tab-biblioteca-4-datasets","Datasets"),T("tab-biblioteca-conocimiento-0-vector-store","Vector store"),T("tab-biblioteca-conocimiento-1-taxonomias-de-fraude","Taxonomías"),T("tab-biblioteca-conocimiento-2-modus-operandi","Modus operandi"),T("tab-biblioteca-conocimiento-3-yellow-flags","Yellow flags"),T("tab-biblioteca-conocimiento-4-red-flags","Red flags"),T("tab-biblioteca-conocimiento-5-casos-similares","Casos similares")]},
- modelos:{t:"Modelos",r:"/modelos",img:"modelos",d:"Catálogo de modelos, resultados y operaciones.",tabs:[T("tab-modelos-0-catalogo-y-resultados","Catálogo y resultados"),T("tab-modelos-1-operaciones","Operaciones")]},
- backups:{t:"Respaldos",r:"/backups",img:"backups",d:"Respaldos de la plataforma. Solo Manager."}
-};
-const M="menú lateral";
-const FLOWS={
- fraud_analyst:{sum:"Trabaja alertas una por una. Solo ve En proceso; es el único rol con el botón Tomar.",steps:[
-  ["login"],["cola","Ingresar → su primera ruta"],["alerta","Tomar (reserva la alerta) o Seguir si ya es suya"],["cola","Resolver (decisión) o Liberar → vuelve a En proceso",{t:"Cola actualizada",d:"La alerta resuelta o liberada sale de su lista."}]]},
- fraud_reviewer:{sum:"Equipo de fraude. Su única vista es el histórico, desde donde corrige el fraud_label.",steps:[
-  ["login"],["historico","Ingresar → su primera ruta"],["alerta","Ver en una fila del histórico",{d:"El enlace Cola del encabezado no le sirve: su único acceso es el histórico."}]]},
- ops_analyst:{sum:"Opera y vigila. Ve alertas en solo lectura (no hay botón Tomar) y el monitor.",steps:[
-  ["login"],["dashboard","Ingresar → /dashboard"],["cola",M+" · En proceso"],["alerta","Ver"],["monitor",M+" · Monitor del Agente"]]},
- data_analyst:{sum:"Analiza el agente y los modelos. Aterriza en el monitor y no ve alertas.",steps:[
-  ["login"],["monitor","Ingresar → su primera ruta"],["testing",M+" · Testing"],["run","Nueva prueba o fila de una corrida"],["escenario","Volver a Testing → abrir un escenario"],["biblioteca",M+" · Biblioteca"],["modelos",M+" · Modelos"]]},
- manager:{sum:"Supervisa la operación. Tiene Respaldos y no tiene Testing ni Modelos.",steps:[
-  ["login"],["dashboard","Ingresar → /dashboard"],["cola",M+" · En proceso"],["alerta","Ver"],["historico",M+" · Histórico"],["monitor",M+" · Monitor"],["configuracion",M+" · Configuración",{tabs:CFG_MGR}],["backups",M+" · Respaldos"],["biblioteca",M+" · Biblioteca"]]},
- release_manager:{sum:"Publica configuraciones. Ve el mismo menú del Manager y suma Testing; no tiene Respaldos.",steps:[
-  ["login"],["dashboard","Ingresar → /dashboard"],["cola",M+" · En proceso"],["alerta","Ver"],["historico",M+" · Histórico"],["monitor",M+" · Monitor"],["configuracion",M+" · Configuración",{d:"Las pestañas dependen del rol; no hay capturas de Release Manager."}],["testing",M+" · Testing"],["run","Nueva prueba o fila de una corrida"],["biblioteca",M+" · Biblioteca"]]},
- channel_manager:{sum:"Gestiona su canal. Es el único rol con todo el menú salvo Respaldos.",steps:[
-  ["login"],["dashboard","Ingresar → /dashboard"],["cola",M+" · En proceso"],["alerta","Ver"],["historico",M+" · Histórico"],["monitor",M+" · Monitor"],["testing",M+" · Testing"],["run","Nueva prueba o fila de una corrida"],["biblioteca",M+" · Biblioteca"],["configuracion",M+" · Configuración",{tabs:CFG_CM}],["biblioteca","Segmento → enlace a Biblioteca",{t:"Biblioteca (desde Segmento)"}],["modelos",M+" · Modelos"]]}
-};
-const ORDER=["fraud_analyst","fraud_reviewer","ops_analyst","data_analyst","manager","release_manager","channel_manager"];
-const $=s=>document.querySelector(s);
-const sl=r=>r.replace(/_/g,"-");
-
-/* matrix */
-(function(){
- const views=Object.keys(VIEWS);
- let h="<thead><tr><th>Vista</th>"+ORDER.map(r=>"<th>"+LABEL[r]+"</th>").join("")+"</tr></thead><tbody>";
- views.forEach(v=>{h+="<tr><td>"+VIEWS[v][0]+" <code>"+VIEWS[v][1]+"</code></td>"+ORDER.map(r=>{
-  if(!ROLE_NAV[r].includes(v))return "<td></td>";
-  return LAND[r]===v?'<td class="home" aria-label="aterrizaje">●</td>':'<td class="y" aria-label="acceso">●</td>';}).join("")+"</tr>";});
- $("#matrix").innerHTML=h+"</tbody>";
-})();
-
-/* lightbox */
-const lb=$("#lb");
-function zoom(img,label){$("#lbi").src="screenshots/"+img+".png";$("#lbi").alt=label;$("#lbt").textContent=label;lb.classList.add("open");$("#lbx").focus();}
-function closeLb(){lb.classList.remove("open");}
-$("#lbx").onclick=closeLb;lb.onclick=e=>{if(e.target===lb)closeLb();};
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeLb();});
-
-/* role view */
-const ARROW='<svg viewBox="0 0 100 12" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="6" x2="90" y2="6" stroke="currentColor" stroke-width="2"/><path d="M88,1 L100,6 L88,11 z" fill="currentColor"/></svg>';
-function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
-function show(role){
- const f=FLOWS[role];
- [...$("#tabs").children].forEach(b=>b.setAttribute("aria-selected",String(b.dataset.role===role)));
- const nav=ROLE_NAV[role].map(v=>VIEWS[v][0]).join(" · ");
- let html='<div class="rolehead"><h2>'+LABEL[role]+'</h2><span class="pill">Aterriza en '+VIEWS[LAND[role]][1]+'</span><p class="lead">'+esc(f.sum)+'</p><p class="note" style="margin:0"><b>Menú:</b> '+esc(nav)+'</p></div><div class="flow" tabindex="0" aria-label="Flujo de pantallas de '+LABEL[role]+'">';
- f.steps.forEach((s,i)=>{
-  const n=Object.assign({},N[s[0]],s[2]||{});
-  if(i>0)html+='<div class="edge">'+ARROW+'<span>'+esc(s[1])+'</span></div>';
-  html+='<div class="step"><div class="box card"><button class="shot" type="button" data-img="'+n.img+'" data-l="'+esc(n.t)+'" aria-label="Ampliar '+esc(n.t)+'"><img src="screenshots/'+n.img+'.png" alt="'+esc(n.t)+'" loading="lazy"></button>'+
-   '<h3><span class="idx">'+(i+1)+'</span>'+esc(n.t)+'</h3><code>'+esc(n.r)+'</code><p>'+esc(n.d)+'</p>';
-  if(n.tabs&&n.tabs.length){html+='<div class="thumbs-label">Pestañas</div><div class="thumbs">'+n.tabs.map(t=>'<button class="thumb" type="button" data-img="'+t.img+'" data-l="'+esc(n.t+" · "+t.label)+'"><img src="screenshots/'+t.img+'.png" alt="" loading="lazy"><span>'+esc(t.label)+'</span></button>').join("")+'</div>';}
-  html+='</div></div>';
- });
- $("#role").innerHTML=html+'</div>';
- $("#role").querySelectorAll("[data-img]").forEach(b=>b.onclick=()=>zoom(b.dataset.img,b.dataset.l));
- try{history.replaceState(null,"","#"+sl(role));}catch(e){}
-}
-ORDER.forEach(r=>{const b=document.createElement("button");b.type="button";b.role="tab";b.textContent=LABEL[r];b.dataset.role=r;b.onclick=()=>show(r);$("#tabs").appendChild(b);});
-function fromHash(){const h=location.hash.slice(1);return ORDER.find(r=>sl(r)===h)||ORDER[0];}
-window.addEventListener("hashchange",()=>show(fromHash()));
-show(fromHash());
-</script>
-
+<script src="feature-flow/roles.js"></script>
+<script src="feature-flow/storyboard.js"></script>
+<script src="feature-flow/casos/acceso.js"></script>
+<script src="feature-flow/casos/alerta-ciclo.js"></script>
+<script src="feature-flow/casos/alerta-consultar.js"></script>
+<script src="feature-flow/casos/alerta-liberar.js"></script>
+<script src="feature-flow/casos/alerta-resolver.js"></script>
+<script src="feature-flow/casos/config-desplegar.js"></script>
+<script src="feature-flow/casos/dataset-particion.js"></script>
+<script src="feature-flow/casos/features-preview.js"></script>
+<script src="feature-flow/casos/fraud-label.js"></script>
+<script src="feature-flow/casos/indicadores.js"></script>
+<script src="feature-flow/casos/modelo-activar.js"></script>
+<script src="feature-flow/casos/modelo-entrenar.js"></script>
+<script src="feature-flow/casos/prueba-correr.js"></script>
+<script src="feature-flow/casos/respaldo.js"></script>
+<script src="feature-flow/casos/vector-store.js"></script>
+<script src="feature-flow/app.js"></script>
 </body>
 </html>

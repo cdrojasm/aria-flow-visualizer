@@ -1,0 +1,30 @@
+FF.cases["vector-store"] = {
+  title: "Construir una generación de vector store",
+  short: "Cargar el conocimiento en una generación nueva sin tocar producción.",
+  goal: "Preparar los documentos de una instancia de vector store en una generación inmutable para consultarla y probarla.",
+  actors: [{ role: "channel_manager", as: "Construye" }, { role: "data_analyst", as: "Construye" }, { role: "manager", as: "Construye y aprueba su uso" }, { role: "release_manager", as: "Construye y aprueba su uso" }],
+  pre: ["La instancia tiene al menos un activo en su manifiesto."],
+  states: [[["Construyendo", ""]], [["Lista", "ok"], ["Fallida", "bad"]], [["Retirada", ""]]],
+  steps: [
+    { t: "Abrir la instancia", r: "/biblioteca", shot: "tab-biblioteca-conocimiento-0-vector-store",
+      "do": "Abres Biblioteca, Base de conocimiento, Vector store, y eliges la instancia.",
+      sys: "Muestra el manifiesto editable y sus generaciones." },
+    { t: "Construir generación", r: "/biblioteca", shot: "tab-biblioteca-conocimiento-0-vector-store", edge: "Construir generación",
+      "do": "Pulsas Construir generación.",
+      sys: "Construir prepara documentos para consultar y probar; no modifica producción ni retira generaciones anteriores. Si ya existe una generación Lista con exactamente el mismo contenido, la reutiliza y no carga nada.",
+      fail: [{ when: "la instancia no tiene activos", see: "Vector store instance <id> has no assets to build", fix: "Añadir activos al manifiesto." },
+             { when: "ya hay una construcción en curso de la misma instancia", what: "Se rechaza la segunda.", fix: "Esperar a que termine la primera." },
+             { when: "el manifiesto apunta a algo que no existe", what: "El plan de construcción falla antes de empezar.", fix: "Corregir el manifiesto." }] },
+    { t: "Esperar el resultado", r: "/biblioteca", shot: "tab-biblioteca-conocimiento-0-vector-store", edge: "Carga los documentos",
+      "do": "Consultas el estado de la generación.",
+      sys: "Pasa de Construyendo a Lista, con su número de documentos.",
+      fail: [{ when: "la carga falla a medias", see: "Estado Fallida con el tipo de error", what: "Borra lo que alcanzó a escribir. Una generación fallida nunca se vuelve consultable.", fix: "Corregir la causa y construir otra generación." }] },
+    { t: "Usarla en una configuración", r: "/configuracion", shot: "configuracion", edge: "Fijar en una configuración",
+      "do": "En una configuración fijas la generación Lista y la pruebas en Testing.",
+      sys: "Producción y las pruebas buscan exactamente la generación fijada, nunca «la última».",
+      fail: [{ when: "quieres que producción use otra generación", what: "No se puede por la vía directa: solo por una solicitud de despliegue aprobada.", fix: "Ver «Versionar, probar y desplegar una configuración»." }] }
+  ],
+  result: "Una generación Lista, inmutable y reutilizable, que solo llega a producción por un despliegue aprobado.",
+  confirm: ["No hay un mensaje de error visible documentado para «construcción en curso»; el código lo rechaza pero no vi cómo lo muestra la pantalla.", "Limpieza: una tarea nocturna borra generaciones sin uso; protege las activas, las de rollback y las pendientes."],
+  src: ["backend src/application/use_cases/vector_store_instances/build_vector_store_generation.py", "backend src/application/use_cases/vector_store_instances/pin_configuration_vector_stores.py", "backend docs/VECTOR_STORE_GENERATIONS.md", "frontend_mockup/src/components/biblioteca"]
+};
