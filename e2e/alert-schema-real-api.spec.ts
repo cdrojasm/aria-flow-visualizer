@@ -104,7 +104,12 @@ const completeMappedFields = [
     "fecha_ultima_marcacion",
     "datetime",
   ),
-  optionalField("biocatch-is-mobile-rat", "biocatch_isMobileRat", "biocatch_isMobileRat"),
+  optionalField(
+    "biocatch-is-mobile-rat",
+    "biocatch_isMobileRat",
+    "biocatch_isMobileRat",
+    "bool",
+  ),
   optionalField("biocatch-is-emulator", "biocatch_isEmulator", "biocatch_isEmulator"),
   optionalField("biocatch-is-rat", "biocatch_isRat", "biocatch_isRat"),
   optionalField("biocatch-is-bot", "biocatch_isBot", "biocatch_isBot"),
@@ -505,6 +510,7 @@ test("API real: procesa una fila y conserva labels fuera del input", async ({ pa
   );
   const candidateInput = detail.schema_comparison.candidate.input;
   expect(Object.keys(candidateInput).length).toBeGreaterThan(0);
+  expect(candidateInput.biocatch_isMobileRat).toBe(false);
   expect(detail.schema_comparison.candidate.labels.tipo).toBeTruthy();
   expect(candidateInput.tipo).toBeUndefined();
   expect(detail.schema_comparison.active.schema_version).toBe(seeded.activeVersion);

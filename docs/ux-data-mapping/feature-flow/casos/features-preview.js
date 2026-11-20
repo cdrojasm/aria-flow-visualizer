@@ -1,0 +1,33 @@
+FF.cases["features-preview"] = {
+  title: "Diseñar y probar características",
+  short: "Armar recetas de feature engineering y probarlas con filas reales antes de entrenar.",
+  goal: "Definir cómo se calculan las variables del modelo y comprobar, fila por fila, qué valor sale y qué pasa cuando los datos están vacíos o son inválidos.",
+  actors: [{ role: "data_analyst", as: "Diseña" }, { role: "channel_manager", as: "Diseña" }],
+  pre: ["Estás en el paso Características del asistente de modelos.", "Tienes un dataset elegido; la vista previa usa filas de ese dataset."],
+  steps: [
+    { t: "Crear una receta", r: "/modelos · Características", shot: "modelos",
+      "do": "En el editor de recetas añades una característica: nombre, tipo de salida (número, categoría o booleano) y los pasos de cálculo, elegidos de un catálogo de operaciones.",
+      sys: "El catálogo de operaciones viene del servidor, así que el editor solo ofrece operaciones válidas. Solo ofrece operaciones compatibles con el tipo de dato de cada paso.",
+      fail: [{ when: "la receta no pasa la validación", see: "No pudimos validar esta configuración", what: "Señala la receta con problema y ofrece el detalle técnico para compartirlo.", fix: "Corregir los campos marcados y volver a calcular." },
+             { when: "la salida es Booleano y la constante de «Si falta o es inválido» no lo es", see: "La constante no coincide con el tipo de salida", fix: "Usar Verdadero o Falso en esa constante." },
+             { when: "dos recetas tienen el mismo nombre", what: "Más adelante el entrenamiento falla con «Las transformaciones generan nombres de columnas duplicados».", fix: "Renombrar una." }] },
+    { t: "Elegir qué hacer con los vacíos", r: "/modelos · Características", shot: "modelos", edge: "Si falta o es inválido",
+      "do": "Eliges una política: dejar vacío, usar una constante o marcar error.",
+      sys: "Define qué ocurre cuando el cálculo falla en una fila. Dejar vacío: el valor queda ausente. Constante: se reemplaza por ese valor. Error: la fila se marca como error." },
+    { t: "Vista previa", r: "/modelos · Características", shot: "modelos", edge: "Vista previa",
+      "do": "Cargas una muestra de filas y pulsas calcular.",
+      sys: "Valida la configuración, encola el cálculo y consulta el resultado hasta que termine. Muestra cada característica por fila con su estado y, si falló, el motivo.",
+      fail: [{ when: "la muestra tiene 0 filas o más de 100", see: "La vista previa requiere entre 1 y 100 filas", fix: "Ajustar la muestra." },
+             { when: "la muestra pesa más de 2 MB", see: "La muestra supera el límite de 2 MB", fix: "Usar menos filas." },
+             { when: "el cálculo no termina bien", see: "La prueba no pudo completarse.", fix: "Abrir el detalle técnico y compartirlo con el equipo." },
+             { when: "una fila produce un error de cálculo", see: "Por ejemplo: Division by zero · log requires a positive value · Missing feature value · Nonfinite feature output · Expected boolean output · Expected a finite number · Invalid ISO timestamp", what: "Solo esa característica en esa fila queda con el estado de la política elegida; el resto de la vista previa sigue.", fix: "Probar con filas que tengan ceros, vacíos y fechas raras antes de entrenar." }] },
+    { t: "Guardar como plantilla", r: "/modelos · Características", shot: "modelos", edge: "Plantillas",
+      "do": "Guardas la configuración como plantilla para reutilizarla en otros modelos.",
+      sys: "Valida y guarda nombre, descripción y configuración.",
+      fail: [{ when: "el nombre pasa de 120 caracteres o la descripción de 2000", see: "Indica un nombre de hasta 120 caracteres y una descripción de hasta 2000", fix: "Acortarlos." },
+             { when: "la configuración pesa más de 200 KB", see: "La configuración supera el límite de 200 KB", fix: "Dividirla en dos plantillas." }] }
+  ],
+  result: "Recetas probadas con filas reales y listas para entrenar. Un error que aquí solo se ve como aviso detiene el entrenamiento si la receta usa la política «error».",
+  confirm: ["Los nombres de las pestañas del editor (Recetas, Vista previa, JSON, Plantillas) salen del código; no hay capturas de esta pantalla.", "Los mensajes de cálculo están en inglés porque el servidor los devuelve así; el editor solo traduce el de la constante booleana."],
+  src: ["backend src/application/use_cases/models/feature_engineering.py", "backend src/domain/models/feature_recipe.py", "backend src/infrastructure/entrypoint/api/routers/models_router.py (preview, feature-templates)", "frontend_mockup/src/components/modelos/FeatureRecipeWorkspace.tsx"]
+};

@@ -1,0 +1,35 @@
+FF.cases["dataset-particion"] = {
+  title: "Preparar y particionar un dataset",
+  short: "Dividir un dataset en particiones reproducibles para entrenar y evaluar.",
+  goal: "Crear una copia del dataset dividida en cuatro particiones independientes, con una semilla para poder repetirla.",
+  actors: [{ role: "data_analyst", as: "Particiona" }, { role: "channel_manager", as: "Particiona" }],
+  pre: ["Existe el dataset de origen en Biblioteca.", "Tiene filas, no excede el máximo permitido y cada partición recibirá ambas clases."],
+  steps: [
+    { t: "Ir a Datasets", r: "/biblioteca", shot: "tab-biblioteca-4-datasets",
+      "do": "Abres Biblioteca y la pestaña Datasets. Si hace falta, subes un dataset nuevo.",
+      sys: "Lista los datasets con acciones por fila: Ver, Particionar y descarga.",
+      fail: [{ when: "subes sin archivo ni contenido", see: "Either file or content is required", fix: "Elegir un archivo." }] },
+    { t: "Configurar la partición", r: "/biblioteca", shot: "tab-biblioteca-4-datasets", edge: "Particionar",
+      "do": "Pulsas Particionar («Configurar particiones reproducibles»), pones un nombre nuevo, las proporciones, la semilla y, opcionalmente, campos para estratificar.",
+      sys: "Valida el dataset de origen y los parámetros antes de crear nada.",
+      fail: [
+        { when: "el nombre nuevo es igual al del origen", see: "El dataset de particiones debe tener otro nombre", fix: "Cambiar el nombre." },
+        { when: "ya existe un dataset con ese nombre", see: "Ya existe un dataset con ese nombre", fix: "Elegir otro." },
+        { when: "el dataset no tiene filas", see: "El dataset no tiene filas para particionar" },
+        { when: "supera el máximo de filas", see: "El dataset tiene N filas y el máximo para particionar es M; extrae una muestra antes de particionar", fix: "Extraer una muestra." },
+        { when: "un campo de estratificación no existe", see: "Los campos de estratificación no existen: <campos>", fix: "Elegir campos del dataset." },
+        { when: "el dataset trae la partición final reservada de la muestra madura", see: "El dataset contiene filas de la partición final reservada; particiona sólo la muestra de diagnóstico", fix: "Particionar la muestra de diagnóstico." },
+        { when: "el dataset es la partición final de una muestra madura", see: "La partición final de la muestra madura está reservada para la evaluación final y no se puede particionar" }] },
+    { t: "Crear las particiones", r: "/biblioteca", shot: "tab-biblioteca-4-datasets", edge: "Confirmar",
+      "do": "Confirmas.",
+      sys: "Reparte las filas con la semilla indicada y guarda el dataset resultante con una huella del contenido.",
+      fail: [{ when: "alguna partición queda sin filas", see: "La cantidad de filas no permite poblar todas las particiones; reduce los estratos o ajusta las proporciones", fix: "Cambiar proporciones o estratos." }] },
+    { t: "Usarlo en un modelo", r: "/modelos", shot: "tab-modelos-0-catalogo-y-resultados", edge: "Nuevo modelo",
+      "do": "Eliges este dataset en el asistente de modelos.",
+      sys: "El entrenamiento valida que cada partición tenga ambas clases.",
+      fail: [{ when: "una partición quedó con una sola clase", see: "La partición <nombre> necesita ambas clases; amplía los datos o revisa la separación", what: "El entrenamiento falla.", fix: "Volver a particionar con otra semilla o estratos." }] }
+  ],
+  result: "Un dataset particionado y reproducible, listo para entrenar y evaluar sin fuga de datos entre particiones.",
+  confirm: ["No leí el formulario de Particionar; los nombres de los campos (proporciones, semilla, estratos) salen del caso de uso, no de la pantalla.", "El máximo de filas lo fija la configuración del servidor; no está en el código del frontend."],
+  src: ["backend src/application/use_cases/datasets/prepare_dataset_split.py", "backend src/application/use_cases/datasets/upload_dataset.py", "frontend_mockup/src/components/biblioteca/DatasetLibraryManager.tsx"]
+};
