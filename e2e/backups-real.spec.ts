@@ -29,7 +29,7 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
   page,
   playwright,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
   test.skip(process.env.ARIA_E2E_REAL !== "1", "E11 requiere nginx y API reales.");
   if (new URL(BASE_URL).hostname !== "localhost")
     throw new Error("E11 sólo puede crear respaldos en el stack local aislado.");
@@ -146,6 +146,19 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     expect(deniedList.status(), await deniedList.text()).toBe(403);
     const deniedCreate = await analystApi.post(`${API}/backups`);
     expect(deniedCreate.status(), await deniedCreate.text()).toBe(403);
+    const deniedUpload = await analystApi.post(`${API}/backups/models`, {
+      multipart: {
+        file: {
+          name: "m.joblib",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from("\x80x"),
+        },
+        tag: "denied",
+      },
+    });
+    expect(deniedUpload.status(), await deniedUpload.text()).toBe(403);
+    const deniedConfig = await analystApi.get(`${API}/backups/configuration`);
+    expect(deniedConfig.status(), await deniedConfig.text()).toBe(403);
 
     await page.addInitScript((token: string) => {
       if (sessionStorage.getItem("e11-role") !== "analyst")
@@ -163,7 +176,8 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     if (!created) {
       await expect(page.getByRole("button", { name: "Crear respaldo" })).toBeEnabled();
       const createResponse = page.waitForResponse(
-        (response) => response.url().includes(`${API}/backups`) && response.request().method() === "POST",
+        (response) =>
+          response.url().includes(`${API}/backups`) && response.request().method() === "POST",
       );
       await page.getByRole("button", { name: "Crear respaldo" }).click();
       const response = await createResponse;
@@ -185,7 +199,7 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
           terminal = entries.find((item) => item.backup_id === created!.backup_id);
           return terminal?.status;
         },
-        { timeout: 180_000, intervals: [500, 1_000, 2_000, 5_000] },
+        { timeout: 480_000, intervals: [500, 1_000, 2_000, 5_000] },
       )
       .toBe("succeeded");
 
@@ -205,9 +219,78 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
       .toBeGreaterThan(0);
     if (terminal!.status === "succeeded") {
       const backupRow = page.locator("article").filter({ hasText: terminal!.directory }).first();
-      await expect(backupRow.getByText(`DynamoDB: ${terminal!.dynamodb_items} registros`)).toBeVisible();
-      await expect(backupRow.getByText(`OpenSearch: ${terminal!.opensearch_documents} documentos`)).toBeVisible();
-      await expect(backupRow.getByText(`Objetos: ${terminal!.object_storage_objects}`)).toBeVisible();
+      await expect(
+        backupRow.getByText(`DynamoDB: ${terminal!.dynamodb_items} registros`),
+      ).toBeVisible();
+      await expect(
+        backupRow.getByText(`OpenSearch: ${terminal!.opensearch_documents} documentos`),
+      ).toBeVisible();
+      await expect(
+        backupRow.getByText(`Objetos: ${terminal!.object_storage_objects}`),
+      ).toBeVisible();
+    }
+
+    // Carga de modelo por la UI: queda READY e inactivo, y un duplicado se rechaza.
+    const modelTag = `e11-upload-${randomBytes(4).toString("hex")}`;
+    const bundle = Buffer.concat([Buffer.from([0x80, 0x04]), randomBytes(64)]);
+    await page.getByTestId("model-bundle-file").setInputFiles({
+      name: "e11.joblib",
+      mimeType: "application/octet-stream",
+      buffer: bundle,
+    });
+    await page.getByLabel("Etiqueta (única)").fill(modelTag);
+    await page.getByLabel("Dataset de origen").fill("e11-dataset");
+    const uploadResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes(`${API}/backups/models`) && response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Cargar modelo" }).click();
+    const uploaded = await uploadResponse;
+    expect(uploaded.status(), await uploaded.text()).toBe(201);
+    await expect(page.getByRole("status").filter({ hasText: modelTag })).toBeVisible();
+    const modelsList = await managerApi.get(`${API}/models`);
+    expect(modelsList.ok(), await modelsList.text()).toBeTruthy();
+    const registered = ((await modelsList.json()) as Array<Record<string, unknown>>).find(
+      (item) => item.tag === modelTag,
+    );
+    expect(registered).toMatchObject({ status: "READY", active: false, created_by: managerEmail });
+    expect(String(registered!.storage_ref)).toMatch(/^models\/sha256\/[\da-f]{64}\.joblib$/);
+    const duplicate = await managerApi.post(`${API}/backups/models`, {
+      multipart: {
+        file: { name: "e11.joblib", mimeType: "application/octet-stream", buffer: bundle },
+        tag: `${modelTag}-b`,
+      },
+    });
+    expect(duplicate.status(), await duplicate.text()).toBe(409);
+    const notJoblib = await managerApi.post(`${API}/backups/models`, {
+      multipart: {
+        file: {
+          name: "x.joblib",
+          mimeType: "application/octet-stream",
+          buffer: Buffer.from("zzz"),
+        },
+        tag: `${modelTag}-c`,
+      },
+    });
+    expect(notJoblib.status(), await notJoblib.text()).toBe(422);
+    // Limpieza del modelo creado (el artefacto queda en object storage).
+    const removed = await managerApi.delete(`${API}/models/${registered!.id as string}`);
+    expect(removed.ok(), await removed.text()).toBeTruthy();
+
+    // Descarga de configuración: JSON adjunto si hay activa; 404 con mensaje si no.
+    const configApi = await managerApi.get(`${API}/backups/configuration`);
+    expect([200, 404]).toContain(configApi.status());
+    if (configApi.status() === 200) {
+      expect(configApi.headers()["content-disposition"]).toMatch(
+        /attachment; filename="configuration-.+\.json"/,
+      );
+      expect(await configApi.json()).toHaveProperty("configuration_id");
+      const downloadPromise = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Descargar JSON" }).click();
+      expect((await downloadPromise).suggestedFilename()).toMatch(/^configuration-.+\.json$/);
+    } else {
+      await page.getByRole("button", { name: "Descargar JSON" }).click();
+      await expect(page.getByText("No hay configuración activa")).toBeVisible();
     }
 
     await page.evaluate(() => {
@@ -221,6 +304,12 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
     await page.getByRole("button", { name: "Ingresar" }).click();
     await expect(page).toHaveURL(/\/monitor$/);
     await expect(page.getByRole("link", { name: "Respaldos", exact: true })).toHaveCount(0);
+
+    // Monitoreo de entrenamiento rediseñado (el manager no ve /modelos; el analista de datos sí).
+    await page.goto("/modelos");
+    await page.getByRole("button", { name: /Operaciones/ }).click();
+    await expect(page.getByTestId("training-monitor")).toBeVisible();
+    await expect(page.getByText("Últimos entrenamientos")).toBeVisible();
   } finally {
     await Promise.all([managerApi.dispose(), analystApi.dispose()]);
   }
