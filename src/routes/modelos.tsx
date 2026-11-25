@@ -1,4 +1,5 @@
 import { ModelTrainingWizard } from "@/components/modelos/ModelTrainingWizard";
+import { TrainingMonitorPanel } from "@/components/modelos/TrainingMonitorPanel";
 import { ModelTrainingResults } from "@/components/modelos/ModelTrainingResults";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +14,6 @@ import {
   TruncText,
   type DataTableColumn,
 } from "@/components/ui/DataTable";
-import { Progress } from "@/components/ui/progress";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { listAsyncOperations } from "@/lib/api/asyncOperations.functions";
 import {
@@ -363,28 +363,11 @@ function ModelosPage() {
                 curso.
               </p>
             </div>
-            <div className="p-6 space-y-4">
-              {trainingOps.length === 0 ? (
-                <p className="text-[13px] text-text-secondary">No hay entrenamientos en curso.</p>
-              ) : (
-                trainingOps.map((op) => {
-                  const stage = (op.result?.stage as string | undefined) ?? op.status;
-                  const pct = (op.result?.progress_pct as number | undefined) ?? 0;
-                  const tag =
-                    (op.payload?.tag as string | undefined) ?? String(op.payload?.model_id ?? "");
-                  return (
-                    <div key={op.id} className="space-y-1.5">
-                      <div className="flex items-center justify-between text-[12px]">
-                        <span className="font-medium text-text-primary">{tag}</span>
-                        <span className="text-text-secondary">
-                          {stage} · {pct}%
-                        </span>
-                      </div>
-                      <Progress value={pct} />
-                    </div>
-                  );
-                })
-              )}
+            <div className="p-6">
+              <TrainingMonitorPanel
+                operations={trainingOpsQuery.data ?? []}
+                loading={trainingOpsQuery.isLoading}
+              />
             </div>
           </section>
         )}
