@@ -24,6 +24,7 @@ vi.mock("@/hooks/useRole", () => ({
 
 const settings = {
   agent_enabled: true,
+  agent_traffic_pct: 100,
   analyst_enabled: true,
   voicebot_enabled: true,
   max_instances: 8,

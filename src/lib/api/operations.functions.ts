@@ -19,6 +19,9 @@ import type {
 
 export type ApiOperationalSettings = {
   agent_enabled: boolean;
+  // Share (0..100) of simulator/production alerts ARIA processes; the rest
+  // escalates straight to an analyst. agent_enabled=false still skips all.
+  agent_traffic_pct: number;
   analyst_enabled: boolean;
   voicebot_enabled: boolean;
   max_instances: number;
@@ -60,6 +63,7 @@ export type ApiAmountTier = {
 
 export type OperationalSettings = {
   agentEnabled: boolean;
+  agentTrafficPct: number;
   analystEnabled: boolean;
   voicebotEnabled: boolean;
   voicebotMaxConcurrentCalls: number;
@@ -92,6 +96,7 @@ export type OperationalSettings = {
 export function operationalSettingsFromApi(api: ApiOperationalSettings): OperationalSettings {
   return {
     agentEnabled: api.agent_enabled,
+    agentTrafficPct: api.agent_traffic_pct ?? 100,
     analystEnabled: api.analyst_enabled,
     voicebotEnabled: api.voicebot_enabled,
     voicebotMaxConcurrentCalls: api.voicebot_max_concurrent_calls,
@@ -138,6 +143,7 @@ export function operationalSettingsToApi(s: OperationalSettings): ApiOperational
   return {
     ...s.passthrough,
     agent_enabled: s.agentEnabled,
+    agent_traffic_pct: s.agentTrafficPct,
     analyst_enabled: s.analystEnabled,
     voicebot_enabled: s.voicebotEnabled,
     voicebot_max_concurrent_calls: s.voicebotMaxConcurrentCalls,

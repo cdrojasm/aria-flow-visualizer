@@ -4,6 +4,7 @@ import { useCanGoBack, useNavigate, useRouter, useRouterState } from "@tanstack/
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { AppSidebar } from "./AppSidebar";
 import { AgentPanel } from "./agent/AgentPanel";
+import { TrafficGateBanner } from "./TrafficGateBanner";
 import { ROLE_NAV, useRole } from "@/hooks/useRole";
 import { useApiHealth } from "@/hooks/useApiHealth";
 
@@ -96,6 +97,9 @@ export function DashboardLayout({
             </p>
           </div>
         )}
+        <TrafficGateBanner
+          canConfigure={role ? ROLE_NAV[role].includes("/configuracion") : false}
+        />
         <div className="px-8 pt-4">
           <button
             type="button"

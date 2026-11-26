@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { AmountTierEditor } from "@/components/configuracion/AmountTierEditor";
+import { TrafficGateDial } from "@/components/configuracion/TrafficGateDial";
 import { AnalystCapacityEditor } from "@/components/configuracion/AnalystCapacityEditor";
 import { ResolutionMethodCatalogManager } from "@/components/configuracion/ResolutionMethodCatalogManager";
 import { TagMultiSelect } from "@/components/configuracion/TagMultiSelect";
@@ -46,6 +47,7 @@ const CAPACITY_STATUS: Record<string, { label: string; className: string }> = {
 
 const SETTING_LABELS: Record<string, string> = {
   agent_enabled: "Estado del agente",
+  agent_traffic_pct: "Tráfico hacia ARIA",
   analyst_enabled: "Estado del analista",
   voicebot_enabled: "Estado del voicebot",
   voicebot_max_concurrent_calls: "Slots de voicebot",
@@ -76,6 +78,9 @@ function formatValue(value: unknown, path?: string): string {
   ) {
     const percent = path === "reasoning_evaluation_sample_rate" ? value * 100 : value;
     return `${percent.toLocaleString("es-CO", { maximumFractionDigits: 2 })}%`;
+  }
+  if (path === "agent_traffic_pct" && typeof value === "number") {
+    return `${value.toLocaleString("es-CO", { maximumFractionDigits: 1 })}%`;
   }
   if (typeof value === "object") return "(editado)";
   return String(value);
@@ -186,6 +191,23 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
       queryClient.setQueryData(["operationalSettings"], saved);
       setDraft(structuredClone(saved));
       void queryClient.invalidateQueries({ queryKey: ["operationsCapacity"] });
+      void queryClient.invalidateQueries({ queryKey: ["operationalSettingsHistory"] });
+    },
+  });
+
+  // The dial applies on its own, from the SAVED settings: unsaved edits
+  // elsewhere in the panel are never pushed by moving the gate.
+  const gateMutation = useMutation({
+    mutationFn: (pct: number) =>
+      updateOperationalSettings({
+        data: {
+          settings: { ...(settingsQuery.data as OperationalSettings), agentTrafficPct: pct },
+          changedBy: user?.email ?? null,
+        },
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["operationalSettings"], updated);
+      setDraft((prev) => (prev ? { ...prev, agentTrafficPct: updated.agentTrafficPct } : prev));
       void queryClient.invalidateQueries({ queryKey: ["operationalSettingsHistory"] });
     },
   });
@@ -310,6 +332,23 @@ export function OperationsPanel({ readOnly }: { readOnly?: boolean }) {
               </p>
             )}
           </div>
+        </Section>
+
+        <Section
+          title="Llave de paso a producción"
+          description="Qué porcentaje de las alertas procesa ARIA; el resto se escala directo a un analista. Requiere confirmación."
+        >
+          <TrafficGateDial
+            current={saved.agentTrafficPct}
+            analystEnabled={saved.analystEnabled}
+            analysts={capacity?.analysts}
+            readOnly={readOnly}
+            pending={gateMutation.isPending}
+            error={
+              gateMutation.isError ? `No se pudo aplicar: ${String(gateMutation.error)}` : null
+            }
+            onApply={(pct) => gateMutation.mutateAsync(pct)}
+          />
         </Section>
 
         <Section
