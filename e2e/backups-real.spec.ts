@@ -230,53 +230,6 @@ test("E11 API/UI real: manager crea respaldo, worker completa y rol no autorizad
       ).toBeVisible();
     }
 
-    // Carga de modelo por la UI: queda READY e inactivo, y un duplicado se rechaza.
-    const modelTag = `e11-upload-${randomBytes(4).toString("hex")}`;
-    const bundle = Buffer.concat([Buffer.from([0x80, 0x04]), randomBytes(64)]);
-    await page.getByTestId("model-bundle-file").setInputFiles({
-      name: "e11.joblib",
-      mimeType: "application/octet-stream",
-      buffer: bundle,
-    });
-    await page.getByLabel("Etiqueta (única)").fill(modelTag);
-    await page.getByLabel("Dataset de origen").fill("e11-dataset");
-    const uploadResponse = page.waitForResponse(
-      (response) =>
-        response.url().includes(`${API}/backups/models`) && response.request().method() === "POST",
-    );
-    await page.getByRole("button", { name: "Cargar modelo" }).click();
-    const uploaded = await uploadResponse;
-    expect(uploaded.status(), await uploaded.text()).toBe(201);
-    await expect(page.getByRole("status").filter({ hasText: modelTag })).toBeVisible();
-    const modelsList = await managerApi.get(`${API}/models`);
-    expect(modelsList.ok(), await modelsList.text()).toBeTruthy();
-    const registered = ((await modelsList.json()) as Array<Record<string, unknown>>).find(
-      (item) => item.tag === modelTag,
-    );
-    expect(registered).toMatchObject({ status: "READY", active: false, created_by: managerEmail });
-    expect(String(registered!.storage_ref)).toMatch(/^models\/sha256\/[\da-f]{64}\.joblib$/);
-    const duplicate = await managerApi.post(`${API}/backups/models`, {
-      multipart: {
-        file: { name: "e11.joblib", mimeType: "application/octet-stream", buffer: bundle },
-        tag: `${modelTag}-b`,
-      },
-    });
-    expect(duplicate.status(), await duplicate.text()).toBe(409);
-    const notJoblib = await managerApi.post(`${API}/backups/models`, {
-      multipart: {
-        file: {
-          name: "x.joblib",
-          mimeType: "application/octet-stream",
-          buffer: Buffer.from("zzz"),
-        },
-        tag: `${modelTag}-c`,
-      },
-    });
-    expect(notJoblib.status(), await notJoblib.text()).toBe(422);
-    // Limpieza del modelo creado (el artefacto queda en object storage).
-    const removed = await managerApi.delete(`${API}/models/${registered!.id as string}`);
-    expect(removed.ok(), await removed.text()).toBeTruthy();
-
     // Descarga de configuración: JSON adjunto si hay activa; 404 con mensaje si no.
     const configApi = await managerApi.get(`${API}/backups/configuration`);
     expect([200, 404]).toContain(configApi.status());

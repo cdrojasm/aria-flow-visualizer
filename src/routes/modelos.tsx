@@ -16,6 +16,8 @@ import {
   type DataTableColumn,
 } from "@/components/ui/DataTable";
 import { SectionTabs } from "@/components/ui/section-tabs";
+import { useRole } from "@/hooks/useRole";
+import { ModelUploadForm } from "@/components/modelos/ModelUploadForm";
 import { listAsyncOperations } from "@/lib/api/asyncOperations.functions";
 import {
   activateModel,
@@ -154,6 +156,9 @@ function ModelosPage() {
   const [deleteTarget, setDeleteTarget] = useState<ModelResponse | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("catalog");
+  // Same roles the backend allows on POST /backups/models (managers cannot).
+  const { role } = useRole();
+  const canUploadModel = role === "channel_manager" || role === "data_analyst";
 
   const modelsQuery = useQuery({
     queryKey: ["models"],
@@ -275,6 +280,7 @@ function ModelosPage() {
           label="Secciones de motores"
           items={[
             { key: "catalog", label: "Catálogo y resultados" },
+            ...(canUploadModel ? [{ key: "upload", label: "Cargar modelo" }] : []),
             {
               key: "operations",
               label: `Operaciones${trainingOps.length ? ` (${trainingOps.length})` : ""}`,
@@ -353,6 +359,8 @@ function ModelosPage() {
             emptyLabel="Sin modelos todavía."
           />
         )}
+
+        {activeSection === "upload" && canUploadModel && <ModelUploadForm />}
 
         {activeSection === "operations" && (
           <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
