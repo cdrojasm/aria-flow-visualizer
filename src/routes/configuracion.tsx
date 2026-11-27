@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ConfigurationVersionGraph } from "@/components/configuracion/ConfigurationVersionGraph";
+import { DeployRequestsPanel } from "@/components/configuracion/DeployRequestsPanel";
 import { ConfigurationVersionGuide } from "@/components/configuracion/ConfigurationVersionGuide";
 import { SegmentAgentTab } from "@/components/configuracion/SegmentAgentTab";
 import { SegmentEvaluationTab } from "@/components/configuracion/SegmentEvaluationTab";
@@ -1863,73 +1864,15 @@ function ConfiguracionPage() {
         )}
 
         {isDeployApprover && (
-          <section className="bg-card rounded-xl border border-border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-5">
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-[12px] font-semibold text-text-secondary uppercase tracking-wider">
-                  Solicitudes de despliegue
-                </h2>
-                <p className="text-[12px] text-text-secondary mt-1">
-                  Aprueba una solicitud para promover exactamente la versión solicitada a producción.
-                </p>
-              </div>
-              <ClipboardList className="h-5 w-5 text-primary" />
-            </div>
-            {deployApprovalError && (
-              <p className="mb-3 rounded-md border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] text-danger" role="alert">
-                {deployApprovalError}
-              </p>
-            )}
-            {deployRequestsQuery.isLoading ? (
-              <p className="text-[13px] text-text-secondary">Cargando solicitudes…</p>
-            ) : deployRequestsQuery.isError ? (
-              <p className="text-[13px] text-danger">No se pudieron cargar las solicitudes.</p>
-            ) : (deployRequestsQuery.data ?? []).length === 0 ? (
-              <p className="rounded-lg border border-dashed border-border px-4 py-5 text-[13px] text-text-secondary">
-                No hay solicitudes de despliegue.
-              </p>
-            ) : (
-              <div className="divide-y divide-border rounded-lg border border-border">
-                {deployRequestsQuery.data?.map((request) => (
-                  <div key={request.id} className="p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[13px] font-semibold text-text-primary">{request.title}</p>
-                        <p className="mt-1 text-[12px] text-text-secondary">{request.message}</p>
-                        <p className="mt-2 text-[11px] text-text-secondary">
-                          {request.requested_by} solicita {request.target_configuration_id}:v{request.target_version}
-                          {request.current_configuration_id
-                            ? ` · producción actual ${request.current_configuration_id}:v${request.current_version}`
-                            : ""}
-                          {` · ${request.changes.length} cambios`}
-                        </p>
-                        {request.status === "pending" && deployRequestIsStale(request) && (
-                          <p className="mt-2 text-[12px] font-medium text-danger" role="alert">
-                            Obsoleta: producción cambió después de esta solicitud. Pide una nueva
-                            revisión antes de desplegar.
-                          </p>
-                        )}
-                      </div>
-                      {request.status === "pending" ? (
-                        <button
-                          type="button"
-                          disabled={approveDeployRequestMutation.isPending || deployRequestIsStale(request)}
-                          onClick={() => void approveDeployRequest(request.id)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Aprobar y desplegar
-                        </button>
-                      ) : (
-                        <span className="text-[11px] font-medium text-success">
-                          Aprobada por {request.approved_by ?? "—"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+          <DeployRequestsPanel
+            requests={deployRequestsQuery.data ?? []}
+            isLoading={deployRequestsQuery.isLoading}
+            isError={deployRequestsQuery.isError}
+            error={deployApprovalError}
+            isStale={deployRequestIsStale}
+            approving={approveDeployRequestMutation.isPending}
+            onApprove={(id) => void approveDeployRequest(id)}
+          />
         )}
 
         {/* Dirty-draft reminder for when the user has wandered off to a

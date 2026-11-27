@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ComponentProps } from "react";
+import { useMemo, useState, type ComponentProps } from "react";
 import { Gitgraph, Orientation, TemplateName, templateExtend } from "@gitgraph/react";
 import type { ConfigurationGraphNodeResponse } from "@/lib/api/configurations.functions";
 
@@ -59,6 +59,35 @@ function groupByFamily(nodes: GraphNode[], byHash: Map<string, GraphNode>): Grap
   return [...families.values()];
 }
 
+type Density = "dense" | "comfortable";
+const DENSITY_KEY = "aria.configGraph.density";
+const DENSITY_LABELS: Record<Density, string> = { dense: "Denso", comfortable: "Holgado" };
+// Vertical pixels between commits, dot size and scroll height per density.
+const DENSITY_METRICS = {
+  dense: {
+    spacing: 20,
+    dot: 5,
+    selectedDot: 7,
+    font: "normal 11px sans-serif",
+    maxHeight: "max-h-72",
+  },
+  comfortable: {
+    spacing: 44,
+    dot: 8,
+    selectedDot: 11,
+    font: "normal 12px sans-serif",
+    maxHeight: "max-h-[28rem]",
+  },
+} as const;
+
+function readDensity(): Density {
+  try {
+    return window.localStorage.getItem(DENSITY_KEY) === "comfortable" ? "comfortable" : "dense";
+  } catch {
+    return "dense";
+  }
+}
+
 type Props = {
   nodes: GraphNode[];
   // The configuration picked in the page selector: only its family is drawn.
@@ -73,6 +102,16 @@ export function ConfigurationVersionGraph({
   selectedVersion,
   onSelectVersion,
 }: Props) {
+  const [density, setDensity] = useState<Density>(readDensity);
+  const metrics = DENSITY_METRICS[density];
+  const changeDensity = (next: Density) => {
+    setDensity(next);
+    try {
+      window.localStorage.setItem(DENSITY_KEY, next);
+    } catch {
+      /* preference is optional */
+    }
+  };
   const byHash = useMemo(
     () => new Map(nodes.map((node) => [hashOf(node.configuration_id, node.version), node])),
     [nodes],
@@ -104,12 +143,12 @@ export function ConfigurationVersionGraph({
         colors: ["#000194", "#0e7490", "#7c3aed", "#be123c", "#4d7c0f"],
         branch: { lineWidth: 4, label: { font: "normal 11px sans-serif" } },
         commit: {
-          spacing: 44,
-          dot: { size: 8 },
-          message: { displayAuthor: false, displayHash: false, font: "normal 12px sans-serif" },
+          spacing: metrics.spacing,
+          dot: { size: metrics.dot },
+          message: { displayAuthor: false, displayHash: false, font: metrics.font },
         },
       }),
-    [],
+    [metrics],
   );
 
   const selectedHash = selected ? hashOf(selected.configuration_id, selected.version) : null;
@@ -145,7 +184,7 @@ export function ConfigurationVersionGraph({
               color,
               strokeColor: isSelected ? "#111827" : color,
               strokeWidth: isSelected ? 3 : 0,
-              size: isSelected ? 11 : 8,
+              size: isSelected ? metrics.selectedDot : metrics.dot,
             },
             message: { color: "#1f2937" },
           },
@@ -154,28 +193,49 @@ export function ConfigurationVersionGraph({
         });
       }
     };
-  }, [family, byHash, selectedHash, onSelectVersion]);
+  }, [family, byHash, selectedHash, onSelectVersion, metrics]);
 
   return (
     <div data-testid="configuration-version-graph">
-      <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-secondary">
-        {(Object.keys(STATE_COLORS) as VersionState[]).map((state) => (
-          <li key={state} className="flex items-center gap-1.5">
-            <span
-              aria-hidden
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: STATE_COLORS[state] }}
-            />
-            {STATE_LABELS[state]}
-          </li>
-        ))}
-      </ul>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-text-secondary">
+          {(Object.keys(STATE_COLORS) as VersionState[]).map((state) => (
+            <li key={state} className="flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: STATE_COLORS[state] }}
+              />
+              {STATE_LABELS[state]}
+            </li>
+          ))}
+        </ul>
+        <div
+          role="group"
+          aria-label="Densidad del grafo"
+          className="inline-flex overflow-hidden rounded-md border border-border text-[11px]"
+        >
+          {(Object.keys(DENSITY_LABELS) as Density[]).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={density === option}
+              onClick={() => changeDensity(option)}
+              className={`px-2.5 py-1 ${density === option ? "bg-primary text-white" : "hover:bg-surface"}`}
+            >
+              {DENSITY_LABELS[option]}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {draw ? (
-        <div className="max-h-[28rem] overflow-auto rounded-lg border border-border bg-white p-3">
+        <div
+          className={`${metrics.maxHeight} overflow-auto rounded-lg border border-border bg-white p-3`}
+        >
           {/* gitgraph only draws on mount, so a new family or selection needs a new key. */}
           <Gitgraph
-            key={`${family?.[0].configuration_id}:${family?.[0].version}:${selectedHash}`}
+            key={`${family?.[0].configuration_id}:${family?.[0].version}:${selectedHash}:${density}`}
             options={{ template, orientation: Orientation.Vertical }}
           >
             {draw}

@@ -221,8 +221,8 @@ test("E01 real: consulta versiones y despliega una versión con aprobación", as
       ).toBeVisible();
 
       const requestCard = approverPage
-        .getByText(requestTitle, { exact: true })
-        .locator("xpath=../..");
+        .getByTestId("deploy-request-row")
+        .filter({ hasText: requestTitle });
       await expect(requestCard.getByText(requestMessage, { exact: true })).toBeVisible();
       const approvalResponsePromise = approverPage.waitForResponse(
         (response) =>
