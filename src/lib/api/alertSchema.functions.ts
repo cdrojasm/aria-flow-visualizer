@@ -17,6 +17,10 @@ export type AlertSchemaField = {
   is_label: boolean;
   is_sensible: boolean;
   sensitivity_strategy: string | null;
+  /** Identifier (event/customer/device id...): never a model input. Absent in old versions = false. */
+  is_identifier?: boolean;
+  /** False when the value only exists after ARIA/analyst decides (leakage). Absent in old versions = true. */
+  available_at_decision?: boolean;
   group: string;
   description: string;
   use_locale: boolean;
@@ -77,6 +81,24 @@ export type AlertSchemaPresence = {
   fields: AlertSchemaPresenceField[];
   unknown_locations: { location: string; frequency: number }[];
 };
+
+export type AlertSchemaUsageConsumer = {
+  kind: "model" | "configuration";
+  name: string;
+  ref: string;
+};
+
+export type AlertSchemaUsage = {
+  version: number;
+  /** field.id -> consumers; only fields that have consumers appear. */
+  fields: Record<string, AlertSchemaUsageConsumer[]>;
+};
+
+/** Models/configurations that use each field. `version` omitted = active schema. */
+export function getAlertSchemaUsage(version?: number | null): Promise<AlertSchemaUsage> {
+  const query = version ? `?version=${encodeURIComponent(String(version))}` : "";
+  return apiFetch(`/api/v0/alert-schema/usage${query}`);
+}
 
 export function listAlertSchemaVersions(): Promise<AlertSchemaVersion[]> {
   return apiFetch("/api/v0/alert-schema/versions");

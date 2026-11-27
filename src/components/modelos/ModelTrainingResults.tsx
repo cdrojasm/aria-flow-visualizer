@@ -19,6 +19,7 @@ import {
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { DataTable } from "@/components/ui/DataTable";
 import { getModel } from "@/lib/api/models.functions";
+import { ModelSchemaBadge } from "./ModelSchemaBadge";
 import { ModelContractTester } from "./ModelContractTester";
 const panel = "rounded-xl border border-border bg-card p-5 space-y-3";
 function Curve({
@@ -80,14 +81,15 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
               ? "Resultados reales sobre el conjunto de prueba independiente. Las probabilidades están calibradas."
               : "Configuración y resultados del entrenamiento."}
           </DialogDescription>
+          {model.data && <ModelSchemaBadge model={model.data} />}
         </DialogHeader>
         <SectionTabs
           label="Detalle del modelo"
           items={[
             { key: "metrics", label: "Desempeño" },
             { key: "curves", label: "Curvas" },
-            { key: "features", label: "Características" },
-            { key: "config", label: "Ejecución y receta" },
+            { key: "features", label: "Variables" },
+            { key: "config", label: "Ejecución y configuración" },
             { key: "contract", label: "Probar contrato" },
           ]}
           value={tab}
@@ -245,8 +247,8 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
             <section className={panel}>
               <h3 className="font-semibold">Importancia global · ganancia normalizada</h3>
               <p className="text-xs text-text-secondary">
-                Hasta 30 características. Describe el uso de las variables por los árboles; no
-                representa causalidad ni contribuciones SHAP por caso.
+                Hasta 30 variables. Describe el uso de las variables por los árboles; no representa
+                causalidad ni contribuciones SHAP por caso.
               </p>
               {report.feature_importance.map((f) => (
                 <div key={f.feature} className="space-y-1">
@@ -276,7 +278,7 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
                   <>
                     <p className="text-sm">
                       {report.duration_seconds.toFixed(1)} s · mejor iteración{" "}
-                      {report.best_iteration} · {report.feature_count} características ·{" "}
+                      {report.best_iteration} · {report.feature_count} variables ·{" "}
                       {report.split_strategy} · {report.timezone}
                     </p>
                     <div className="grid sm:grid-cols-4 gap-3">
@@ -296,7 +298,7 @@ export function ModelTrainingResults({ id, onClose }: { id: string; onClose: () 
                 )}
               </section>
               <section className={panel}>
-                <h3 className="font-semibold">Receta persistida</h3>
+                <h3 className="font-semibold">Configuración persistida</h3>
                 <pre className="text-xs whitespace-pre-wrap break-all">
                   {JSON.stringify(
                     {

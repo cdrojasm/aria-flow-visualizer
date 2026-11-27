@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, Plus, Save, X } from "lucide-react";
-import { DataTable, type DataTableColumn } from "@/components/ui/DataTable";
+import { AlertTriangle, Plus } from "lucide-react";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { useRole } from "@/hooks/useRole";
 import {
   approveAlertSchema,
   getActiveAlertSchema,
+  getAlertSchemaUsage,
   listAlertSchemaSuggestions,
   getAlertSchemaPresence,
   listAlertSchemaVersions,
@@ -14,50 +14,24 @@ import {
   rejectAlertSchema,
   saveAlertSchemaDraft,
   type AlertSchemaField,
-  type AlertSchemaFieldType,
   type AlertSchemaVersion,
 } from "@/lib/api/alertSchema.functions";
+import { EssentialFieldsChecklist, essentialsBreakdown } from "./EssentialFieldsChecklist";
+import { FieldDetailDrawer } from "./FieldDetailDrawer";
+import { ReviewInbox, buildReviewItems } from "./ReviewInbox";
+import { SchemaDiff } from "./SchemaDiff";
+import { FieldsByRole } from "./SchemaFieldsTable";
+import { SchemaStatusBand, type PrimaryAction } from "./SchemaStatusBand";
+import {
+  ESSENTIAL_ROLES,
+  compareLocally,
+  humanError,
+  impactLabel,
+  statusLabel,
+  summarizeComparison,
+} from "./schemaHelpers";
 
-type SchemaTab = "fields" | "system" | "proposals" | "suggestions";
-const TABS: { key: SchemaTab; label: string }[] = [
-  { key: "fields", label: "Campos" },
-  { key: "system", label: "Campos de sistema" },
-  { key: "proposals", label: "Propuestas" },
-  { key: "suggestions", label: "Sugerencias" },
-];
-const TYPES: AlertSchemaFieldType[] = ["string", "number", "bool", "date", "datetime", "list"];
-const ROLES: { name: string; type: AlertSchemaFieldType; required: boolean; consumers: string }[] =
-  [
-    {
-      name: "event_id",
-      type: "string",
-      required: true,
-      consumers: "Señales de ARIC, trazabilidad",
-    },
-    {
-      name: "event_time",
-      type: "datetime",
-      required: true,
-      consumers: "Workflow, perfilado e historial",
-    },
-    {
-      name: "event_type",
-      type: "string",
-      required: true,
-      consumers: "Segmentación, métricas y tags",
-    },
-    {
-      name: "channel",
-      type: "string",
-      required: true,
-      consumers: "Segmentación, métricas e historial",
-    },
-    { name: "entrypoint", type: "string", required: true, consumers: "Segmentación, métricas" },
-    { name: "amount", type: "number", required: true, consumers: "Perfilado y métricas" },
-    { name: "customer_id", type: "string", required: true, consumers: "Consultas al host" },
-    { name: "account_id", type: "string", required: false, consumers: "Historial al host" },
-    { name: "session_id", type: "string", required: false, consumers: "Señales de ARIC" },
-  ];
+type SchemaTab = "essentials" | "fields" | "proposals" | "review";
 const KNOWN_OUTCOME_FIELDS = new Set(["marcacion_final", "tipo", "desenlace"]);
 
 const emptyField = (id: string): AlertSchemaField => ({
@@ -78,16 +52,24 @@ const emptyField = (id: string): AlertSchemaField => ({
   description: "",
   use_locale: false,
   locale_type: null,
+  is_identifier: false,
+  available_at_decision: true,
 });
 
-function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : "No fue posible completar la operación.";
-  if (message.includes("409"))
-    return "409 · La versión activa cambió. Recarga y vuelve a basar el borrador.";
-  if (message.includes("422"))
-    return `422 · ${message.split(": ").slice(1).join(": ") || "El esquema no cumple las validaciones."}`;
-  return message;
-}
+const emptyVersion = (basedOn: number | null): AlertSchemaVersion => ({
+  version: basedOn ?? 1,
+  status: "draft",
+  fields: [],
+  field_roles: {},
+  proposed_by: null,
+  proposed_at: null,
+  approved_by: null,
+  approved_at: null,
+  impact_acknowledged: false,
+  based_on_version: basedOn,
+  comparison: {},
+  impact: [],
+});
 
 function validate(fields: AlertSchemaField[], roles: Record<string, string>): string[] {
   const errors: string[] = [];
@@ -104,293 +86,31 @@ function validate(fields: AlertSchemaField[], roles: Record<string, string>): st
       errors.push(`${field.field || "Campo"}: un campo core necesita nombre visible.`);
     if (field.is_label && field.is_history)
       errors.push(`${field.field || "Campo"}: no puede ser etiqueta e historial.`);
+    if (field.is_label && field.is_identifier === true)
+      errors.push(`${field.field || "Campo"}: no puede ser etiqueta e identificador.`);
     if (field.is_sensible && !field.sensitivity_strategy)
       errors.push(`${field.field || "Campo"}: define la estrategia sensible.`);
     if (field.use_locale && !field.locale_type)
-      errors.push(`${field.field || "Campo"}: define locale_type.`);
+      errors.push(`${field.field || "Campo"}: define el tipo de locale.`);
     if (field.data_source === "aria" && field.is_mandatory)
-      errors.push(`${field.field || "Campo"}: aria no puede ser obligatorio.`);
+      errors.push(`${field.field || "Campo"}: un resultado de ARIA no puede ser obligatorio.`);
     if (KNOWN_OUTCOME_FIELDS.has(field.field) && !field.is_label)
-      errors.push(`${field.field}: un campo de desenlace conocido debe ser etiqueta.`);
+      errors.push(`${field.field}: un campo de desenlace conocido debe tener el rol Desenlace.`);
   });
   const byId = new Map(fields.map((field) => [field.id, field]));
-  ROLES.filter((role) => role.required || roles[role.name]).forEach((role) => {
+  ESSENTIAL_ROLES.filter((role) => role.required || roles[role.name]).forEach((role) => {
     const selected = byId.get(roles[role.name]);
-    if (!selected) errors.push(`Falta asignar el rol obligatorio: ${role.name}.`);
+    if (!selected) errors.push(`Falta asignar el campo esencial: ${role.name}.`);
     else if (!selected.is_alert || selected.is_label || selected.type !== role.type)
-      errors.push(`El rol ${role.name} tiene un campo incompatible.`);
+      errors.push(`El campo esencial ${role.name} tiene un campo incompatible.`);
   });
   return [...new Set(errors)];
 }
 
-function fieldColumns(
-  readOnly: boolean,
-  onChange: (id: string, patch: Partial<AlertSchemaField>) => void,
-): DataTableColumn<AlertSchemaField>[] {
-  return [
-    {
-      key: "field",
-      label: "Campo",
-      minWidth: 140,
-      sortValue: (f) => f.field,
-      searchValue: (f) => f.field,
-      render: (f) => (
-        <input
-          aria-label={`Campo ${f.id}`}
-          value={f.field}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { field: e.target.value })}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-    {
-      key: "field_name",
-      label: "Nombre visible",
-      minWidth: 160,
-      sortValue: (f) => f.field_name,
-      searchValue: (f) => f.field_name,
-      render: (f) => (
-        <input
-          aria-label={`Nombre ${f.id}`}
-          value={f.field_name}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { field_name: e.target.value })}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-    {
-      key: "description",
-      label: "Descripción",
-      minWidth: 200,
-      sortValue: (f) => f.description,
-      searchValue: (f) => f.description,
-      render: (f) => (
-        <textarea
-          aria-label={`Descripción ${f.id}`}
-          value={f.description}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { description: e.target.value })}
-          className="min-h-8 w-40 rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-    {
-      key: "field_ds_loc",
-      label: "Ubicación",
-      minWidth: 160,
-      sortValue: (f) => f.field_ds_loc,
-      searchValue: (f) => f.field_ds_loc,
-      render: (f) => (
-        <input
-          aria-label={`Ubicación ${f.id}`}
-          value={f.field_ds_loc}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { field_ds_loc: e.target.value })}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-    {
-      key: "type",
-      label: "Tipo",
-      minWidth: 100,
-      sortValue: (f) => f.type,
-      searchValue: (f) => f.type,
-      render: (f) => (
-        <select
-          aria-label={`Tipo ${f.id}`}
-          value={f.type}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { type: e.target.value as AlertSchemaFieldType })}
-          className="rounded border border-border bg-background px-2 py-1 text-xs"
-        >
-          {TYPES.map((type) => (
-            <option key={type}>{type}</option>
-          ))}
-        </select>
-      ),
-    },
-    {
-      key: "data_source",
-      label: "Origen",
-      minWidth: 90,
-      sortValue: (f) => f.data_source,
-      searchValue: (f) => f.data_source,
-      render: (f) => (
-        <select
-          aria-label={`Origen ${f.id}`}
-          value={f.data_source}
-          disabled={readOnly}
-          onChange={(e) =>
-            onChange(f.id, { data_source: e.target.value as AlertSchemaField["data_source"] })
-          }
-          className="rounded border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option>aric</option>
-          <option>host</option>
-          <option>aria</option>
-        </select>
-      ),
-    },
-    {
-      key: "is_core",
-      label: "Core",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_core),
-      render: (f) => (
-        <input
-          aria-label={`Core ${f.id}`}
-          type="checkbox"
-          checked={f.is_core}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_core: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "is_alert",
-      label: "Alerta",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_alert),
-      render: (f) => (
-        <input
-          aria-label={`Alerta ${f.id}`}
-          type="checkbox"
-          checked={f.is_alert}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_alert: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "is_mandatory",
-      label: "Obligatorio",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_mandatory),
-      render: (f) => (
-        <input
-          aria-label={`Obligatorio ${f.id}`}
-          type="checkbox"
-          checked={f.is_mandatory}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_mandatory: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "is_history",
-      label: "Historial",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_history),
-      render: (f) => (
-        <input
-          aria-label={`Historial ${f.id}`}
-          type="checkbox"
-          checked={f.is_history}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_history: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "is_label",
-      label: "Etiqueta",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_label),
-      render: (f) => (
-        <input
-          aria-label={`Etiqueta ${f.id}`}
-          type="checkbox"
-          checked={f.is_label}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_label: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "is_sensible",
-      label: "Sensible",
-      minWidth: 80,
-      sortValue: (f) => Number(f.is_sensible),
-      render: (f) => (
-        <input
-          aria-label={`Sensible ${f.id}`}
-          type="checkbox"
-          checked={f.is_sensible}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { is_sensible: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "sensitivity_strategy",
-      label: "Estrategia",
-      minWidth: 120,
-      sortValue: (f) => f.sensitivity_strategy ?? "",
-      render: (f) => (
-        <select
-          aria-label={`Estrategia sensible ${f.id}`}
-          value={f.sensitivity_strategy ?? ""}
-          disabled={readOnly || !f.is_sensible}
-          onChange={(e) => onChange(f.id, { sensitivity_strategy: e.target.value || null })}
-          className="rounded border border-border bg-background px-2 py-1 text-xs"
-        >
-          <option value="">—</option>
-          <option value="anonymize">anonymize</option>
-          <option value="obfuscate">obfuscate</option>
-        </select>
-      ),
-    },
-    {
-      key: "use_locale",
-      label: "Locale",
-      minWidth: 80,
-      sortValue: (f) => Number(f.use_locale),
-      render: (f) => (
-        <input
-          aria-label={`Locale ${f.id}`}
-          type="checkbox"
-          checked={f.use_locale}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { use_locale: e.target.checked })}
-        />
-      ),
-    },
-    {
-      key: "locale_type",
-      label: "Tipo locale",
-      minWidth: 120,
-      sortValue: (f) => f.locale_type ?? "",
-      searchValue: (f) => f.locale_type ?? "",
-      render: (f) => (
-        <input
-          aria-label={`Tipo de locale ${f.id}`}
-          value={f.locale_type ?? ""}
-          disabled={readOnly || !f.use_locale}
-          onChange={(e) => onChange(f.id, { locale_type: e.target.value || null })}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-    {
-      key: "group",
-      label: "Grupo",
-      minWidth: 120,
-      sortValue: (f) => f.group,
-      searchValue: (f) => f.group,
-      render: (f) => (
-        <input
-          aria-label={`Grupo ${f.id}`}
-          value={f.group}
-          disabled={readOnly}
-          onChange={(e) => onChange(f.id, { group: e.target.value })}
-          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
-        />
-      ),
-    },
-  ];
+/** User ids are UUIDs: show a short form (full value stays in the tooltip). */
+function shortActor(value: string | null | undefined): string {
+  if (!value) return "—";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(value) ? `${value.slice(0, 8)}…` : value;
 }
 
 export function AlertSchemaEditor() {
@@ -414,27 +134,47 @@ export function AlertSchemaEditor() {
   });
   const active = activeQuery.data ?? null;
   const versions = versionsQuery.data ?? [];
+  const presence = presenceQuery.data;
   const [viewedVersion, setViewedVersion] = useState<number | null>(null);
-  const [tab, setTab] = useState<SchemaTab>("fields");
+  const [tab, setTab] = useState<SchemaTab>("essentials");
   const [draft, setDraft] = useState<AlertSchemaVersion | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [sourceFilter, setSourceFilter] = useState("all");
   const [impactAcknowledged, setImpactAcknowledged] = useState(false);
   const [ignoredLocations, setIgnoredLocations] = useState<Set<string>>(new Set());
+  const [openFieldId, setOpenFieldId] = useState<string | null>(null);
   const selected =
     draft ??
     (viewedVersion ? versions.find((item) => item.version === viewedVersion) : null) ??
     active;
   const fields = useMemo(() => selected?.fields ?? [], [selected]);
-  const errors = useMemo(
-    () => validate(fields, selected?.field_roles ?? {}),
-    [fields, selected?.field_roles],
-  );
-  const readOnly =
-    selected?.status === "active" ||
-    selected?.status === "historical" ||
-    selected?.status === "rejected";
+  const fieldRoles = useMemo(() => selected?.field_roles ?? {}, [selected]);
+  const errors = useMemo(() => validate(fields, fieldRoles), [fields, fieldRoles]);
+  const editing = !!draft && draft.status === "draft";
+  const tableReadOnly = !editing;
+  const status = selected?.status ?? null;
   const isProposer = !!user?.id && user.id === selected?.proposed_by;
-  const hasImpact = (selected?.impact ?? []).length > 0;
+  const impact = selected?.impact ?? [];
+  // Consumers per field; a draft has no consumers of its own, so it is read against its base
+  // version. A failing endpoint just hides the "Usado por" column.
+  const usageVersion = selected
+    ? selected.status === "draft"
+      ? (selected.based_on_version ?? active?.version ?? null)
+      : selected.version
+    : null;
+  const usageQuery = useQuery({
+    queryKey: ["alertSchema", "usage", usageVersion],
+    queryFn: () => getAlertSchemaUsage(usageVersion),
+    enabled: !!selected,
+    retry: false,
+    // The report reads every model and configuration (seconds): do not recompute it each time
+    // the tab is reopened.
+    staleTime: 5 * 60_000,
+  });
+  const usage = usageQuery.isError ? null : (usageQuery.data ?? null);
+  const hasImpact = impact.length > 0;
+  const showErrors = errors.length > 0 && (editing || status === "draft" || status === "proposed");
+
   const mutation = useMutation({
     mutationFn: async (action: "save" | "propose" | "approve" | "reject") => {
       if (!selected) throw new Error("No hay una versión de esquema seleccionada.");
@@ -454,93 +194,100 @@ export function AlertSchemaEditor() {
     },
     onSuccess: (result) => {
       setDraft(result);
+      setDirty(false);
       queryClient.invalidateQueries({ queryKey: ["alertSchema"] });
     },
   });
 
+  const edit = (updater: (current: AlertSchemaVersion) => AlertSchemaVersion) => {
+    setDraft((current) => (current ? updater(current) : current));
+    setDirty(true);
+  };
   const updateField = (id: string, patch: Partial<AlertSchemaField>) =>
-    setDraft((current) =>
-      current
-        ? {
-            ...current,
-            fields: current.fields.map((field) =>
-              field.id === id ? { ...field, ...patch } : field,
-            ),
-          }
-        : current,
-    );
-  const startDraft = () =>
-    setDraft(
-      selected
-        ? {
-            ...selected,
-            status: "draft",
-            version: selected.version || 1,
-            fields: selected.fields.map((field) => ({ ...field })),
-            field_roles: { ...selected.field_roles },
-          }
-        : {
-            version: 1,
-            status: "draft",
-            fields: [],
-            field_roles: {},
-            proposed_by: null,
-            proposed_at: null,
-            approved_by: null,
-            approved_at: null,
-            impact_acknowledged: false,
-            based_on_version: active?.version ?? null,
-            comparison: {},
-            impact: [],
-          },
-    );
-  const columns = fieldColumns(!draft || !!readOnly, updateField);
-  const grouped = fields
-    .filter((field) => sourceFilter === "all" || field.data_source === sourceFilter)
-    .reduce<Record<string, Record<string, AlertSchemaField[]>>>((result, field) => {
-      const destination = field.is_history
-        ? "Historial"
-        : field.is_label
-          ? "Desenlace"
-          : field.data_source === "aria"
-            ? "Resultado del agente"
-            : "Alerta";
-      const groups = (result[destination] ??= {});
-      (groups[field.group || "Sin grupo"] ??= []).push(field);
-      return result;
-    }, {});
-  const actionError = mutation.error ? errorText(mutation.error) : null;
-  const presence = presenceQuery.data;
-  const presenceByField = new Map((presence?.fields ?? []).map((item) => [item.field_id, item]));
+    edit((current) => ({
+      ...current,
+      fields: current.fields.map((field) => (field.id === id ? { ...field, ...patch } : field)),
+    }));
+  const baseDraft = (): AlertSchemaVersion =>
+    selected
+      ? {
+          ...selected,
+          status: "draft",
+          version: selected.version || 1,
+          fields: selected.fields.map((field) => ({ ...field })),
+          field_roles: { ...selected.field_roles },
+        }
+      : emptyVersion(active?.version ?? null);
+  const startDraft = () => {
+    setDraft(baseDraft());
+    setDirty(selected?.status !== "draft");
+    mutation.reset();
+  };
+  const discardDraft = () => {
+    setDraft(null);
+    setDirty(false);
+    mutation.reset();
+  };
+  const addField = (patch: Partial<AlertSchemaField> = {}) => {
+    const next = { ...emptyField(`field-${Date.now()}`), ...patch };
+    setDraft((current) => {
+      const base = current ?? baseDraft();
+      return { ...base, status: "draft", fields: [...base.fields, next] };
+    });
+    setDirty(true);
+  };
   const addPresenceField = (location: string) => {
     const fieldName = location.split(".").at(-1) ?? location;
-    setDraft((current) => ({
-      ...(current ?? {
-        version: active?.version ?? 1,
-        status: "draft",
-        fields: [],
-        field_roles: {},
-        proposed_by: null,
-        proposed_at: null,
-        approved_by: null,
-        approved_at: null,
-        impact_acknowledged: false,
-        based_on_version: active?.version ?? null,
-        comparison: {},
-        impact: [],
-      }),
-      status: "draft",
-      fields: [
-        ...(current?.fields ?? []),
-        emptyField(`field-${Date.now()}`) as AlertSchemaField,
-      ].map((field, index, all) =>
-        index === all.length - 1
-          ? { ...field, field: fieldName, field_name: fieldName, field_ds_loc: location }
-          : field,
-      ),
-    }));
+    addField({ field: fieldName, field_name: fieldName, field_ds_loc: location });
     setTab("fields");
   };
+
+  const reviewItems = buildReviewItems(presence, suggestionsQuery.data ?? [], ignoredLocations);
+  const sensitiveWithoutStrategy = fields.filter(
+    (field) => field.is_sensible && !field.sensitivity_strategy,
+  ).length;
+  const coverage = essentialsBreakdown(fields, fieldRoles);
+  const changeCount = editing
+    ? (summarizeComparison(compareLocally(active, { fields, field_roles: fieldRoles }))?.total ?? 0)
+    : (summarizeComparison(selected?.comparison)?.total ?? 0);
+  const viewingOther = editing || (!!selected && selected.version !== active?.version);
+  const viewedText = viewingOther
+    ? `${statusLabel(editing ? "draft" : status)}${editing || status === "draft" || status === "proposed" ? ` con ${changeCount} ${changeCount === 1 ? "cambio" : "cambios"}` : ` v${selected?.version}`}`
+    : null;
+
+  let primary: PrimaryAction = "edit";
+  let primaryDisabled = false;
+  let primaryHint: string | null = null;
+  if (editing && dirty) {
+    primary = "save";
+    primaryDisabled = errors.length > 0;
+    if (errors.length > 0) primaryHint = `Corrige ${errors.length} validaciones para guardar.`;
+  } else if (editing) {
+    primary = "propose";
+    primaryDisabled = errors.length > 0;
+    if (errors.length > 0) primaryHint = `Corrige ${errors.length} validaciones para proponer.`;
+  } else if (status === "proposed") {
+    primary = "approve";
+    if (isProposer) {
+      primaryDisabled = true;
+      primaryHint = "No puedes aprobar tu propia propuesta; debe hacerlo otro manager.";
+    } else if (hasImpact && !impactAcknowledged) {
+      primaryDisabled = true;
+      primaryHint = "Confirma el impacto en la pestaña Propuestas para aprobar.";
+    }
+  }
+  const onPrimary = () => {
+    if (primary === "edit") startDraft();
+    else if (primary === "save") mutation.mutate("save");
+    else if (primary === "propose") mutation.mutate("propose");
+    else if (primary === "approve") mutation.mutate("approve");
+  };
+
+  const visibleFields = fields.filter(
+    (field) => sourceFilter === "all" || field.data_source === sourceFilter,
+  );
+  const openField = fields.find((field) => field.id === openFieldId) ?? null;
+  const actionError = mutation.error ? humanError(mutation.error) : null;
 
   return (
     <section className="space-y-4">
@@ -548,18 +295,21 @@ export function AlertSchemaEditor() {
         <div>
           <p className="text-sm font-semibold">Esquema de alerta</p>
           <p className="mt-1 text-xs text-text-secondary">
-            Activo: v{active?.version ?? "—"} · Vista: v{selected?.version ?? "—"}
-          </p>
-          <p className="mt-1 text-xs text-text-secondary">
-            Estado: {selected?.status ?? "sin versión activa"} · Propuso:{" "}
-            {selected?.proposed_by ?? "—"} · Aprobó: {selected?.approved_by ?? "—"}
+            Vista: v{selected?.version ?? "—"} · Estado: {statusLabel(status)} · Propuso:{" "}
+            <span title={selected?.proposed_by ?? undefined}>
+              {shortActor(selected?.proposed_by)}
+            </span>{" "}
+            · Aprobó:{" "}
+            <span title={selected?.approved_by ?? undefined}>
+              {shortActor(selected?.approved_by)}
+            </span>
           </p>
         </div>
         <select
           aria-label="Versión del esquema"
           value={selected?.version ?? ""}
           onChange={(e) => {
-            setDraft(null);
+            discardDraft();
             setViewedVersion(e.target.value ? Number(e.target.value) : null);
           }}
           className="h-9 rounded-md border border-border bg-background px-3 text-sm"
@@ -567,25 +317,66 @@ export function AlertSchemaEditor() {
           <option value="">Versión activa</option>
           {versions.map((version) => (
             <option key={version.version} value={version.version}>
-              v{version.version} · {version.status}
+              v{version.version} · {statusLabel(version.status)}
             </option>
           ))}
         </select>
       </div>
-      <SectionTabs
-        label="Secciones del esquema"
-        items={TABS}
-        value={tab}
-        onValueChange={setTab}
-        variant="pills"
+      <SchemaStatusBand
+        loading={activeQuery.isLoading}
+        activeVersion={active?.version ?? null}
+        viewedText={viewedText}
+        requiredCovered={coverage.requiredCovered}
+        requiredTotal={coverage.requiredTotal}
+        optionalCovered={coverage.optionalCovered}
+        optionalTotal={coverage.optionalTotal}
+        toReview={reviewItems.length}
+        sensitiveWithoutStrategy={sensitiveWithoutStrategy}
+        primary={primary}
+        primaryDisabled={primaryDisabled}
+        primaryHint={primaryHint}
+        pending={mutation.isPending}
+        onPrimary={onPrimary}
+        canReject={status === "proposed"}
+        onReject={() => mutation.mutate("reject")}
+        canDiscard={editing}
+        onDiscard={discardDraft}
       />
       {actionError && (
         <div
           role="alert"
+          data-testid="schema-action-error"
           className="rounded-md border border-danger/40 bg-danger/10 p-3 text-xs text-danger"
         >
           {actionError}
         </div>
+      )}
+      {showErrors && <ValidationErrors errors={errors} />}
+      <SectionTabs
+        label="Secciones del esquema"
+        items={[
+          { key: "essentials", label: "Campos esenciales" },
+          { key: "fields", label: "Campos" },
+          { key: "proposals", label: "Propuestas" },
+          { key: "review", label: `Por revisar (${reviewItems.length})` },
+        ]}
+        value={tab}
+        onValueChange={setTab}
+        variant="pills"
+      />
+      {tab === "essentials" && (
+        <EssentialFieldsChecklist
+          fields={fields}
+          fieldRoles={fieldRoles}
+          presence={presence}
+          editable={editing}
+          onAssign={(role, fieldId) =>
+            edit((current) => ({
+              ...current,
+              field_roles: { ...current.field_roles, [role]: fieldId },
+            }))
+          }
+        />
       )}
       {tab === "fields" && (
         <div className="space-y-3">
@@ -601,134 +392,41 @@ export function AlertSchemaEditor() {
               <option value="host">host</option>
               <option value="aria">aria</option>
             </select>
-            <div className="flex gap-2">
+            {editing && (
               <button
                 type="button"
-                onClick={startDraft}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs"
+                onClick={() => addField()}
+                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-white"
               >
-                <Plus className="h-3.5 w-3.5" /> Editar borrador
+                <Plus className="h-3.5 w-3.5" /> Campo
               </button>
-              {draft && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            fields: [...current.fields, emptyField(`field-${Date.now()}`)],
-                          }
-                        : current,
-                    )
-                  }
-                  className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-white"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Campo
-                </button>
-              )}
-            </div>
+            )}
           </div>
-          {Object.keys(grouped).length === 0 ? (
+          {visibleFields.length === 0 ? (
             <Empty text="La v1 permanece vacía hasta que se cargue un esquema." />
           ) : (
-            Object.entries(grouped).map(([destination, groups]) => (
-              <div key={destination} className="space-y-2">
-                <h3 className="text-sm font-semibold text-text-primary">{destination}</h3>
-                {Object.entries(groups).map(([group, groupFields]) => (
-                  <DataTable
-                    key={`${destination}-${group}`}
-                    storageKey="alert-schema-fields"
-                    title={group}
-                    columns={columns}
-                    rows={groupFields
-                      .slice()
-                      .sort(
-                        (left, right) =>
-                          left.field.localeCompare(right.field) ||
-                          left.field_ds_loc.localeCompare(right.field_ds_loc),
-                      )}
-                    rowKey={(field) => field.id}
-                    pageSize={50}
-                    itemLabel="campos"
-                    searchLabel={`Buscar campos en ${group}`}
-                    searchPlaceholder="Buscar campo, ubicación o tipo…"
-                  />
-                ))}
-              </div>
-            ))
+            <FieldsByRole
+              fields={visibleFields}
+              readOnly={tableReadOnly}
+              impact={impact}
+              usage={usage}
+              onChange={updateField}
+              onOpen={setOpenFieldId}
+            />
           )}
-        </div>
-      )}
-      {tab === "system" && (
-        <div className="rounded-lg border border-border">
-          <div className="border-b border-border p-3 text-xs text-text-secondary">
-            Los roles sólo aceptan campos is_alert del tipo compatible.
-          </div>
-          {ROLES.map((role) => (
-            <div
-              key={role.name}
-              className="grid gap-2 border-t border-border p-3 md:grid-cols-[150px_1fr_1fr] md:items-center"
-            >
-              <div className="text-xs font-semibold">
-                {role.name}
-                {role.required && <span className="ml-1 text-danger">*</span>}
-              </div>
-              <select
-                aria-label={`Campo para ${role.name}`}
-                disabled={!draft}
-                value={selected?.field_roles[role.name] ?? ""}
-                onChange={(e) =>
-                  setDraft((current) =>
-                    current
-                      ? {
-                          ...current,
-                          field_roles: { ...current.field_roles, [role.name]: e.target.value },
-                        }
-                      : current,
-                  )
-                }
-                className="h-8 rounded border border-border bg-background px-2 text-xs"
-              >
-                <option value="">Sin asignar</option>
-                {fields
-                  .filter((field) => field.is_alert && !field.is_label && field.type === role.type)
-                  .map((field) => (
-                    <option key={field.id} value={field.id}>
-                      {field.field_name || field.field || field.id}
-                    </option>
-                  ))}
-              </select>
-              <p className="text-[11px] text-text-secondary">
-                {role.consumers} ·{" "}
-                {(() => {
-                  const distribution = selected?.field_roles[role.name]
-                    ? presenceByField.get(selected.field_roles[role.name])?.distribution
-                    : null;
-                  if (!distribution) return "Distribución: sin datos";
-                  if (distribution.kind === "numeric")
-                    return `Percentiles: ${Object.entries(distribution.percentiles ?? {})
-                      .map(([key, value]) => `${key} ${value ?? "—"}`)
-                      .join(" · ")}`;
-                  return `Valores: ${
-                    Object.entries(distribution.frequencies ?? {})
-                      .slice(0, 4)
-                      .map(([key, value]) => `${key}: ${value}`)
-                      .join(" · ") || "sin datos"
-                  }`;
-                })()}
-              </p>
-            </div>
-          ))}
         </div>
       )}
       {tab === "proposals" && (
         <div className="space-y-3">
           <div className="rounded-lg border border-border p-4 text-xs">
-            <p className="font-semibold">Comparación con la versión activa</p>
-            <pre className="mt-2 whitespace-pre-wrap text-text-secondary">
-              {JSON.stringify(selected?.comparison ?? {}, null, 2)}
-            </pre>
+            <p className="mb-2 font-semibold">Comparación con la versión activa</p>
+            <SchemaDiff
+              comparison={
+                editing
+                  ? compareLocally(active, { fields, field_roles: fieldRoles })
+                  : (selected?.comparison ?? {})
+              }
+            />
           </div>
           {hasImpact && (
             <div className="rounded-lg border border-warning/50 bg-warning/10 p-4 text-xs">
@@ -736,8 +434,8 @@ export function AlertSchemaEditor() {
                 <AlertTriangle className="mr-1 inline h-4 w-4" /> Impacto en uso
               </p>
               <ul className="mt-2 list-disc pl-5">
-                {selected?.impact.map((item, index) => (
-                  <li key={index}>{String(item.name ?? item.id ?? "Consumidor activo")}</li>
+                {impact.map((item, index) => (
+                  <li key={index}>{impactLabel(item)}</li>
                 ))}
               </ul>
               <label className="mt-3 flex items-center gap-2">
@@ -750,120 +448,24 @@ export function AlertSchemaEditor() {
               </label>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {draft && (
-              <button
-                type="button"
-                disabled={errors.length > 0 || mutation.isPending}
-                onClick={() => mutation.mutate("save")}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs disabled:opacity-50"
-              >
-                <Save className="h-3.5 w-3.5" /> Guardar
-              </button>
-            )}
-            <button
-              type="button"
-              disabled={!selected || !!readOnly || errors.length > 0 || mutation.isPending}
-              onClick={() => mutation.mutate("propose")}
-              className="rounded-md bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            >
-              Proponer
-            </button>
-            <button
-              type="button"
-              aria-label="Aprobar propuesta"
-              disabled={
-                !selected ||
-                selected.status !== "proposed" ||
-                isProposer ||
-                (hasImpact && !impactAcknowledged) ||
-                mutation.isPending
-              }
-              onClick={() => mutation.mutate("approve")}
-              className="inline-flex items-center gap-1 rounded-md bg-success px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            >
-              <Check className="h-3.5 w-3.5" /> Aprobar
-            </button>
-            <button
-              type="button"
-              disabled={!selected || selected.status !== "proposed" || mutation.isPending}
-              onClick={() => mutation.mutate("reject")}
-              className="inline-flex items-center gap-1 rounded-md border border-danger/50 px-3 py-1.5 text-xs text-danger disabled:opacity-50"
-            >
-              <X className="h-3.5 w-3.5" /> Rechazar
-            </button>
-          </div>
-          {isProposer && (
-            <p className="text-xs text-warning">
-              No puedes aprobar tu propia propuesta; debe hacerlo otro manager.
-            </p>
-          )}
-          {errors.length > 0 && <ValidationErrors errors={errors} />}
         </div>
       )}
-      {tab === "suggestions" && (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-border bg-surface p-3 text-xs text-text-secondary">
-            Último análisis: {presence?.report_day ?? "—"} · {presence?.alert_count ?? 0} alertas
-          </div>
-          {(presence?.unknown_locations ?? [])
-            .filter((item) => !ignoredLocations.has(item.location))
-            .map((item) => (
-              <div key={item.location} className="rounded-lg border border-border p-3 text-xs">
-                <p className="font-semibold">Campo nuevo · {item.location}</p>
-                <p className="mt-1 text-text-secondary">Llegó en {item.frequency} alertas.</p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md bg-primary px-2 py-1 text-white"
-                    onClick={() => addPresenceField(item.location)}
-                  >
-                    Añadir al borrador
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-border px-2 py-1"
-                    onClick={() =>
-                      setIgnoredLocations((current) => new Set(current).add(item.location))
-                    }
-                  >
-                    Ignorar
-                  </button>
-                </div>
-              </div>
-            ))}
-          {(suggestionsQuery.data ?? []).map((suggestion) => (
-            <div key={suggestion.id} className="rounded-lg border border-border p-3 text-xs">
-              <p className="font-semibold">
-                {suggestion.field} · {suggestion.location}
-              </p>
-              <p className="mt-1 text-text-secondary">{suggestion.comment}</p>
-              <p className="mt-1 text-[11px] text-text-secondary">
-                Reportó {suggestion.created_by}
-              </p>
-              <div className="mt-2 flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-md bg-primary px-2 py-1 text-white"
-                  onClick={() => addPresenceField(suggestion.location)}
-                >
-                  Añadir al borrador
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-2 py-1"
-                  onClick={() =>
-                    setIgnoredLocations((current) => new Set(current).add(suggestion.location))
-                  }
-                >
-                  Ignorar
-                </button>
-              </div>
-            </div>
-          ))}
-          {!(suggestionsQuery.data ?? []).length && <Empty text="No hay reportes de analistas." />}
-        </div>
+      {tab === "review" && (
+        <ReviewInbox
+          presence={presence}
+          items={reviewItems}
+          onAdd={addPresenceField}
+          onIgnore={(location) => setIgnoredLocations((current) => new Set(current).add(location))}
+        />
       )}
+      <FieldDetailDrawer
+        field={openField}
+        readOnly={tableReadOnly}
+        impact={impact}
+        usage={usage}
+        onChange={updateField}
+        onClose={() => setOpenFieldId(null)}
+      />
     </section>
   );
 }
@@ -872,6 +474,7 @@ function ValidationErrors({ errors }: { errors: string[] }) {
   return (
     <div
       role="alert"
+      data-testid="schema-validation-errors"
       className="rounded-md border border-danger/40 bg-danger/10 p-3 text-xs text-danger"
     >
       <p className="font-semibold">Corrige antes de guardar:</p>
@@ -883,6 +486,7 @@ function ValidationErrors({ errors }: { errors: string[] }) {
     </div>
   );
 }
+
 function Empty({ text }: { text: string }) {
   return (
     <div className="rounded-lg border border-dashed border-border p-8 text-center text-xs text-text-secondary">

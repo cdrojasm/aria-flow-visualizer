@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
 
 import { FeatureRecipeWorkspace } from "@/components/modelos/FeatureRecipeWorkspace";
@@ -10,6 +11,7 @@ import {
   type ProfilingStrategyKey,
 } from "@/data/configs";
 import type { Rubric } from "@/data/configs";
+import { getActiveAlertSchema } from "@/lib/api/alertSchema.functions";
 import { useVariableCatalog } from "@/hooks/useVariableCatalog";
 import { SegmentRubricsSection } from "./SegmentRubricsSection";
 import { Field, VariablePicker } from "./shared/FormControls";
@@ -44,6 +46,13 @@ export function SegmentProfilingSection({
 }) {
   const { variables } = useVariableCatalog();
   const pool = [...variables, ...extraVariables];
+  // Active alert schema feeds the variable workspace (field picker, inherited
+  // rules, typed generation). A failure just falls back to free paths.
+  const schemaQuery = useQuery({
+    queryKey: ["alertSchema", "active"],
+    queryFn: () => getActiveAlertSchema(),
+    staleTime: 60_000,
+  });
 
   const updateStrategy = (index: number, patch: Partial<ProfilingStrategy>) => {
     const strategies = value.strategies.map((s, i) => (i === index ? { ...s, ...patch } : s));
@@ -60,12 +69,13 @@ export function SegmentProfilingSection({
           target=""
           availableFields={variables}
           onValidity={() => {}}
+          schema={schemaQuery.data ?? null}
         />
       </fieldset>
       <div className="space-y-3">
         <p className="text-[12px] text-text-secondary">
           Las tres estrategias se ejecutan en este orden y pueden usar las variables base y las
-          señales definidas arriba.
+          variables definidas arriba.
         </p>
         {PROFILING_STRATEGY_KEYS.map((key, index) => {
           const strategy = value.strategies.find((s) => s.key === key) ?? value.strategies[index];

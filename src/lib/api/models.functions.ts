@@ -74,6 +74,13 @@ export type TrainingReport = {
   dataset_sha256: string;
 };
 
+export type ModelSchemaReview = {
+  required: boolean;
+  trained_version: number | null;
+  active_version: number | null;
+  changed_fields: string[];
+};
+
 export type ModelResponse = {
   id: string;
   tag: string;
@@ -94,6 +101,9 @@ export type ModelResponse = {
   historical_features?: HistoricalFeature[];
   training_config?: TrainingConfig;
   training_report?: TrainingReport | null;
+  /** Schema version the model was trained with. Absent in old backends/models. */
+  alert_schema_version?: number | null;
+  schema_review?: ModelSchemaReview | null;
 };
 
 export type CreateModelPayload = {
@@ -106,6 +116,8 @@ export type CreateModelPayload = {
   feature_configuration?: FeatureConfiguration | null;
   historical_features?: HistoricalFeature[];
   training_config?: TrainingConfig;
+  /** Omitted = the backend pins the active schema. */
+  alert_schema_version?: number | null;
 };
 
 export type ModelScoreResponse = {

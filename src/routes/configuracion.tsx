@@ -1401,9 +1401,26 @@ function ConfiguracionPage() {
   const actionButtonClass =
     "inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium disabled:opacity-50 disabled:cursor-not-allowed";
 
+  const schemaTab = canManageSchema && activeTab === "schema";
+  const sectionTabs = (
+        <SectionTabs
+          label="Secciones de configuración"
+          items={(isChannelManager ? SEGMENT_CONFIGURATION_TAB_META : isReleaseManager ? RELEASE_TAB_META : GENERAL_TAB_META)
+            .filter((tab) => tab.key !== "schema" || canManageSchema)
+            .map((tab) => ({
+            ...tab,
+            dirty: selectedConfig.dirtyTabs.includes(tab.key),
+          }))}
+          value={activeTab}
+          onValueChange={setActiveTab}
+          disabled={apiDown}
+        />
+  );
+
   return (
     <DashboardLayout
       bottomBar={
+        schemaTab ? undefined : (
         <div
           className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8 ${activeTab === "optimizador" ? "hidden" : ""}`}
         >
@@ -1493,6 +1510,7 @@ function ConfiguracionPage() {
             </button>
           )}
         </div>
+        )
       }
     >
       <div className="px-8 py-6 max-w-[1280px] space-y-6">
@@ -1509,6 +1527,10 @@ function ConfiguracionPage() {
           </p>
         </header>
 
+        {schemaTab && sectionTabs}
+
+        {!schemaTab && (
+        <>
         {/* Sticky historical-version banner — always visible above the picker while browsing an old version */}
         {(isChannelManager || isReleaseManager || isManager) && readOnlyHistorical && (
           <div className="sticky top-0 z-20 -mx-8 px-8 py-2 bg-background/95 backdrop-blur border-b border-border">
@@ -2031,19 +2053,10 @@ function ConfiguracionPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <SectionTabs
-          label="Secciones de configuración"
-          items={(isChannelManager ? SEGMENT_CONFIGURATION_TAB_META : isReleaseManager ? RELEASE_TAB_META : GENERAL_TAB_META)
-            .filter((tab) => tab.key !== "schema" || canManageSchema)
-            .map((tab) => ({
-            ...tab,
-            dirty: selectedConfig.dirtyTabs.includes(tab.key),
-          }))}
-          value={activeTab}
-          onValueChange={setActiveTab}
-          disabled={apiDown}
-        />
+        </>
+        )}
+
+        {!schemaTab && sectionTabs}
 
         <fieldset disabled={locked} className="contents">
           {activeTab === "general" && (

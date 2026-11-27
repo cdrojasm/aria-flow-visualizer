@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Trash2,
@@ -8,9 +8,26 @@ import {
   FlaskConical,
   Download,
   CircleAlert,
+  MoreHorizontal,
 } from "lucide-react";
 import { WarningAlert } from "@/components/configuracion/shared/FormControls";
-import { SectionTabs } from "@/components/ui/section-tabs";
+import type { AlertSchemaVersion } from "@/lib/api/alertSchema.functions";
+import { SchemaFieldPicker } from "./feature/FieldPicker";
+import { GenerationReview } from "./feature/GenerationReview";
+import {
+  createFieldMappings,
+  isPremarked,
+  MAX_RECIPES,
+  proposeGenerationCandidates,
+} from "./feature/generation";
+import {
+  alertPathsUsed,
+  buildSchemaIndex,
+  historyFields,
+  recipeGuards,
+  schemaFieldPath,
+  type SchemaIndex,
+} from "./feature/schemaFields";
 import { getDatasetRows } from "@/lib/api/datasets.functions";
 import {
   type FeatureConfiguration,
@@ -148,7 +165,7 @@ const friendlyFeatureError = (error: string) => {
     return {
       title: "La constante no coincide con el tipo de salida",
       explanation:
-        "Esta característica entrega un valor booleano, por lo que su valor alternativo debe ser Verdadero o Falso.",
+        "Esta variable entrega un valor booleano, por lo que su valor alternativo debe ser Verdadero o Falso.",
       action:
         "En “Si falta o es inválido”, usa una constante booleana. El editor la propone automáticamente al seleccionar Booleano.",
       technical: message,
@@ -158,7 +175,7 @@ const friendlyFeatureError = (error: string) => {
   }
   return {
     title: "No pudimos validar esta configuración",
-    explanation: "Revisa los campos marcados en la característica y vuelve a calcular.",
+    explanation: "Revisa los campos marcados en la variable y vuelve a calcular.",
     action: "Si el problema continúa, abre el detalle técnico para compartirlo con el equipo.",
     technical: message,
     recipeId: problem.recipe_id,
@@ -284,40 +301,44 @@ function paths(v: unknown, prefix = "", depth = 0): { path: string; value: unkno
     return [{ path, value }, ...paths(value, path, depth + 1)];
   });
 }
-function createFieldMappings(fieldPaths: string[], existing: Recipe[]): Recipe[] {
-  const names = new Set(existing.map((recipe) => recipe.name));
-  const mapped = new Set(
-    existing
-      .filter((recipe) => recipe.source === "current")
-      .map((recipe) => recipe.path?.replace(/^\$\./, "")),
+const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,79}$/;
+// Cheap, local problems of one variable. It never calls the backend: the
+// authoritative check is still the preview evaluator.
+function recipeIssues(
+  recipe: Recipe,
+  config: FeatureConfiguration,
+  index: SchemaIndex | null,
+  preview: Preview | null,
+): string[] {
+  const issues: string[] = [];
+  if (!NAME_PATTERN.test(recipe.name)) issues.push("Nombre inválido");
+  if (recipe.source === "current" && !recipe.path) issues.push("Falta el campo de la alerta");
+  if (recipe.source === "history" && !config.mappings.history)
+    issues.push("Falta el campo de historial");
+  for (const excluded of recipeGuards(recipe, index).excluded)
+    issues.push(`Usa un campo excluido (${excluded.label})`);
+  for (const suspect of recipeGuards(recipe, index).suspect)
+    issues.push(`Usa un campo sospechoso (${suspect.label}): ${suspect.reason}`);
+  const failed = preview?.rows.some((row) =>
+    row.features.some((feature) => feature.id === recipe.id && feature.status === "error"),
   );
-  return [...new Set(fieldPaths)]
-    .filter((path) => !mapped.has(path))
-    .map((path) => {
-      const clean = path
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^A-Za-z0-9_]/g, "_");
-      const base = (/^[A-Za-z]/.test(clean) ? clean : `campo_${clean}`).slice(0, 80);
-      let name = base;
-      let suffix = 2;
-      while (names.has(name)) {
-        const ending = `_${suffix++}`;
-        name = `${base.slice(0, 80 - ending.length)}${ending}`;
-      }
-      names.add(name);
-      return {
-        id: uid(),
-        name,
-        description: "",
-        enabled: true,
-        output_type: "string",
-        source: "current",
-        path,
-        missing: { policy: "missing" },
-        steps: [],
-      };
-    });
+  if (failed) issues.push("La última prueba devolvió un error");
+  return issues;
+}
+type RecipeValidity = "unvalidated" | "valid" | "warning";
+/**
+ * ✓ only after the evaluator computed the variable without error; ⚠ on a local
+ * problem or an evaluator error; otherwise neutral "Sin validar".
+ */
+function recipeValidity(recipe: Recipe, issues: string[], preview: Preview | null): RecipeValidity {
+  if (issues.length) return "warning";
+  const result = preview?.rows.flatMap((row) =>
+    row.features.filter((feature) => feature.id === recipe.id),
+  );
+  if (!recipe.enabled || !result?.length) return "unvalidated";
+  return result.every((feature) => feature.status === "ok" || feature.status === "missing")
+    ? "valid"
+    : "warning";
 }
 function defaultStep(operation: string): RecipeStep {
   return {
@@ -515,6 +536,7 @@ export function FeatureRecipeWorkspace({
   onValidity,
   onDiagnostic,
   focusRecipeId,
+  schema = null,
 }: {
   value: FeatureConfiguration;
   onChange: (c: FeatureConfiguration) => void;
@@ -526,6 +548,8 @@ export function FeatureRecipeWorkspace({
   onValidity: (valid: boolean) => void;
   onDiagnostic?: (diagnostic: FeatureDiagnostic | null) => void;
   focusRecipeId?: string | null;
+  /** Active alert schema. When present it feeds the field selectors and rules. */
+  schema?: AlertSchemaVersion | null;
 }) {
   // Feature configurations are persisted inside several versioned resources
   // (models and agent configuration). Older versions did not always contain
@@ -533,16 +557,21 @@ export function FeatureRecipeWorkspace({
   // empty at the editor boundary: a historical configuration must be
   // viewable, and opening it must never make the whole configuration route
   // fail before the user has a chance to save a migrated version.
-  const value: FeatureConfiguration = {
-    schema_version: rawValue?.schema_version ?? 2,
-    mappings: rawValue?.mappings ?? { timezone: "America/Bogota" },
-    recipes: Array.isArray(rawValue?.recipes)
-      ? rawValue.recipes.map((recipe) => ({
-          ...recipe,
-          steps: Array.isArray(recipe.steps) ? recipe.steps : [],
-        }))
-      : [],
-  };
+  // Memoized on the incoming value: the effects below depend on `value`, and a
+  // fresh object per render would wipe the preview result right after it arrives.
+  const value: FeatureConfiguration = useMemo(
+    () => ({
+      schema_version: rawValue?.schema_version ?? 2,
+      mappings: rawValue?.mappings ?? { timezone: "America/Bogota" },
+      recipes: Array.isArray(rawValue?.recipes)
+        ? rawValue.recipes.map((recipe) => ({
+            ...recipe,
+            steps: Array.isArray(recipe.steps) ? recipe.steps : [],
+          }))
+        : [],
+    }),
+    [rawValue],
+  );
   const [selected, setSelected] = useState(value.recipes[0]?.id ?? "");
   const [tab, setTab] = useState("recipes");
   const [invalidField, setInvalidField] = useState(false);
@@ -552,6 +581,8 @@ export function FeatureRecipeWorkspace({
   const [samples, setSamples] = useState("[]");
   const [source, setSource] = useState("Ejemplos ficticios");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [openDetails, setOpenDetails] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [previewError, setPreviewError] = useState("");
@@ -568,8 +599,14 @@ export function FeatureRecipeWorkspace({
   const [showErrorsOnly, setShowErrorsOnly] = useState(false);
   const [mappingSearch, setMappingSearch] = useState("");
   const [truthyDrafts, setTruthyDrafts] = useState<Record<string, string>>({});
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [included, setIncluded] = useState<Set<string>>(new Set());
   const request = useRef(0);
   const recipe = value.recipes.find((r) => r.id === selected) ?? value.recipes[0];
+  const schemaIndex: SchemaIndex | null = buildSchemaIndex(schema, fieldAliases);
+  const schemaAlertPaths = schemaIndex
+    ? schemaIndex.fields.filter((info) => info.role === "alert").map((info) => info.path)
+    : [];
   let rows: Record<string, unknown>[] = [];
   let sampleError = "";
   try {
@@ -620,7 +657,9 @@ export function FeatureRecipeWorkspace({
   const fields = paths(rows[0]);
   const realFields = realRows.flatMap((row) => paths(row));
   const historyPath = value.mappings.history ?? "";
-  const currentPaths = [...new Set([...availableFields, ...realFields.map((f) => f.path)])].filter(
+  const currentPaths = [
+    ...new Set([...availableFields, ...realFields.map((f) => f.path), ...schemaAlertPaths]),
+  ].filter(
     (path) =>
       path !== historyPath &&
       !path.startsWith(`${historyPath}.`) &&
@@ -637,10 +676,18 @@ export function FeatureRecipeWorkspace({
       }),
     ),
   ];
+  const schemaHistoryPaths = schemaIndex ? historyFields(schemaIndex).map((info) => info.path) : [];
   const historyCandidates = [
     ...new Set([
-      ...realFields.filter((field) => Array.isArray(field.value)).map((field) => field.path),
-      ...availableFields,
+      ...schemaHistoryPaths,
+      // With a schema, only its history fields are offered; without one (or
+      // when it declares none) the dataset-derived arrays keep working.
+      ...(schemaHistoryPaths.length
+        ? []
+        : [
+            ...realFields.filter((field) => Array.isArray(field.value)).map((field) => field.path),
+            ...availableFields,
+          ]),
     ]),
   ].filter((path) => path !== target && !path.startsWith(`${target}.`));
   const containerPaths = new Set(
@@ -655,10 +702,20 @@ export function FeatureRecipeWorkspace({
       !historyPath.startsWith(`${path}.`) &&
       !target.startsWith(`${path}.`),
   );
-  const mappedPaths = new Set(
-    value.recipes.filter((r) => r.source === "current").map((r) => r.path?.replace(/^\$\./, "")),
+  // Generation is a proposal the analyst confirms: schema fields (typed) plus the
+  // dataset columns the schema does not know, each with the rule that applies.
+  const candidates = proposeGenerationCandidates({
+    index: schemaIndex,
+    datasetPaths: bulkPaths,
+    existing: value.recipes,
+    target,
+    historyPath,
+  });
+  const proposable = candidates.filter((c) => c.level !== "exclude");
+  const selectedCandidates = candidates.filter(
+    (c) => c.level !== "exclude" && included.has(c.path),
   );
-  const pendingPaths = bulkPaths.filter((path) => !mappedPaths.has(path));
+  const createCount = selectedCandidates.reduce((sum, c) => sum + c.recipeCount, 0);
   const suggestedPaths = currentPaths;
   const fixture = fixtureFor(currentPaths);
   const pathLabel = (path: string) => {
@@ -813,13 +870,29 @@ export function FeatureRecipeWorkspace({
     onChange({ ...value, recipes: [...value.recipes, r] });
     setSelected(r.id);
   };
+  const openReview = () => {
+    setIncluded(new Set(candidates.filter(isPremarked).map((c) => c.path)));
+    setReviewOpen(true);
+  };
+  const toggleCandidate = (path: string) =>
+    setIncluded((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   const generateMappings = () => {
-    const generated = createFieldMappings(pendingPaths, value.recipes);
-    if (!generated.length || value.recipes.length + generated.length > 200) return;
+    const generated = createFieldMappings(
+      selectedCandidates.map((c) => c.path),
+      value.recipes,
+      schemaIndex,
+    );
+    if (!generated.length || value.recipes.length + generated.length > MAX_RECIPES) return;
     onChange({ ...value, recipes: [...value.recipes, ...generated] });
     setSelected(generated[0].id);
+    setReviewOpen(false);
     setMessage(
-      `Se crearon ${generated.length} mapeos como texto. Puedes editar su tipo y añadir transformaciones.`,
+      `Se crearon ${generated.length} variables a partir de los campos que marcaste. Siguen sin validar: pulsa “Probar variable” o “Validar y calcular”.`,
     );
   };
   const addMapping = () => {
@@ -836,7 +909,7 @@ export function FeatureRecipeWorkspace({
     onChange({ ...value, recipes: [...value.recipes, mapping] });
     setSelected(mapping.id);
   };
-  const evaluate = async () => {
+  const evaluate = async (override?: Record<string, unknown>[]) => {
     const id = ++request.current;
     let queued = false;
     setBusy(true);
@@ -867,9 +940,11 @@ export function FeatureRecipeWorkspace({
         })),
       };
       parseConfig(JSON.stringify(previewConfiguration));
-      if (sampleError) throw new Error(sampleError);
-      const result = await previewFeatures(previewConfiguration, rows, target);
+      if (!override && sampleError) throw new Error(sampleError);
+      const sendRows = override ?? rows;
+      const result = await previewFeatures(previewConfiguration, sendRows, target);
       if (request.current !== id) return;
+      setPreviewRows(sendRows);
       queued = true;
       setPreviewTaskId(result.task_id);
     } catch (e) {
@@ -896,6 +971,81 @@ export function FeatureRecipeWorkspace({
     a.click();
     URL.revokeObjectURL(a.href);
   };
+  const alertPathField = (
+    label: string,
+    current: string,
+    change: (path: string) => void,
+    testId: string,
+  ) =>
+    schemaIndex ? (
+      <div className="space-y-1">
+        <span className="block text-[12px] font-medium text-text-secondary">{label}</span>
+        <SchemaFieldPicker
+          index={schemaIndex}
+          value={current}
+          onChange={change}
+          label={label}
+          testId={testId}
+          showExcluded={testId === "fe-field-picker"}
+        />
+      </div>
+    ) : (
+      <Field label={label}>
+        <input
+          className={input}
+          list="fe-paths"
+          value={current}
+          onChange={(e) => change(e.target.value)}
+        />
+      </Field>
+    );
+  const inlineRows =
+    source === "Ejemplos ficticios" && realRows.length
+      ? realRows.slice(0, 5)
+      : sampleError
+        ? fixture
+        : rows;
+  const guardsOfRecipe = recipe
+    ? recipeGuards(recipe, schemaIndex)
+    : { excluded: [], suspect: [], sensitive: [] };
+  const featureResult = recipe
+    ? preview?.rows[0]?.features.find((feature) => feature.id === recipe.id)
+    : undefined;
+  const exampleRow = (preview ? previewRows : inlineRows)[0];
+  const exampleValue: unknown = !recipe
+    ? undefined
+    : recipe.source === "current"
+      ? recipe.path
+        ? fieldAt(exampleRow, recipe.path)
+        : undefined
+      : (() => {
+          const events = fieldAt(exampleRow, historyPath);
+          return Array.isArray(events) ? `${events.length} eventos` : undefined;
+        })();
+  const stepResult = (step: RecipeStep, index: number) => {
+    if (step.enabled === false || !recipe) return null;
+    const testId = `fe-step-result-${index}`;
+    if (!featureResult)
+      return (
+        <p data-testid={testId} className="text-xs text-text-secondary">
+          ejemplo → resultado: {show(index === 0 ? exampleValue : undefined)} → sin probar
+        </p>
+      );
+    const enabled = recipe.steps.filter((candidate) => candidate.enabled !== false);
+    const position = enabled.findIndex((candidate) => candidate.id === step.id);
+    const input = position <= 0 ? exampleValue : featureResult.trace[position - 1]?.value;
+    const output = featureResult.trace[position];
+    return (
+      <p data-testid={testId} className="text-xs font-mono text-text-secondary break-all">
+        ejemplo → resultado: {show(input)} → {output ? show(output.value) : "—"}
+        {output?.skipped ? " (omitido: entrada ausente)" : ""}
+      </p>
+    );
+  };
+  const openPanel = (next: "recipes" | "preview" | "json" | "templates") => {
+    setTab(next);
+    setMenuOpen(false);
+  };
   const copyJson = async () => {
     try {
       await navigator.clipboard.writeText(raw);
@@ -909,50 +1059,91 @@ export function FeatureRecipeWorkspace({
     <section className={panel}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-semibold text-text-primary">
-            Ingeniería de características
-          </h3>
+          <h3 className="text-[15px] font-semibold text-text-primary">Ingeniería de variables</h3>
           <p className="mt-0.5 text-[12px] text-text-secondary">
-            Mapea variables, transforma transacciones y calcula señales del historial.
+            Define variables: toma campos de la alerta, transfórmalos y calcula valores del
+            historial.
           </p>
         </div>
-        <WarningAlert>
-          <span className="font-medium">Mapeos activos:</span>{" "}
-          {value.recipes.filter((r) => r.enabled).length} · versión 1
-        </WarningAlert>
+        <div className="flex items-center gap-2">
+          <div
+            data-testid="fe-active-banner"
+            className="rounded-md border border-border bg-muted/30 px-3 py-2 text-[12px] text-text-secondary"
+          >
+            <span className="font-medium text-text-primary">Variables activas:</span>{" "}
+            {value.recipes.filter((r) => r.enabled).length} · versión {value.schema_version}
+            {schemaIndex ? ` · esquema v${schemaIndex.version}` : ""}
+          </div>
+          <div className="relative">
+            <button
+              type="button"
+              className={button}
+              aria-label="Más opciones"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              data-testid="fe-menu-button"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal size={16} />
+            </button>
+            {menuOpen && (
+              <div
+                role="menu"
+                aria-label="Más opciones de variables"
+                data-testid="fe-menu"
+                className="absolute right-0 z-20 mt-1 w-56 rounded-md border border-border bg-card p-1 shadow-md"
+              >
+                {[
+                  { id: "json", label: "JSON avanzado", run: () => openPanel("json") },
+                  { id: "templates", label: "Plantillas", run: () => openPanel("templates") },
+                  {
+                    id: "download",
+                    label: "Descargar JSON",
+                    run: () => {
+                      download();
+                      setMenuOpen(false);
+                    },
+                  },
+                  { id: "preview", label: "Probar con más filas", run: () => openPanel("preview") },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="menuitem"
+                    data-testid={`fe-menu-${item.id}`}
+                    className="block w-full rounded px-3 py-2 text-left text-[12px] hover:bg-primary/5"
+                    onClick={item.run}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-      <SectionTabs
-        label="Ingeniería de características"
-        value={tab as "recipes" | "preview" | "json" | "templates"}
-        onValueChange={setTab}
-        variant="pills"
-        items={[
-          { key: "recipes", label: "Mapeo y transformaciones" },
-          { key: "preview", label: "Prueba de configuración" },
-          { key: "json", label: "JSON avanzado" },
-          { key: "templates", label: "Plantillas reutilizables" },
-        ]}
-      />
-      <p className="text-[12px] text-text-secondary rounded-lg bg-muted/30 p-3">
-        {tab === "recipes" && "Define los mapeos que transforman los datos de una alerta."}
-        {tab === "preview" && "Comprueba los resultados de los mapeos con datos de prueba."}
-        {tab === "json" && "Edita o importa la configuración completa."}
-        {tab === "templates" && "Guarda y reutiliza conjuntos de mapeos."}
-        <span
-          className="ml-1 inline-flex cursor-help"
-          title={
-            tab === "recipes"
-              ? "Cada mapeo produce una variable de salida. El campo original solo se conserva si lo incluyes como otro mapeo."
-              : tab === "preview"
-                ? "Ejecuta los mapeos sobre filas de prueba antes de usarlos."
-                : tab === "json"
-                  ? "Úsalo cuando necesites precisión o automatización. Las muestras no se guardan en esta configuración."
-                  : "Cada modelo recibe una copia independiente de la plantilla."
-          }
-        >
-          ⓘ
-        </span>
-      </p>
+      {tab !== "recipes" && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/30 p-3 text-[12px] text-text-secondary">
+          <button
+            type="button"
+            className={button}
+            data-testid="fe-back-to-variables"
+            onClick={() => openPanel("recipes")}
+          >
+            ← Volver a variables
+          </button>
+          <span data-testid="fe-panel-title" className="font-medium text-text-primary">
+            {tab === "preview" && "Probar con más filas"}
+            {tab === "json" && "JSON avanzado"}
+            {tab === "templates" && "Plantillas"}
+          </span>
+          <span>
+            {tab === "preview" && "Comprueba los resultados de las variables con varias filas."}
+            {tab === "json" && "Edita o importa la configuración completa."}
+            {tab === "templates" && "Guarda y reutiliza conjuntos de variables."}
+          </span>
+        </div>
+      )}
       <datalist id="fe-paths">
         {suggestedPaths.map((path) => (
           <option key={path} value={path} label={pathLabel(path)} />
@@ -1071,88 +1262,167 @@ export function FeatureRecipeWorkspace({
           <div className="space-y-2">
             <button
               type="button"
-              className={button}
+              className={`${button} bg-primary text-white`}
+              data-testid="fe-generate"
               disabled={
                 sampleLoading ||
-                !pendingPaths.length ||
-                value.recipes.length + pendingPaths.length > 200 ||
+                !proposable.length ||
+                value.recipes.length >= MAX_RECIPES ||
                 rawDirty ||
                 invalidField
               }
-              onClick={generateMappings}
+              onClick={openReview}
             >
-              Generar mapeos de todos los campos
-              {pendingPaths.length > 0 ? ` (${pendingPaths.length})` : ""}
+              Revisar campos y generar variables
+              {proposable.length > 0 ? ` (${proposable.length})` : ""}
             </button>
-            <p className="text-xs text-text-secondary">
-              Crea los campos simples de la alerta como texto, sin transformaciones. Conserva los
-              mapeos existentes y no los duplica. El campo objetivo y los contenedores, incluido el
-              historial, quedan fuera; sus eventos necesitan una extracción o agregación.
-            </p>
-            {value.recipes.length + pendingPaths.length > 200 && (
-              <p role="alert" className="text-sm text-danger">
-                La generación superaría el límite de 200 mapeos. Añade individualmente los campos
-                que necesites.
+            {!reviewOpen && (
+              <p className="text-xs text-text-secondary">
+                {schemaIndex
+                  ? "Abre una revisión con un campo del esquema por variable: tú decides cuáles se crean. Los campos que parecen identificadores o que se generan después de decidir quedan sin marcar con su motivo; la etiqueta y el resultado de ARIA no se pueden usar."
+                  : "Abre una revisión con los campos simples de la alerta como texto. Los que parecen identificadores o posteriores a la decisión quedan sin marcar. El campo objetivo y el historial quedan fuera."}
               </p>
+            )}
+            {value.recipes.length >= MAX_RECIPES && (
+              <p role="alert" className="text-sm text-danger">
+                Ya se alcanzó el límite de {MAX_RECIPES} variables. Elimina alguna para generar más.
+              </p>
+            )}
+            {reviewOpen && (
+              <GenerationReview
+                candidates={candidates}
+                included={included}
+                onToggle={toggleCandidate}
+                createCount={createCount}
+                existingCount={value.recipes.length}
+                max={MAX_RECIPES}
+                onConfirm={generateMappings}
+                onCancel={() => setReviewOpen(false)}
+              />
             )}
           </div>
           <div className="grid md:grid-cols-[210px_1fr] gap-4">
             <aside className="space-y-2">
               {value.recipes.length > 0 && (
                 <input
-                  aria-label="Buscar mapeo"
+                  aria-label="Buscar variable"
                   className={input}
                   value={mappingSearch}
                   onChange={(e) => setMappingSearch(e.target.value)}
-                  placeholder="Buscar mapeo…"
+                  placeholder="Buscar variable…"
                 />
               )}
               <div
                 role="region"
-                aria-label="Campos mapeados"
+                aria-label="Variables definidas"
+                data-testid="fe-variable-list"
                 className="grid max-h-[26.5rem] gap-2 overflow-y-auto pr-1"
               >
-                {value.recipes
-                  .filter((r) => r.name.toLowerCase().includes(mappingSearch.trim().toLowerCase()))
-                  .map((r) => (
-                    <button
-                      key={r.id}
-                      title={r.name}
-                      onClick={() => setSelected(r.id)}
-                      className={`${button} h-16 min-w-0 w-full text-left ${recipe?.id === r.id ? "bg-primary/10" : ""}`}
-                    >
-                      <span className="block truncate">{r.name}</span>
-                      <span className="block text-xs text-text-secondary">
-                        {r.enabled ? "Activa" : "Desactivada"} · {r.steps.length} pasos
-                      </span>
-                    </button>
-                  ))}
+                {(["current", "history"] as const).map((origin) => {
+                  const items = value.recipes.filter(
+                    (r) =>
+                      r.source === origin &&
+                      r.name.toLowerCase().includes(mappingSearch.trim().toLowerCase()),
+                  );
+                  if (!items.length) return null;
+                  return (
+                    <div key={origin} data-testid={`fe-group-${origin}`} className="grid gap-2">
+                      <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
+                        {origin === "current" ? "Operación actual" : "Historial"} ({items.length})
+                      </p>
+                      {items.map((r) => {
+                        const issues = recipeIssues(r, value, schemaIndex, preview);
+                        const validity = recipeValidity(r, issues, preview);
+                        return (
+                          <button
+                            key={r.id}
+                            title={r.name}
+                            data-testid={`fe-variable-item-${r.name}`}
+                            onClick={() => setSelected(r.id)}
+                            className={`${button} h-16 min-w-0 w-full text-left ${recipe?.id === r.id ? "bg-primary/10" : ""}`}
+                          >
+                            <span className="flex items-center justify-between gap-2">
+                              <span className="block truncate">{r.name}</span>
+                              <span
+                                data-testid={`fe-validity-${r.name}`}
+                                data-state={validity}
+                                role="img"
+                                aria-label={
+                                  validity === "warning"
+                                    ? `Variable con problemas: ${issues[0] ?? "la última prueba devolvió un error"}`
+                                    : validity === "valid"
+                                      ? "Variable validada"
+                                      : "Sin validar"
+                                }
+                                title={
+                                  validity === "warning"
+                                    ? (issues[0] ?? "La última prueba devolvió un error")
+                                    : validity === "valid"
+                                      ? "Validada"
+                                      : "Sin validar"
+                                }
+                                className={
+                                  validity === "warning"
+                                    ? "text-warning"
+                                    : validity === "valid"
+                                      ? "text-success"
+                                      : "text-text-secondary"
+                                }
+                              >
+                                {validity === "warning" ? "⚠" : validity === "valid" ? "✓" : "○"}
+                              </span>
+                            </span>
+                            <span className="block text-xs text-text-secondary">
+                              {r.enabled ? "Activa" : "Desactivada"} · {r.steps.length} pasos
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
                 {value.recipes.length > 0 &&
                   !value.recipes.some((r) =>
                     r.name.toLowerCase().includes(mappingSearch.trim().toLowerCase()),
                   ) && (
                     <p className="text-xs text-text-secondary px-1 py-2">
-                      Sin mapeos que coincidan con "{mappingSearch}".
+                      Sin variables que coincidan con "{mappingSearch}".
                     </p>
                   )}
               </div>
               <button
                 type="button"
                 className={`${button} w-full`}
-                disabled={value.recipes.length >= 200}
+                data-testid="fe-add-variable"
+                disabled={value.recipes.length >= MAX_RECIPES}
                 onClick={addMapping}
               >
-                <Plus size={14} className="inline" /> Añadir mapeo
+                <Plus size={14} className="inline" /> Añadir variable
               </button>
-              {value.recipes.length === 0 && (
-                <div className="space-y-2">
-                  <button className={`${button} w-full`} onClick={() => add()}>
-                    <Plus size={14} className="inline" /> Característica del historial
+              {value.recipes.length === 0 && historyPath && (
+                <div className="space-y-2" data-testid="fe-history-starters">
+                  <p className="px-1 text-[11px] text-text-secondary">
+                    Con el historial “{historyPath}”:
+                  </p>
+                  <button
+                    className={`${button} w-full`}
+                    data-testid="fe-add-history"
+                    onClick={() => add()}
+                  >
+                    <Plus size={14} className="inline" /> Variable del historial
                   </button>
-                  <button className={`${button} w-full`} onClick={() => add("ratio")}>
+                  <button
+                    className={`${button} w-full`}
+                    data-testid="fe-add-ratio"
+                    onClick={() => add("ratio")}
+                  >
                     + Ratio de importe
                   </button>
-                  <button className={`${button} w-full`} onClick={() => add("categorize")}>
+                  <button
+                    className={`${button} w-full`}
+                    data-testid="fe-add-category"
+                    onClick={() => add("categorize")}
+                  >
                     + Categoría de importe
                   </button>
                 </div>
@@ -1160,22 +1430,27 @@ export function FeatureRecipeWorkspace({
             </aside>
             <div className="space-y-4">
               {!recipe ? (
-                <p className="p-8 text-sm text-text-secondary">
-                  Crea una característica y añade sus transformaciones. Para trabajar con eventos,
-                  selecciona primero el campo de historial.
+                <p data-testid="fe-empty-state" className="p-8 text-sm text-text-secondary">
+                  Crea una variable y añade sus transformaciones. El camino recomendado es “Revisar
+                  campos y generar variables”.{" "}
+                  {historyPath
+                    ? `El historial ya está configurado (${historyPath}): úsalo para variables que calculan sobre eventos.`
+                    : showHistorySettings
+                      ? "Para calcular sobre eventos, selecciona antes el campo de historial arriba."
+                      : "Para calcular sobre eventos, el campo de historial se define en el paso “Datos y objetivo”."}
                 </p>
               ) : (
                 <>
                   <div className="flex gap-2 items-center">
                     <input
-                      aria-label="Nombre de característica"
+                      aria-label="Nombre de variable"
                       className={input}
                       value={recipe.name}
                       onChange={(e) => update({ name: e.target.value })}
                     />
                     <button
                       className={button}
-                      aria-label="Duplicar receta"
+                      aria-label="Duplicar variable"
                       onClick={() => {
                         const copy = {
                           ...recipe,
@@ -1194,7 +1469,7 @@ export function FeatureRecipeWorkspace({
                     </button>
                     <button
                       className={button}
-                      aria-label="Eliminar receta"
+                      aria-label="Eliminar variable"
                       onClick={() =>
                         onChange({
                           ...value,
@@ -1207,7 +1482,8 @@ export function FeatureRecipeWorkspace({
                   </div>
                   <input
                     className={input}
-                    placeholder="Descripción de la señal"
+                    aria-label="Descripción de la variable"
+                    placeholder="Descripción de la variable"
                     value={recipe.description}
                     onChange={(e) => update({ description: e.target.value })}
                   />
@@ -1254,14 +1530,12 @@ export function FeatureRecipeWorkspace({
                         )}
                       </p>
                     ) : (
-                      <Field label="Campo de la alerta">
-                        <input
-                          className={input}
-                          list="fe-paths"
-                          value={recipe.path ?? ""}
-                          onChange={(e) => update({ path: e.target.value || undefined })}
-                        />
-                      </Field>
+                      alertPathField(
+                        "Campo de la alerta",
+                        recipe.path ?? "",
+                        (path) => update({ path: path || undefined }),
+                        "fe-field-picker",
+                      )
                     )}
                     <Field label="Si falta o es inválido">
                       <select
@@ -1286,6 +1560,44 @@ export function FeatureRecipeWorkspace({
                       </select>
                     </Field>
                   </div>
+                  {guardsOfRecipe.excluded.length > 0 && (
+                    <div
+                      role="alert"
+                      data-testid="fe-excluded-in-use"
+                      className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12px] text-text-primary"
+                    >
+                      {guardsOfRecipe.excluded.map((g) => (
+                        <p key={g.path}>
+                          <span className="font-medium">{g.label}</span> está excluido como entrada:{" "}
+                          {g.reason}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  {guardsOfRecipe.suspect.length > 0 && (
+                    <div data-testid="fe-suspect-in-use">
+                      <WarningAlert>
+                        {guardsOfRecipe.suspect.map((g) => (
+                          <p key={g.path}>
+                            <span className="font-medium">{g.label}:</span> {g.reason} Revisa si
+                            debe entrar al modelo.
+                          </p>
+                        ))}
+                      </WarningAlert>
+                    </div>
+                  )}
+                  {guardsOfRecipe.sensitive.length > 0 && (
+                    <div data-testid="fe-sensitive-warning">
+                      <WarningAlert>
+                        {guardsOfRecipe.sensitive.map((g) => (
+                          <p key={g.path}>
+                            <span className="font-medium">{g.label}:</span> {g.reason} Revisa si
+                            debe entrar al modelo.
+                          </p>
+                        ))}
+                      </WarningAlert>
+                    </div>
+                  )}
                   {recipe.source === "current" && recipe.path && (
                     <div className="rounded-lg border border-border bg-surface p-3 space-y-1">
                       <p className="text-xs font-medium">Vista previa de "{recipe.path}"</p>
@@ -1353,7 +1665,7 @@ export function FeatureRecipeWorkspace({
                       checked={recipe.enabled}
                       onChange={(e) => update({ enabled: e.target.checked })}
                     />
-                    Incluir esta característica en el modelo
+                    Incluir esta variable en el modelo
                   </label>
                   {recipe.steps.map((s, i) => (
                     <div key={s.id} className="rounded-lg border border-border p-3 space-y-3">
@@ -1474,37 +1786,28 @@ export function FeatureRecipeWorkspace({
                               />
                             </Field>
                           )}
-                          <Field label="Fecha de referencia de la alerta">
-                            <input
-                              className={input}
-                              list="fe-paths"
-                              value={s.current_path ?? ""}
-                              onChange={(e) =>
-                                updateStep(s.id, {
-                                  current_path: e.target.value || undefined,
-                                })
-                              }
-                            />
-                          </Field>
+                          {alertPathField(
+                            "Fecha de referencia de la alerta",
+                            s.current_path ?? "",
+                            (path) => updateStep(s.id, { current_path: path || undefined }),
+                            `fe-step-${i}-reference`,
+                          )}
                         </div>
                       )}
                       {["add", "subtract", "multiply", "divide", "ratio", "difference"].includes(
                         s.operation,
                       ) && (
                         <div className="grid grid-cols-2 gap-2">
-                          <Field label="Ruta de operación actual">
-                            <input
-                              className={input}
-                              list="fe-paths"
-                              value={s.current_path ?? ""}
-                              onChange={(e) =>
-                                updateStep(s.id, {
-                                  current_path: e.target.value || undefined,
-                                  value: undefined,
-                                })
-                              }
-                            />
-                          </Field>
+                          {alertPathField(
+                            "Ruta de operación actual",
+                            s.current_path ?? "",
+                            (path) =>
+                              updateStep(s.id, {
+                                current_path: path || undefined,
+                                value: undefined,
+                              }),
+                            `fe-step-${i}-current`,
+                          )}
                           {!["ratio", "difference"].includes(s.operation) && (
                             <Field label="O constante numérica">
                               <input
@@ -1715,18 +2018,12 @@ export function FeatureRecipeWorkspace({
                                   </select>
                                 </Field>
                                 {c.current_path !== undefined ? (
-                                  <Field label="Campo de la alerta">
-                                    <input
-                                      className={input}
-                                      list="fe-paths"
-                                      value={c.current_path}
-                                      onChange={(e) =>
-                                        changeCondition({
-                                          current_path: e.target.value,
-                                        })
-                                      }
-                                    />
-                                  </Field>
+                                  alertPathField(
+                                    "Campo de la alerta",
+                                    c.current_path,
+                                    (path) => changeCondition({ current_path: path }),
+                                    `fe-step-${i}-condition-${j}`,
+                                  )
                                 ) : (
                                   <Field
                                     label={
@@ -1997,6 +2294,7 @@ export function FeatureRecipeWorkspace({
                           </Field>
                         </>
                       )}
+                      {stepResult(s, i)}
                     </div>
                   ))}
                   <button
@@ -2009,6 +2307,45 @@ export function FeatureRecipeWorkspace({
                   >
                     + Añadir transformación
                   </button>
+                  <div
+                    data-testid="fe-inline-test"
+                    className="rounded-lg border border-border bg-surface p-3 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] font-medium">Prueba de la variable</p>
+                      <button
+                        type="button"
+                        className={button}
+                        data-testid="fe-inline-run"
+                        disabled={busy || invalidField || rawDirty}
+                        onClick={() => evaluate(inlineRows)}
+                      >
+                        <FlaskConical size={14} className="inline" />{" "}
+                        {busy ? "Calculando…" : "Probar variable"}
+                      </button>
+                    </div>
+                    <p data-testid="fe-inline-example" className="text-xs text-text-secondary">
+                      Ejemplo (fila 1): <span className="font-mono">{show(exampleValue)}</span>
+                    </p>
+                    <p data-testid="fe-inline-final" className="text-[13px]">
+                      Valor final:{" "}
+                      <span className="font-mono font-medium">
+                        {!recipe.enabled
+                          ? "Variable desactivada"
+                          : featureResult
+                            ? featureResult.status === "ok" || featureResult.status === "missing"
+                              ? show(featureResult.value)
+                              : `${show(featureResult.value)} · requiere revisión`
+                            : "Sin probar"}
+                      </span>
+                    </p>
+                    {tab === "recipes" && previewError && (
+                      <p role="alert" data-testid="fe-inline-error" className="text-xs text-danger">
+                        {friendlyFeatureError(previewError).title}:{" "}
+                        {friendlyFeatureError(previewError).explanation}
+                      </p>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -2087,7 +2424,7 @@ export function FeatureRecipeWorkspace({
               className={input}
               value={templateName}
               onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Nombre de plantilla reutilizable"
+              placeholder="Nombre de plantilla"
             />
             <button
               className={button}
@@ -2110,7 +2447,7 @@ export function FeatureRecipeWorkspace({
               <span>
                 {t.name}
                 <small className="block text-text-secondary">
-                  {t.configuration.recipes.length} características
+                  {t.configuration.recipes.length} variables
                 </small>
               </span>
               <div className="flex gap-2">
@@ -2118,7 +2455,7 @@ export function FeatureRecipeWorkspace({
                   className={button}
                   onClick={() => {
                     onChange(parseConfig(JSON.stringify(t.configuration)));
-                    setMessage("Plantilla copiada. Revisa los mapeos para tu dataset.");
+                    setMessage("Plantilla copiada. Revisa las variables para tu dataset.");
                   }}
                 >
                   Usar copia
@@ -2212,7 +2549,7 @@ export function FeatureRecipeWorkspace({
                 !!sampleError ||
                 !value.recipes.some((r) => r.enabled)
               }
-              onClick={evaluate}
+              onClick={() => evaluate()}
             >
               <FlaskConical size={15} className="inline" />{" "}
               {busy ? "Calculando en segundo plano…" : "Validar y calcular"}
@@ -2253,7 +2590,7 @@ export function FeatureRecipeWorkspace({
                         setPreviewError("");
                       }}
                     >
-                      Revisar mapping “{details.recipeName}”
+                      Revisar variable “{details.recipeName}”
                     </button>
                   )}
                   <details className="pt-1 text-xs text-text-secondary">

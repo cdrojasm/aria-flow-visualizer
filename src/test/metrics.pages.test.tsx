@@ -353,6 +353,7 @@ describe("/monitor", () => {
       "Explicabilidad",
       "Indicadores técnicos",
       "% Recomendaciones",
+      "Optimizador",
     ]);
     // Only the first tab is open; Voicebot and Bidi are disabled everywhere.
     expect(screen.getByRole("tab", { name: "Indicadores generales" })).toHaveAttribute(

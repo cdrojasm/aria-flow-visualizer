@@ -104,12 +104,7 @@ const completeMappedFields = [
     "fecha_ultima_marcacion",
     "datetime",
   ),
-  optionalField(
-    "biocatch-is-mobile-rat",
-    "biocatch_isMobileRat",
-    "biocatch_isMobileRat",
-    "bool",
-  ),
+  optionalField("biocatch-is-mobile-rat", "biocatch_isMobileRat", "biocatch_isMobileRat", "bool"),
   optionalField("biocatch-is-emulator", "biocatch_isEmulator", "biocatch_isEmulator"),
   optionalField("biocatch-is-rat", "biocatch_isRat", "biocatch_isRat"),
   optionalField("biocatch-is-bot", "biocatch_isBot", "biocatch_isBot"),
@@ -348,19 +343,43 @@ test("API real: gobierno del esquema y bloqueo de autoaprobación", async ({ pag
   await page.goto("/configuracion");
 
   await page.getByRole("button", { name: "Esquema" }).click();
-  await expect(page.getByText(new RegExp(`Activo: v${seeded.activeVersion}`))).toBeVisible();
-  await expect(page.getByRole("button", { name: "Campos de sistema" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Sugerencias" })).toBeVisible();
+  const band = page.getByTestId("schema-status-band");
+  await expect(band).toContainText(`Activa v${seeded.activeVersion}`);
+  await expect(band).toContainText(/Esenciales: \d+\/\d+ obligatorios/);
+  await expect(band).toContainText(/Por revisar: \d+/);
+  await expect(band).toContainText(/Sensibles sin estrategia: \d+/);
+  // El esquema es global: nada del versionado de configuraciones, y las pestañas
+  // del esquema se ven sin desplazarse.
+  await expect(page.getByText("Grafo de versiones")).toHaveCount(0);
+  await expect(page.getByText("Solicitudes de despliegue")).toHaveCount(0);
+  await expect(page.getByText(/Viendo la versión/)).toHaveCount(0);
+  await expect(page.getByText(/Consultando configuración/)).toHaveCount(0);
+  await expect(page.getByText("Solo lectura")).toHaveCount(0);
+  const tabsBox = await page.getByRole("button", { name: "Campos esenciales" }).boundingBox();
+  expect(tabsBox?.y ?? Infinity).toBeLessThan(page.viewportSize()?.height ?? 720);
+  await expect(page.getByTestId("schema-primary-action")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Campos esenciales" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Por revisar \(\d+\)$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Propuestas" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Campo event-id" })).toHaveValue("event_id");
-  await page.getByRole("button", { name: "Campos de sistema" }).click();
+  // Checklist de esenciales: lo primero que se ve, con la asignación de roles.
+  await expect(page.getByTestId("essential-fields")).toBeVisible();
   for (const role of Object.keys(roles)) {
     await expect(page.getByRole("combobox", { name: `Campo para ${role}` })).toHaveValue(
       activeSchema.field_roles[role],
     );
   }
   await expect(page.getByText("Workflow, perfilado e historial")).toBeVisible();
-  await page.getByRole("button", { name: "Sugerencias" }).click();
+  // Tabla delgada: rol único y panel lateral con los detalles.
+  await page.getByRole("button", { name: "Campos", exact: true }).click();
+  // Sin borrador la tabla es texto plano (no controles editables).
+  await expect(page.getByTestId("field-text-event-id")).toHaveText("event_id");
+  await expect(page.getByRole("textbox", { name: "Campo event-id" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Rol event-id" })).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: /^(Etiqueta|Historial) / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Detalles event-id" }).click();
+  await expect(page.getByTestId("side-drawer").getByLabel("Ubicación event-id")).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar panel" }).click();
+  await page.getByRole("button", { name: /^Por revisar \(\d+\)$/ }).click();
   await expect(page.getByText(/Último análisis:/)).toBeVisible();
   const presence = await getJson(
     request,
@@ -389,6 +408,7 @@ test("API real: gobierno del esquema y bloqueo de autoaprobación", async ({ pag
     .getByRole("combobox", { name: "Versión del esquema" })
     .selectOption(String(seeded.candidateVersion));
   await expect(page.getByText(new RegExp(`Propuso: .+`))).toBeVisible();
+  await expect(page.getByText(/\b(proposed|draft|historical)\b/)).toHaveCount(0);
   await page.getByRole("button", { name: "Propuestas" }).click();
   const candidate = await getJson(
     request,
@@ -398,6 +418,9 @@ test("API real: gobierno del esquema y bloqueo de autoaprobación", async ({ pag
     versions.find((item: { version: number }) => item.version === seeded.candidateVersion),
   );
   await expect(page.getByText("Comparación con la versión activa")).toBeVisible();
+  await expect(page.getByTestId("schema-diff-chips")).toContainText(/\+\d+ añadidos/);
+  await expect(page.getByTestId("schema-diff-chips")).toContainText(/eliminados/);
+  await expect(page.getByTestId("schema-diff").locator("pre")).toBeHidden();
   if (candidate.impact.length > 0) await expect(page.getByText("Impacto en uso")).toBeVisible();
   if (candidate.proposed_by === seeded.manager.id) {
     await expect(page.getByRole("button", { name: "Aprobar propuesta" })).toBeDisabled();

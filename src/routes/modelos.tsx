@@ -1,5 +1,6 @@
 import { ModelTrainingWizard } from "@/components/modelos/ModelTrainingWizard";
 import { TrainingMonitorPanel } from "@/components/modelos/TrainingMonitorPanel";
+import { ModelSchemaBadge } from "@/components/modelos/ModelSchemaBadge";
 import { ModelTrainingResults } from "@/components/modelos/ModelTrainingResults";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +71,7 @@ const modelColumns: DataTableColumn<ModelResponse>[] = [
         <TruncText maxWidth={240} className="text-[11px] text-text-secondary">
           {m.description}
         </TruncText>
+        <ModelSchemaBadge model={m} />
       </div>
     ),
   },

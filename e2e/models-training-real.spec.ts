@@ -391,6 +391,74 @@ test("E05 API/UI real: entrena, activa y prueba un modelo con su contrato versio
   expect(scored.score).toBeGreaterThanOrEqual(0);
   expect(scored.score).toBeLessThanOrEqual(1);
 
+  // Asistente "Nuevo modelo" (REQ-C): objetivo sugerido por el esquema activo y
+  // pasos con terminología "Variables". No guarda ni entrena nada.
+  const activeSchemaResponse = await api!.get("/api/v0/alert-schema/active", {
+    headers: authHeaders(),
+  });
+  const activeSchema = activeSchemaResponse.ok()
+    ? ((await activeSchemaResponse.json()) as {
+        version: number;
+        fields: { field: string; field_name: string; is_label: boolean; is_history: boolean }[];
+      } | null)
+    : null;
+  const schemaHasLabel = !!activeSchema?.fields.some((f) => f.is_label && !f.is_history);
+  await page.evaluate(() => localStorage.removeItem("aria.model-training.draft.v1"));
+  await page.goto("/modelos");
+  await page.getByRole("button", { name: "Nuevo modelo" }).click();
+  const steps = page.getByRole("navigation", { name: "Pasos del entrenamiento" });
+  for (const name of ["Datos y objetivo", "Variables", "XGBoost", "Revisión"])
+    await expect(steps.getByRole("button", { name })).toBeVisible();
+  await page.getByPlaceholder("xgboost-historico-v1").fill(`e05-wizard-${Date.now()}`);
+  await page
+    .locator("select")
+    .filter({ has: page.locator("option", { hasText: "Selecciona un dataset" }) })
+    .selectOption(datasetName!);
+  const targetSelect = page.getByTestId("target-select");
+  await expect(
+    targetSelect.locator("option", { hasText: "marcacion_final" }).first(),
+  ).toBeAttached();
+  if (schemaHasLabel) {
+    // Sugerir, no imponer: el resto de campos sigue disponible.
+    await expect(targetSelect.getByTestId("target-suggested").first()).toBeAttached();
+    await expect(targetSelect.locator("option", { hasText: "channel" })).toBeAttached();
+    await targetSelect.selectOption("channel");
+    await expect(page.getByTestId("target-not-label")).toContainText(`v${activeSchema!.version}`);
+  }
+  await targetSelect.selectOption("marcacion_final");
+  await page.getByText("risk-suspected").first().waitFor();
+
+  // Paso 1: sin nombre/clase positiva el botón explica qué falta (REQ-F).
+  const continueButton = page.getByRole("button", { name: "Continuar" });
+  await expect(continueButton).toBeDisabled();
+  await expect(page.getByTestId("wizard-step0-hint")).toContainText("Falta: clase positiva");
+  await page
+    .locator("label:has(input[type=checkbox])")
+    .filter({ hasText: /^\s*risk\s*·/ })
+    .first()
+    .locator("input")
+    .check();
+  await expect(page.getByTestId("wizard-step0-hint")).toHaveCount(0);
+  await continueButton.click();
+
+  // Paso Variables: la generación es una revisión, no crea nada por sí sola.
+  await expect(page.getByTestId("fe-active-banner")).toBeVisible({ timeout: 60_000 });
+  await page.getByTestId("fe-generate").click();
+  const review = page.getByTestId("fe-generate-review");
+  await expect(review).toBeVisible();
+  await expect(page.locator('[data-testid^="fe-variable-item-"]')).toHaveCount(0);
+  // El objetivo nunca se puede marcar; los sospechosos llegan sin marcar con motivo.
+  const targetCheck = review.getByTestId("fe-gen-check-marcacion_final");
+  if (await targetCheck.count()) await expect(targetCheck).toBeDisabled();
+  const suspects = review.locator('[data-level="suspect"], [data-level="exclude"]');
+  for (const row of await suspects.all()) {
+    await expect(row.locator('input[type="checkbox"]')).not.toBeChecked();
+    await expect(row.locator('[data-testid^="fe-gen-reason-"]')).not.toBeEmpty();
+  }
+  await review.getByTestId("fe-gen-cancel").click();
+  await expect(review).toHaveCount(0);
+  await page.evaluate(() => localStorage.removeItem("aria.model-training.draft.v1"));
+
   await test.info().attach("E05 modelo real", {
     body: Buffer.from(
       JSON.stringify(
