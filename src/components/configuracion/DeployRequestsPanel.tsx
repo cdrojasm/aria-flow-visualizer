@@ -14,8 +14,8 @@ type SortKey = "requested_at" | "requested_by" | "status";
 type SortDir = "asc" | "desc";
 
 const COLUMNS: { key: SortKey; label: string; className: string }[] = [
-  { key: "requested_at", label: "Recientes", className: "w-36" },
   { key: "requested_by", label: "Solicitante", className: "w-44" },
+  { key: "requested_at", label: "Recientes", className: "w-36" },
   { key: "status", label: "Estado", className: "w-40" },
 ];
 

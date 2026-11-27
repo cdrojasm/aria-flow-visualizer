@@ -76,3 +76,15 @@ describe("DeployRequestsPanel", () => {
     expect(screen.queryByTestId("deploy-request-row")).toBeNull();
   });
 });
+
+describe("DeployRequestsPanel columns", () => {
+  it("keeps each header aligned with its cell", () => {
+    renderPanel();
+    const headers = screen.getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(headers.slice(0, 4)).toEqual(["Solicitud", "Solicitante", "Recientes", "Estado"]);
+    const cells = within(screen.getAllByTestId("deploy-request-row")[0]).getAllByRole("cell");
+    expect(cells[1].textContent).toBe("ana"); // Solicitante
+    expect(cells[2].textContent).toMatch(/\d/); // fecha
+    expect(cells[3].textContent).toMatch(/Aprobada/); // Estado
+  });
+});
