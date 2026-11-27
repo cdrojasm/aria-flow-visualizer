@@ -114,7 +114,7 @@ function shortActor(value: string | null | undefined): string {
 }
 
 export function AlertSchemaEditor() {
-  const { user } = useRole();
+  const { user, role } = useRole();
   const queryClient = useQueryClient();
   const activeQuery = useQuery({
     queryKey: ["alertSchema", "active"],
@@ -153,7 +153,9 @@ export function AlertSchemaEditor() {
   const editing = !!draft && draft.status === "draft";
   const tableReadOnly = !editing;
   const status = selected?.status ?? null;
-  const isProposer = !!user?.id && user.id === selected?.proposed_by;
+  // Manager and release manager own the app: they may promote their own proposal.
+  const canSelfApprove = role === "manager" || role === "release_manager";
+  const isProposer = !!user?.id && user.id === selected?.proposed_by && !canSelfApprove;
   const impact = selected?.impact ?? [];
   // Consumers per field; a draft has no consumers of its own, so it is read against its base
   // version. A failing endpoint just hides the "Usado por" column.

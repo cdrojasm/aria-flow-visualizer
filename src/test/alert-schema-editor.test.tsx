@@ -11,8 +11,9 @@ const testUser = {
   role: "manager",
   permissions: ["alert_schema"],
 };
+let testRole = "manager";
 vi.mock("@/hooks/useRole", () => ({
-  useRole: () => ({ user: testUser, role: "manager" }),
+  useRole: () => ({ user: testUser, role: testRole }),
 }));
 
 vi.mock("@/lib/api/alertSchema.functions", () => ({
@@ -65,7 +66,26 @@ function renderEditor() {
 }
 
 describe("gobierno del esquema", () => {
+  it("deja aprobar su propia propuesta al manager y al release manager", async () => {
+    for (const role of ["manager", "release_manager"]) {
+      testRole = role;
+      const user = userEvent.setup();
+      const view = renderEditor();
+      const picker = await screen.findByRole("combobox", { name: "Versión del esquema" });
+      await screen.findByRole("option", { name: /v2/ });
+      await user.selectOptions(picker, "2");
+      await user.click(screen.getByRole("button", { name: "Propuestas" }));
+      const acknowledgement = await screen.findByRole("checkbox", { name: /Entiendo el impacto/ });
+      expect(screen.queryByText(/No puedes aprobar tu propia propuesta/)).toBeNull();
+      await user.click(acknowledgement);
+      expect(screen.getByRole("button", { name: "Aprobar propuesta" })).toBeEnabled();
+      view.unmount();
+    }
+    testRole = "manager";
+  });
+
   it("deshabilita aprobar para quien propuso la versión", async () => {
+    testRole = "channel_manager";
     const user = userEvent.setup();
     renderEditor();
     const picker = await screen.findByRole("combobox", { name: "Versión del esquema" });

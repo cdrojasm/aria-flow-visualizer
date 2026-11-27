@@ -422,14 +422,9 @@ test("API real: gobierno del esquema y bloqueo de autoaprobación", async ({ pag
   await expect(page.getByTestId("schema-diff-chips")).toContainText(/eliminados/);
   await expect(page.getByTestId("schema-diff").locator("pre")).toBeHidden();
   if (candidate.impact.length > 0) await expect(page.getByText("Impacto en uso")).toBeVisible();
-  if (candidate.proposed_by === seeded.manager.id) {
-    await expect(page.getByRole("button", { name: "Aprobar propuesta" })).toBeDisabled();
-    await expect(page.getByText(/No puedes aprobar tu propia propuesta/)).toBeVisible();
-  } else {
-    // The persisted local stack may contain a proposal from an earlier E2E
-    // identity. In that case this manager is a valid cross-user approver.
-    await expect(page.getByRole("button", { name: "Aprobar propuesta" })).toBeEnabled();
-  }
+  // Managers own the app: they can approve their own proposal as well as another's.
+  await expect(page.getByRole("button", { name: "Aprobar propuesta" })).toBeEnabled();
+  await expect(page.getByText(/No puedes aprobar tu propia propuesta/)).toHaveCount(0);
 
   const versions = await getJson(
     request,
